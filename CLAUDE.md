@@ -240,7 +240,38 @@ Why this is first after baseline: the native wrapper affects how we think about 
 
 **Don't do yet:** push notifications, biometric unlock, any non-essential plugin. That's scope for a later milestone once we need them.
 
-### Milestone 2 — Shared segments (the flagship data-model feature)
+### Milestone 2 — Smart import from reservation documents and emails
+
+**Problem:** TREK lets you attach a booking PDF to a reservation, but every field — flight number, times, airports, confirmation code, passenger names — still has to be typed by hand. First pain point observed on the 2026-04-19 baseline tour, promoted from the deferred list.
+
+**Design sketch:**
+
+- New endpoint `POST /api/reservations/extract` — accepts an uploaded PDF or pasted email body, returns a structured JSON draft of a reservation (type, provider, dates, times, confirmation number, passengers, legs). Does NOT save; returns a draft the client shows in a review form.
+- **Extraction pipeline:**
+  1. Text-layer extraction via `pdf-parse` (plain-text PDFs cover ~90% of real bookings).
+  2. Fallback OCR via `tesseract.js` when the PDF is image-only (rare — usually scanned travel-agent confirmations).
+  3. Structured parse via LLM with a JSON-schema-constrained prompt. Model is pluggable: default to locally-hosted Ollama (privacy-preserving), optional OpenAI / Anthropic API behind an admin-panel toggle with explicit consent.
+- **New table** `reservation_imports(id, trip_id, uploaded_by, source_type, raw_text, parsed_json, confidence, status, created_at)` — audit trail for every extraction so we can iterate the prompt and debug bad extractions without re-uploading.
+- **UI:** reservation form gains an "Import from document/email" button → drop PDF or paste email text → server returns draft → form pre-populates with each field tagged `(auto-filled)` → user edits and saves. The user is always the last step; the LLM never writes directly.
+
+**Open questions to resolve in plan phase:**
+
+- Which local model? Llama-3.1-8B-Instruct and Mistral-7B both handle structured extraction well; Llama-3.1 is probably the pick. Where does Ollama run — same container as the server, or separate?
+- Schema coverage — how many reservation types on day one? Likely flight, hotel, car hire, train. Defer: cruise, event tickets, tours.
+- Should an imported PDF auto-attach as the reservation's document? Probably yes — single flow.
+- Multi-leg flights: one reservation with N legs, or N reservations?
+- Email input: paste-as-text only, or eventually an inbound email address? Start with paste.
+
+**Upstream contribution:** Likely yes. Every TREK user has this pain. Keep the LLM choice and self-hosting path pluggable so upstream isn't forced onto a specific provider.
+
+**Don't do yet:**
+
+- Inbound email receiving (SMTP inbox or forwarding address). Paste-text first.
+- Itinerary-level ingest (whole trip's worth of PDFs in one go). One document at a time.
+- Auto-save without review. Always prefill-and-review.
+- Receipt OCR for expenses — separate feature, still out of scope.
+
+### Milestone 3 — Shared segments (the flagship data-model feature)
 
 **Problem:** Couple A and Couple B each have their own trip record. For days 7–11 they travel together. Both households want those days to appear in their own trip timeline and stay in sync.
 
@@ -258,11 +289,11 @@ Why this is first after baseline: the native wrapper affects how we think about 
 - If one party leaves the segment, does their copy of those days remain as a snapshot or get deleted?
 - How do per-person expenses on a shared day allocate between households?
 
-### Milestone 3 — Offline-first writes (cross-cutting)
+### Milestone 4 — Offline-first writes (cross-cutting)
 
-**This is not a standalone feature; it's a rewrite of how mutations flow through the app.** Specified in detail in §7. Build it now because Milestones 4+ assume it works.
+**This is not a standalone feature; it's a rewrite of how mutations flow through the app.** Specified in detail in §7. Build it now because Milestones 5+ assume it works.
 
-### Milestone 4 — Per-day journal with photos
+### Milestone 5 — Per-day journal with photos
 
 **Problem:** TREK is a planner. We also want it to be the place we record what actually happened.
 
@@ -275,11 +306,11 @@ Why this is first after baseline: the native wrapper affects how we think about 
 - Photos: drag-and-drop multiple on web, native camera picker on iOS/Android, client-side resize before upload, EXIF-preserved capture date.
 - Photos must work offline — queued locally, uploaded when online (see §7).
 
-### Milestone 5 — JSON export and import
+### Milestone 6 — JSON export and import
 
 Specified in §8. Build after offline + journal so exports include journal content and pending-sync items correctly.
 
-### Milestone 6 — Settle-up view
+### Milestone 7 — Settle-up view
 
 **Problem:** TREK tracks categorised expenses with splits. It doesn't answer "Alice owes Bob how much?"
 
@@ -290,7 +321,7 @@ Specified in §8. Build after offline + journal so exports include journal conte
 - UI: one screen showing net positions and a recommended settlement ("Alice pays Bob $214, Carol pays Alice $87").
 - Per-trip and per-segment views.
 
-### Milestone 7 — Pre-trip availability poll
+### Milestone 8 — Pre-trip availability poll
 
 **Problem:** Before a trip exists, we need to pick dates with another couple.
 
@@ -301,13 +332,12 @@ Specified in §8. Build after offline + journal so exports include journal conte
 - Once dates converge, one button creates a trip with those dates and invites the voters as members.
 - Consider: integrate with the existing Vacay addon so availability can be pre-filled from vacation-day records.
 
-### Milestone 8+ (deferred / reconsider after real use)
+### Milestone 9+ (deferred / reconsider after real use)
 
 - Closed-on-this-day warnings when a place is scheduled on a closed day.
 - Inter-stop travel time on the itinerary.
 - Public shareable trip guide (read-only view of a completed trip).
 - iCal feed export for calendar integration.
-- Booking email import via forwarded confirmations.
 - Push notifications (flight-day reminders, sync-completed confirmations).
 
 ### Explicitly out of scope

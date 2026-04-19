@@ -25,6 +25,7 @@ import adminRoutes from './routes/admin';
 import mapsRoutes from './routes/maps';
 import filesRoutes from './routes/files';
 import reservationsRoutes from './routes/reservations';
+import reservationImportRoutes from './routes/reservationImport';
 import dayNotesRoutes from './routes/dayNotes';
 import weatherRoutes from './routes/weather';
 import settingsRoutes from './routes/settings';
@@ -187,6 +188,7 @@ export function createApp(): express.Application {
   app.use('/api/trips/:tripId/budget', budgetRoutes);
   app.use('/api/trips/:tripId/collab', collabRoutes);
   app.use('/api/trips/:tripId/reservations', reservationsRoutes);
+  app.use('/api/trips/:tripId/reservation-imports', reservationImportRoutes);
   app.use('/api/trips/:tripId/days/:dayId/notes', dayNotesRoutes);
   app.get('/api/health', (_req: Request, res: Response) => res.json({ status: 'ok' }));
   app.use('/api', assignmentsRoutes);

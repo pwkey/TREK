@@ -254,6 +254,22 @@ export const reservationsApi = {
   updatePositions: (tripId: number | string, positions: { id: number; day_plan_position: number }[], dayId?: number) => apiClient.put(`/trips/${tripId}/reservations/positions`, { positions, day_id: dayId }).then(r => r.data),
 }
 
+// [460-fork] Smart Import (Milestone 2 slice 3)
+export const reservationImportsApi = {
+  extract: (
+    tripId: number | string,
+    opts: { file?: File; emailText?: string; autoAttach?: boolean; clientMutationId?: string },
+  ) => {
+    const form = new FormData()
+    if (opts.file) form.append('file', opts.file)
+    if (opts.emailText !== undefined) form.append('email_text', opts.emailText)
+    if (opts.autoAttach !== undefined) form.append('auto_attach', String(opts.autoAttach))
+    const headers: Record<string, string> = { 'Content-Type': 'multipart/form-data' }
+    if (opts.clientMutationId) headers['X-Client-Mutation-Id'] = opts.clientMutationId
+    return apiClient.post(`/trips/${tripId}/reservation-imports/extract`, form, { headers }).then(r => r.data)
+  },
+}
+
 export const weatherApi = {
   get: (lat: number, lng: number, date: string) => apiClient.get('/weather', { params: { lat, lng, date } }).then(r => r.data),
   getDetailed: (lat: number, lng: number, date: string, lang?: string) => apiClient.get('/weather/detailed', { params: { lat, lng, date, lang } }).then(r => r.data),

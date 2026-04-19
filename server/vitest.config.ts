@@ -1,4 +1,9 @@
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
+
+// [460-fork] fileURLToPath fixes alias resolution on Windows. `new URL(..., import.meta.url).pathname`
+// emits `/E:/…` on Windows which Node then can't resolve. Good upstream PR candidate.
+const resolveSdk = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url));
 
 export default defineConfig({
   test: {
@@ -20,22 +25,10 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@modelcontextprotocol/sdk/server/mcp': new URL(
-          './node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js',
-          import.meta.url
-      ).pathname,
-      '@modelcontextprotocol/sdk/server/streamableHttp': new URL(
-          './node_modules/@modelcontextprotocol/sdk/dist/cjs/server/streamableHttp.js',
-          import.meta.url
-      ).pathname,
-      '@modelcontextprotocol/sdk/inMemory': new URL(
-          './node_modules/@modelcontextprotocol/sdk/dist/cjs/inMemory.js',
-          import.meta.url
-      ).pathname,
-      '@modelcontextprotocol/sdk/client/index': new URL(
-          './node_modules/@modelcontextprotocol/sdk/dist/cjs/client/index.js',
-          import.meta.url
-      ).pathname,
+      '@modelcontextprotocol/sdk/server/mcp': resolveSdk('./node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js'),
+      '@modelcontextprotocol/sdk/server/streamableHttp': resolveSdk('./node_modules/@modelcontextprotocol/sdk/dist/cjs/server/streamableHttp.js'),
+      '@modelcontextprotocol/sdk/inMemory': resolveSdk('./node_modules/@modelcontextprotocol/sdk/dist/cjs/inMemory.js'),
+      '@modelcontextprotocol/sdk/client/index': resolveSdk('./node_modules/@modelcontextprotocol/sdk/dist/cjs/client/index.js'),
     },
   },
 });

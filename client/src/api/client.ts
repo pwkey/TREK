@@ -202,6 +202,9 @@ export const adminApi = {
     apiClient.post('/admin/dev/test-notification', data).then(r => r.data),
   getNotificationPreferences: () => apiClient.get('/admin/notification-preferences').then(r => r.data),
   updateNotificationPreferences: (prefs: Record<string, Record<string, boolean>>) => apiClient.put('/admin/notification-preferences', prefs).then(r => r.data),
+  // [460-fork] Smart Import (Milestone 2)
+  getImportSettings: () => apiClient.get('/admin/import-settings').then(r => r.data),
+  updateImportSettings: (data: Record<string, unknown>) => apiClient.put('/admin/import-settings', data).then(r => r.data),
 }
 
 export const addonsApi = {

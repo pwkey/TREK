@@ -864,6 +864,36 @@ function runMigrations(db: Database.Database): void {
         for (const d of matchingDays) ins.run(r.id, d.id, r.day_plan_position);
       }
     },
+    // [460-fork] Smart Import (Milestone 2): reservation_imports — audit trail for LLM-driven reservation extraction.
+    // UUID primary key per CLAUDE.md §9 (new-table rule). When rebasing on upstream, keep this thunk at the TAIL of the array.
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS reservation_imports (
+          id TEXT PRIMARY KEY,
+          trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+          reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL,
+          source_type TEXT NOT NULL,
+          source_file_id INTEGER REFERENCES trip_files(id) ON DELETE SET NULL,
+          raw_text TEXT,
+          parsed_json TEXT,
+          confidence REAL,
+          status TEXT NOT NULL DEFAULT 'draft',
+          provider TEXT,
+          model TEXT,
+          error_message TEXT,
+          client_mutation_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_reservation_imports_trip ON reservation_imports(trip_id);
+        CREATE INDEX IF NOT EXISTS idx_reservation_imports_created_by ON reservation_imports(created_by);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_reservation_imports_cmid
+          ON reservation_imports(client_mutation_id)
+          WHERE client_mutation_id IS NOT NULL;
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

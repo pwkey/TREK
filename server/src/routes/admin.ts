@@ -3,6 +3,7 @@ import { authenticate, adminOnly } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { writeAudit, getClientIp, logInfo } from '../services/auditLog';
 import * as svc from '../services/adminService';
+import * as importSettings from '../services/importSettingsService';
 import { getPreferencesMatrix, setAdminPreferences } from '../services/notificationPreferencesService';
 
 const router = express.Router();
@@ -323,6 +324,35 @@ router.post('/rotate-jwt-secret', (req: Request, res: Response) => {
     ip: getClientIp(req),
   });
   res.json({ success: true });
+});
+
+// ── [460-fork] Smart Import settings (Milestone 2) ─────────────────────────
+// Additive block — keep contiguous to minimise upstream rebase conflicts.
+
+router.get('/import-settings', (_req: Request, res: Response) => {
+  res.json(importSettings.getImportSettings());
+});
+
+router.put('/import-settings', (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  try {
+    const next = importSettings.updateImportSettings(req.body ?? {});
+    writeAudit({
+      userId: authReq.user.id,
+      action: 'admin.import_settings_update',
+      ip: getClientIp(req),
+      details: {
+        provider: next.provider,
+        ollama_url_set: !!next.ollama_url,
+        anthropic_key_set: next.anthropic_key_set,
+        openai_key_set: next.openai_key_set,
+        ocr_enabled: next.ocr_enabled,
+      },
+    });
+    res.json(next);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Invalid import settings' });
+  }
 });
 
 // ── Dev-only: test notification endpoints ──────────────────────────────────────

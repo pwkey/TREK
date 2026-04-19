@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(npm --version)",
+      "Bash(docker --version)",
+      "Bash(gh auth *)",
+      "Bash(mkdir -p \"E:/code projects/460 trip planner/docs\")",
+      "Bash(mv \"E:/code projects/460 trip planner/ours-trial-notes.md\" \"E:/code projects/460 trip planner/ours-build-native.md\" \"E:/code projects/460 trip planner/feature-analysis.md\" \"E:/code projects/460 trip planner/feature-analysis.docx\" \"E:/code projects/460 trip planner/docs/\")",
+      "Bash(gh repo *)",
+      "Bash(git config *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git remote *)",
+      "Bash(git fetch *)"
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Upload, FileText, AlertCircle, Wand2 } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { reservationImportsApi } from '../../api/client'
@@ -30,8 +30,27 @@ export default function ReservationImportSheet({ isOpen, onClose, tripId, onImpo
   const [file, setFile] = useState<File | null>(null)
   const [emailText, setEmailText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Tick every second while busy so we can show "still loading the model…"-style
+  // reassurances during the Ollama cold-start (~30-60s on the first request).
+  useEffect(() => {
+    if (!busy) { setElapsed(0); return }
+    const start = Date.now()
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 500)
+    return () => clearInterval(id)
+  }, [busy])
+
+  const progressLine = (() => {
+    if (!busy) return null
+    if (elapsed < 5) return `Sending to extractor… (${elapsed}s)`
+    if (elapsed < 15) return `Extracting… (${elapsed}s)`
+    if (elapsed < 60) return `Loading model into memory — first run only, ~30-60s. (${elapsed}s)`
+    if (elapsed < 120) return `Still working — large or complex PDFs take longer. (${elapsed}s)`
+    return `Almost there — Ollama can take up to 3 min on a cold start. (${elapsed}s)`
+  })()
 
   const reset = () => {
     setFile(null)
@@ -172,6 +191,18 @@ export default function ReservationImportSheet({ isOpen, onClose, tripId, onImpo
           }}>
             <AlertCircle size={14} style={{ marginTop: 1, color: '#ef4444', flexShrink: 0 }} />
             <div>{error}</div>
+          </div>
+        )}
+
+        {busy && progressLine && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: 10, borderRadius: 8,
+            background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.3)',
+            fontSize: 12, color: 'var(--text-primary)',
+          }}>
+            <div style={{ width: 14, height: 14, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite', flexShrink: 0 }} />
+            <div>{progressLine}</div>
           </div>
         )}
 

@@ -7,17 +7,22 @@ export interface PdfTextResult {
 const MAX_TEXT_BYTES = 200 * 1024; // 200KB cap
 
 export async function extractPdfText(buffer: Buffer): Promise<PdfTextResult> {
-  // pdf-parse's default export is a callable; its shipped types don't describe the call signature well.
-  const mod = await import('pdf-parse');
-  const pdfParse = (mod.default ?? mod) as unknown as (b: Buffer) => Promise<{ text: string; numpages: number }>;
-  const result = await pdfParse(buffer);
-  const text = (result.text || '').trim();
-  const truncated = Buffer.byteLength(text, 'utf8') > MAX_TEXT_BYTES
-    ? text.slice(0, MAX_TEXT_BYTES)
-    : text;
-  return {
-    text: truncated,
-    pageCount: result.numpages ?? 0,
-    hadText: truncated.length > 0,
-  };
+  // pdf-parse v2 exports a class, not a function. The constructor converts Node
+  // Buffer to Uint8Array for the worker; we destroy() to free pdfjs workers.
+  const { PDFParse } = (await import('pdf-parse')) as typeof import('pdf-parse');
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const result = await parser.getText();
+    const text = (result.text || '').trim();
+    const truncated = Buffer.byteLength(text, 'utf8') > MAX_TEXT_BYTES
+      ? text.slice(0, MAX_TEXT_BYTES)
+      : text;
+    return {
+      text: truncated,
+      pageCount: Array.isArray(result.pages) ? result.pages.length : 0,
+      hadText: truncated.length > 0,
+    };
+  } finally {
+    try { await parser.destroy(); } catch { /* swallow */ }
+  }
 }

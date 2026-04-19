@@ -3,10 +3,13 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { checkPermission } from '../services/permissions';
 import { verifyTripAccess } from '../services/reservationService';
+import { createFile, filesDir } from '../services/fileService';
+import { db } from '../db/database';
 import { extractReservationDraft } from '../services/reservationImport/extractor';
 import { extractPdfText } from '../services/reservationImport/pdfTextExtractor';
 import { extractRequestSchema, normaliseAutoAttach } from '../services/reservationImport/validation';
@@ -133,7 +136,7 @@ router.post('/extract', authenticate, singlePdfUpload, async (req: Request, res:
           draft: JSON.parse(existing.parsed_json),
           confidence: existing.confidence ?? 0,
           provider_used: existing.provider,
-          attached_file_id: null,
+          attached_file_id: existing.source_file_id ?? null,
           replayed: true,
         });
       }
@@ -166,12 +169,36 @@ router.post('/extract', authenticate, singlePdfUpload, async (req: Request, res:
       );
       recordImportComplete(importId, result);
 
+      // Auto-attach: on successful PDF extraction, move the tmp file into the
+      // trip's files directory and register a trip_files row (not yet linked
+      // to a reservation — the reservation doesn't exist until the user saves).
+      let attachedFileId: number | null = null;
+      if (uploadedFile && normaliseAutoAttach(req.body?.auto_attach)) {
+        try {
+          if (!fs.existsSync(filesDir)) fs.mkdirSync(filesDir, { recursive: true });
+          const ext = path.extname(uploadedFile.originalname) || '.pdf';
+          const storedName = `${randomUUID()}${ext}`;
+          const destPath = path.join(filesDir, storedName);
+          await fs.promises.copyFile(uploadedFile.path, destPath);
+          const created = createFile(
+            tripId,
+            { filename: storedName, originalname: uploadedFile.originalname, size: uploadedFile.size, mimetype: uploadedFile.mimetype },
+            authReq.user.id,
+            {},
+          );
+          attachedFileId = created.id as number;
+          db.prepare('UPDATE reservation_imports SET source_file_id = ? WHERE id = ?').run(attachedFileId, importId);
+        } catch (attachErr) {
+          console.error('[reservation-import] auto-attach failed:', attachErr);
+        }
+      }
+
       return res.json({
         import_id: importId,
         draft: result.draft,
         confidence: result.confidence,
         provider_used: result.provider_used,
-        attached_file_id: null, // slice 4 adds auto-attach via trip_files
+        attached_file_id: attachedFileId,
       });
     } catch (innerErr) {
       const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);

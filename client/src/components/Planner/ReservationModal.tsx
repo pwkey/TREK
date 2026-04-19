@@ -5,13 +5,15 @@ import { useTripStore } from '../../store/tripStore'
 import { useAddonStore } from '../../store/addonStore'
 import Modal from '../shared/Modal'
 import CustomSelect from '../shared/CustomSelect'
-import { Plane, Hotel, Utensils, Train, Car, Ship, Ticket, FileText, Users, Paperclip, X, ExternalLink, Link2 } from 'lucide-react'
+import { Plane, Hotel, Utensils, Train, Car, Ship, Ticket, FileText, Users, Paperclip, X, ExternalLink, Link2, Wand2 } from 'lucide-react'
 import { useToast } from '../shared/Toast'
 import { useTranslation } from '../../i18n'
 import { CustomDatePicker } from '../shared/CustomDateTimePicker'
 import CustomTimePicker from '../shared/CustomTimePicker'
 import { getAuthUrl } from '../../api/authUrl'
 import type { Day, Place, Reservation, TripFile, AssignmentsMap, Accommodation } from '../../types'
+import ReservationImportSheet from './ReservationImportSheet'
+import type { ReservationImportResponse, ReservationImportDraft } from '../../types/reservationImport'
 
 const TYPE_OPTIONS = [
   { value: 'flight',     labelKey: 'reservations.type.flight',     Icon: Plane },
@@ -98,6 +100,9 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
   const [showFilePicker, setShowFilePicker] = useState(false)
   const [linkedFileIds, setLinkedFileIds] = useState<number[]>([])
   const [unlinkedFileIds, setUnlinkedFileIds] = useState<number[]>([])
+  // [460-fork] Smart Import (Milestone 2 slice 4)
+  const [showImportSheet, setShowImportSheet] = useState(false)
+  const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set())
 
   const assignmentOptions = useMemo(
     () => buildAssignmentOptions(days, assignments, t, locale),
@@ -163,6 +168,52 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
   }, [reservation, isOpen, selectedDayId])
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
+
+  // [460-fork] Apply a Smart-Import draft into the form state. Tracks which
+  // fields were auto-filled so callers can show a "(auto-filled)" badge.
+  const applyImportDraft = (result: ReservationImportResponse) => {
+    const d: ReservationImportDraft = result.draft
+    const touched = new Set<string>()
+    const next: Record<string, string> = {}
+    const take = (key: string, value: string | null | undefined) => {
+      if (value === null || value === undefined) return
+      const s = String(value).trim()
+      if (!s) return
+      next[key] = s
+      touched.add(key)
+    }
+    if (d.type && TYPE_OPTIONS.some(o => o.value === d.type)) take('type', d.type)
+    take('title', d.title)
+    if (d.reservation_time) take('reservation_time', d.reservation_time.slice(0, 16))
+    if (d.reservation_end_time) {
+      const end = d.reservation_end_time
+      if (end.includes('T')) {
+        take('end_date', end.split('T')[0])
+        take('reservation_end_time', (end.split('T')[1] || '').slice(0, 5))
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+        take('end_date', end)
+      }
+    }
+    take('location', d.location)
+    take('confirmation_number', d.confirmation_number)
+    take('notes', d.notes)
+    if (d.price !== null && d.price !== undefined) take('price', String(d.price))
+    // Flight-specific: first leg fills airline/flight number/airports.
+    if (d.type === 'flight' && d.legs && d.legs.length > 0) {
+      const leg = d.legs[0]
+      take('meta_airline', leg.airline)
+      take('meta_flight_number', leg.flight_number)
+      take('meta_departure_airport', leg.origin)
+      take('meta_arrival_airport', leg.destination)
+    }
+    setForm(prev => ({ ...prev, ...next }))
+    setAutoFilledFields(touched)
+    // Auto-attach: if the server stashed the PDF into trip_files, link it to this reservation on save.
+    if (result.attached_file_id) {
+      setLinkedFileIds(prev => prev.includes(result.attached_file_id!) ? prev : [...prev, result.attached_file_id!])
+      loadFiles(tripId!)
+    }
+  }
 
   // Validate that end datetime is after start datetime
   const isEndBeforeStart = (() => {
@@ -306,6 +357,43 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={reservation ? t('reservations.editTitle') : t('reservations.newTitle')} size="2xl">
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+        {/* [460-fork] Smart Import trigger (Milestone 2 slice 4) */}
+        {!reservation && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <button
+              type="button"
+              onClick={() => setShowImportSheet(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '6px 12px', borderRadius: 8,
+                border: '1px dashed var(--border-primary)',
+                background: 'var(--bg-card)', fontSize: 12, fontWeight: 500,
+                cursor: 'pointer', color: 'var(--text-primary)', fontFamily: 'inherit',
+              }}
+              title="Extract reservation details from a booking PDF or email"
+            >
+              <Wand2 size={12} /> Import from document or email
+            </button>
+          </div>
+        )}
+
+        {autoFilledFields.size > 0 && (
+          <div style={{
+            padding: '8px 12px', borderRadius: 8, fontSize: 12,
+            background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.3)',
+            color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          }}>
+            <span>{autoFilledFields.size} field{autoFilledFields.size === 1 ? '' : 's'} pre-filled from import. Review before saving.</span>
+            <button
+              type="button"
+              onClick={() => setAutoFilledFields(new Set())}
+              style={{ border: 'none', background: 'none', fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              dismiss
+            </button>
+          </div>
+        )}
 
         {/* Type selector */}
         <div>
@@ -714,6 +802,16 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
           </button>
         </div>
       </form>
+
+      {/* [460-fork] Smart Import sheet (Milestone 2 slice 4) */}
+      {tripId && (
+        <ReservationImportSheet
+          isOpen={showImportSheet}
+          onClose={() => setShowImportSheet(false)}
+          tripId={tripId}
+          onImported={applyImportDraft}
+        />
+      )}
     </Modal>
   )
 }

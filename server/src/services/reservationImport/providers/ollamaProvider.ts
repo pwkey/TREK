@@ -22,7 +22,7 @@ export class OllamaProvider implements LlmProvider {
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
-  async extract(prompt: string, jsonSchema: unknown): Promise<{ parsed: unknown; model: string }> {
+  async extract(prompt: string, _jsonSchema: unknown): Promise<{ parsed: unknown; model: string }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     let res: Response;
@@ -35,8 +35,11 @@ export class OllamaProvider implements LlmProvider {
           model: this.model,
           prompt,
           stream: false,
-          format: jsonSchema,
-          options: { temperature: 0.1 },
+          // Ollama's `format: "json"` is a much cheaper CPU constraint than a
+          // full JSON-schema `format: <schema>` — tokens aren't validated against
+          // every nested field. Post-parse + zod still enforces the schema.
+          format: 'json',
+          options: { temperature: 0.1, num_ctx: 4096 },
         }),
       });
     } catch (err: any) {

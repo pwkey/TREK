@@ -50,7 +50,9 @@ describe('OllamaProvider', () => {
     const sent = JSON.parse((call[1] as RequestInit).body as string);
     expect(sent.model).toBe('llama3.1:8b');
     expect(sent.stream).toBe(false);
-    expect(sent.format).toEqual(schema);
+    // We pass format:"json" (Ollama cheap JSON mode) rather than the full schema —
+    // schema-constrained decoding is too slow on CPU. zod validates post-parse.
+    expect(sent.format).toBe('json');
   });
 
   it('strips trailing slash from base URL', async () => {

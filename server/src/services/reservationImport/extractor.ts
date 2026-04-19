@@ -1,5 +1,6 @@
 import { getResolvedImportSettings } from '../importSettingsService';
 import { OllamaProvider } from './providers/ollamaProvider';
+import { AnthropicProvider } from './providers/anthropicProvider';
 import { buildExtractionPrompt } from './prompts';
 import { reservationDraftJsonSchema, reservationDraftSchema } from './schema';
 import { ExtractContext, ExtractError, ExtractResult, ExtractSource, LlmProvider, ReservationDraft } from './types';
@@ -49,11 +50,15 @@ function buildProviderFromSettings(): LlmProvider {
     case 'ollama':
       return new OllamaProvider({ url: settings.ollama_url, model: settings.ollama_model });
     case 'anthropic':
+      if (!settings.anthropic_key) {
+        throw new ExtractError('PROVIDER_DISABLED', 'Anthropic API key is not set in admin settings.');
+      }
+      return new AnthropicProvider({ apiKey: settings.anthropic_key, model: settings.anthropic_model });
     case 'openai':
-      // Slice 5 wires these in. Until then, selecting them is a misconfiguration.
+      // Slice 5b: not yet implemented. Fall through to disabled.
       throw new ExtractError(
         'PROVIDER_DISABLED',
-        `Provider "${settings.provider}" is not yet implemented. Select "ollama" or set provider to "disabled".`,
+        'OpenAI provider is not yet implemented. Use "anthropic" or "ollama".',
       );
     default:
       throw new ExtractError('PROVIDER_DISABLED', `Unknown provider: ${settings.provider}`);

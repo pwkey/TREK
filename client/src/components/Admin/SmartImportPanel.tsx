@@ -29,7 +29,7 @@ const emptySettings: ImportSettings = {
   provider: 'disabled',
   ollama_url: 'http://localhost:11434',
   ollama_model: 'llama3.1:8b',
-  anthropic_model: 'claude-sonnet-4-5',
+  anthropic_model: 'claude-haiku-4-5',
   openai_model: 'gpt-4o-mini',
   anthropic_key_set: false,
   openai_key_set: false,
@@ -211,12 +211,12 @@ export default function SmartImportPanel() {
                     type="text"
                     value={settings.anthropic_model}
                     onChange={e => update('anthropic_model', e.target.value)}
-                    placeholder="claude-sonnet-4-5"
+                    placeholder="claude-haiku-4-5"
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                   />
                 </div>
-                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-3">
-                  Adapter not yet implemented (Milestone 2, slice 5). Key is stored encrypted; selecting this provider before the adapter ships will return an error on extract.
+                <p className="text-xs text-gray-500">
+                  Cloud inference, typically sub-second per extraction. Booking text (names, dates, confirmation codes) is sent to Anthropic. ~$0.004 per extraction on Haiku 4.5.
                 </p>
               </div>
             )}

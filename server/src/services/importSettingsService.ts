@@ -51,7 +51,7 @@ const DEFAULTS = {
   provider: 'disabled' as ImportProvider,
   ollama_url: 'http://localhost:11434',
   ollama_model: 'llama3.1:8b',
-  anthropic_model: 'claude-sonnet-4-5',
+  anthropic_model: 'claude-haiku-4-5',
   openai_model: 'gpt-4o-mini',
   ocr_enabled: false,
 };

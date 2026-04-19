@@ -97,8 +97,15 @@ describe('extractReservationDraft', () => {
     ).rejects.toMatchObject({ code: 'PROVIDER_DISABLED' });
   });
 
-  it('throws PROVIDER_DISABLED when anthropic/openai selected (not yet implemented)', async () => {
-    vi.mocked(settings.getResolvedImportSettings).mockReturnValue({ ...baseSettings, provider: 'anthropic', anthropic_key: 'sk-ant-x' });
+  it('throws PROVIDER_DISABLED when anthropic selected but no API key', async () => {
+    vi.mocked(settings.getResolvedImportSettings).mockReturnValue({ ...baseSettings, provider: 'anthropic', anthropic_key: null });
+    await expect(
+      extractReservationDraft({ kind: 'email_text', text: 'something' }, { tripId: 1, userId: 1 })
+    ).rejects.toMatchObject({ code: 'PROVIDER_DISABLED' });
+  });
+
+  it('throws PROVIDER_DISABLED when openai selected (not yet implemented)', async () => {
+    vi.mocked(settings.getResolvedImportSettings).mockReturnValue({ ...baseSettings, provider: 'openai', openai_key: 'sk-o-x' });
     await expect(
       extractReservationDraft({ kind: 'email_text', text: 'something' }, { tripId: 1, userId: 1 })
     ).rejects.toMatchObject({ code: 'PROVIDER_DISABLED' });

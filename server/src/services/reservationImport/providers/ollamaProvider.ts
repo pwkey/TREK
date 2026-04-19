@@ -1,6 +1,9 @@
 import { ExtractError, LlmProvider } from '../types';
 
-const DEFAULT_TIMEOUT_MS = 60_000;
+// First request after server start (or after the model unloads from RAM) is a
+// cold-start: llama3.1:8b takes 30-90s to load on a typical Windows box. After
+// that, Ollama keeps the model resident for `keep_alive` (5 min default).
+const DEFAULT_TIMEOUT_MS = 180_000;
 
 interface OllamaGenerateResponse {
   response?: string;

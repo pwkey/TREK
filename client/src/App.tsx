@@ -13,6 +13,7 @@ import AtlasPage from './pages/AtlasPage'
 import SharedTripPage from './pages/SharedTripPage'
 import InAppNotificationsPage from './pages/InAppNotificationsPage.tsx'
 import { ToastContainer } from './components/shared/Toast'
+import SplashScreen from './components/shared/SplashScreen'
 import { TranslationProvider, useTranslation } from './i18n'
 import { authApi } from './api/client'
 import { usePermissionsStore, PermissionLevel } from './store/permissionsStore'
@@ -157,6 +158,7 @@ export default function App() {
 
   return (
     <TranslationProvider>
+      <SplashScreen />
       <ToastContainer />
       <Routes>
         <Route path="/" element={<RootRedirect />} />

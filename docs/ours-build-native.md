@@ -6,6 +6,32 @@ Referenced from `CLAUDE.md` §3 (distribution strategy) and §12 (annual mainten
 
 ---
 
+## Status (as of 2026-04-20)
+
+Phase A (no Apple cost, Android-focused):
+
+- ✅ PWA branded: icons, manifest, theme, title, splash, all visible "TREK" strings replaced.
+- ✅ Capacitor core + CLI + Android platform installed at repo root.
+- ✅ `capacitor.config.json`: appId `com.fourhundredsixty.tripplanner`, webDir `client/dist`.
+- ✅ `android/` Gradle project generated and checked in (the template is meant to be committed per CLAUDE.md §3.3).
+- ✅ `cap sync` round-trip verified: `client/dist` → `android/app/src/main/assets/public`.
+- ⬜ Android Studio / SDK / JDK not yet installed on the dev machine — required to actually produce an APK.
+- ⬜ iOS platform deliberately not added (needs macOS for CocoaPods).
+
+Convenience scripts in the root `package.json`:
+
+- `npm run cap:sync` — rebuild client then `cap sync`.
+- `npm run cap:open:android` — open `android/` in Android Studio (once installed).
+- `npm run android:debug` — full pipeline to `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+Still required before the APK is useful:
+
+- Install Android Studio (see §2 and §4.4).
+- Decide WebView→backend strategy. Currently the APK loads bundled UI and `fetch('/api/...')` hits `capacitor://localhost/api` and fails. Options: set `server.url` in `capacitor.config.json` to the dev box's LAN address, or configure the client's API base URL to an absolute production host once we have one.
+- Generate branded Android launcher icons. Current icons are the default green Capacitor placeholder. Plan: `npm install --save-dev @capacitor/assets`, place `resources/icon.png` (1024×1024), run `npx capacitor-assets generate --android`.
+
+---
+
 ## 1. Why a runbook, not tribal knowledge
 
 Native-app signing, provisioning, and store submission have a high activation energy, a high error rate for first-time setup, and a nasty habit of breaking the week before a trip when you most need the app working. This document exists so future-you isn't rediscovering the same fix at 11pm the night before a flight. Update it every time you solve a problem that wasn't already written here.

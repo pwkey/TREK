@@ -245,6 +245,33 @@ export function createInvite(params: { segmentId: string; userId: number }): Cre
   return { id, token, expires_at: expires };
 }
 
+export interface InvitePreview {
+  segment: Pick<SegmentRow, 'id' | 'title' | 'start_date' | 'end_date'>;
+  expires_at: string;
+  accepted: boolean;
+}
+
+/**
+ * Look up a segment invite by its bearer token and return the minimal preview
+ * the accepter needs to decide — title, date range, expiry. Does NOT leak
+ * sibling-trip titles or member lists. Any authenticated user can call this
+ * with a valid token; bad/expired tokens produce the usual error codes.
+ */
+export function getInvitePreview(token: string): InvitePreview | SegmentServiceError {
+  const invite = db.prepare(
+    'SELECT segment_id, expires_at, accepted_at FROM segment_invites WHERE token = ?',
+  ).get(token) as { segment_id: string; expires_at: string; accepted_at: string | null } | undefined;
+  if (!invite) return { error: 'Invite not found', code: 'INVITE_NOT_FOUND', status: 404 };
+  if (new Date(invite.expires_at).getTime() < Date.now()) {
+    return { error: 'Invite has expired', code: 'INVITE_EXPIRED', status: 410 };
+  }
+  const seg = db.prepare(
+    'SELECT id, title, start_date, end_date FROM segments WHERE id = ?',
+  ).get(invite.segment_id) as Pick<SegmentRow, 'id' | 'title' | 'start_date' | 'end_date'> | undefined;
+  if (!seg) return { error: 'Segment not found', code: 'SEGMENT_NOT_FOUND', status: 404 };
+  return { segment: seg, expires_at: invite.expires_at, accepted: invite.accepted_at != null };
+}
+
 export function acceptInvite(params: AcceptInviteParams): SegmentView | SegmentServiceError {
   const { token, userId, targetTripId } = params;
   // Slice 1 supports replace_own only; keep_own is deferred.

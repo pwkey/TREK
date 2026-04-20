@@ -43,6 +43,7 @@ export interface Day {
   date?: string | null;
   notes?: string | null;
   title?: string | null;
+  segment_id?: string | null; // [460-fork] Milestone 4: shared-segment pointer
 }
 
 export interface Place {

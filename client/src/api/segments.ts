@@ -30,6 +30,12 @@ export interface LeaveResult {
   cloned_day_ids: number[]
 }
 
+export interface InvitePreview {
+  segment: { id: string; title: string; start_date: string | null; end_date: string | null }
+  expires_at: string
+  accepted: boolean
+}
+
 export const segmentsApi = {
   create: (data: { trip_id: number; day_ids: number[]; title: string }) =>
     apiClient.post('/segments', data).then(r => r.data as SegmentView),
@@ -39,6 +45,9 @@ export const segmentsApi = {
 
   createInvite: (segmentId: string) =>
     apiClient.post(`/segments/${segmentId}/invites`).then(r => r.data as CreateInviteResult),
+
+  getInvitePreview: (token: string) =>
+    apiClient.get(`/segments/invite/${token}`).then(r => r.data as InvitePreview),
 
   accept: (data: { token: string; target_trip_id: number }) =>
     apiClient.post('/segments/accept', data).then(r => r.data as SegmentView),

@@ -19,6 +19,7 @@ import { useToast } from '../shared/Toast'
 import { getCategoryIcon } from '../shared/categoryIcons'
 import { useTripStore } from '../../store/tripStore'
 import CreateSegmentModal from '../Segments/CreateSegmentModal' // [460-fork] Milestone 4
+import SharedDayChip from '../Segments/SharedDayChip' // [460-fork] Milestone 4
 import { useCanDo } from '../../store/permissionsStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useTranslation } from '../../i18n'
@@ -1038,6 +1039,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                       >
                         <Pencil size={15} strokeWidth={1.8} color="var(--text-secondary)" />
                       </button>}
+                      {/* [460-fork] Milestone 4 — shared-segment marker */}
+                      {day.segment && <SharedDayChip title={day.segment.title} />}
                       {(() => {
                         const dayAccs = accommodations.filter(a => day.id >= a.start_day_id && day.id <= a.end_day_id)
                           // Sort: check-out first, then ongoing stays, then check-in last

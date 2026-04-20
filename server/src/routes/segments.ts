@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { writeAudit, getClientIp } from '../services/auditLog';
+import { broadcast } from '../websocket';
 import * as segmentService from '../services/segmentService';
 
 const router = express.Router();
@@ -31,6 +32,14 @@ router.get('/:id', authenticate, (req: Request, res: Response) => {
   res.json(result);
 });
 
+// Preview an invite by token (for the accept page). Minimal data; no
+// sibling-trip PII. Any authenticated user can hit this with a valid token.
+router.get('/invite/:token', authenticate, (req: Request, res: Response) => {
+  const result = segmentService.getInvitePreview(req.params.token);
+  if ('error' in result) return sendErr(res, result);
+  res.json(result);
+});
+
 // Mint an invite link. Only a linked-trip owner can create invites (OQ-F).
 router.post('/:id/invites', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
@@ -50,6 +59,15 @@ router.post('/accept', authenticate, (req: Request, res: Response) => {
   const result = segmentService.acceptInvite({ token, userId: authReq.user.id, targetTripId: target_trip_id });
   if ('error' in result) return sendErr(res, result);
   writeAudit({ userId: authReq.user.id, action: 'segment.accept', ip: getClientIp(req), details: { segmentId: result.segment.id, targetTripId: target_trip_id } });
+  // Tell every linked trip (including the new one) to refresh — days are
+  // about to appear on the new side, and existing sides may want to see the
+  // "now linked with N trips" update. Payload key is `attachedTripId` to
+  // avoid colliding with the room-scoped `tripId` the broadcast helper
+  // stamps on the wire event.
+  const payload = { segmentId: result.segment.id, attachedTripId: target_trip_id };
+  for (const linkedTripId of result.linked_trip_ids) {
+    broadcast(linkedTripId, 'segment:attached', payload, req.headers['x-socket-id'] as string);
+  }
   res.json(result);
 });
 
@@ -61,6 +79,14 @@ router.delete('/:id/trips/:tripId', authenticate, (req: Request, res: Response) 
   const result = segmentService.removeTripFromSegment({ segmentId: req.params.id, tripId, userId: authReq.user.id });
   if ('error' in result) return sendErr(res, result);
   writeAudit({ userId: authReq.user.id, action: 'segment.leave', ip: getClientIp(req), details: { segmentId: req.params.id, tripId, clonedDayCount: result.cloned_day_ids.length } });
+  // Notify the leaving trip AND every remaining linked trip so their UIs
+  // drop the chip / refresh membership counts.
+  const payload = { segmentId: req.params.id, leftTripId: tripId };
+  broadcast(tripId, 'segment:detached', payload, req.headers['x-socket-id'] as string);
+  const remaining = segmentService.listTripIdsForSegment(req.params.id);
+  for (const linkedTripId of remaining) {
+    broadcast(linkedTripId, 'segment:detached', payload, req.headers['x-socket-id'] as string);
+  }
   res.json(result);
 });
 

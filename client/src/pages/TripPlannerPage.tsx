@@ -208,6 +208,14 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
   useTripWebSocket(tripId)
 
+  // [460-fork] Milestone 4 — refresh days when a segment is attached/detached.
+  useEffect(() => {
+    if (!tripId) return
+    const onSegmentsChanged = () => { void tripActions.refreshDays(tripId) }
+    window.addEventListener('segments:changed', onSegmentsChanged)
+    return () => window.removeEventListener('segments:changed', onSegmentsChanged)
+  }, [tripId])
+
   const [mapCategoryFilter, setMapCategoryFilter] = useState<string>('')
 
   const [expandedDayIds, setExpandedDayIds] = useState<Set<number> | null>(null)

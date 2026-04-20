@@ -250,6 +250,15 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
         window.dispatchEvent(new CustomEvent('memories:updated', { detail: payload }))
         return {}
 
+      // [460-fork] Shared segments (Milestone 4). A trip has been linked to or
+      // left a segment — the set of days visible via the UNION query may have
+      // changed. We dispatch a window event so the planner page can refresh
+      // days without us taking a dependency on tripStore here.
+      case 'segment:attached':
+      case 'segment:detached':
+        window.dispatchEvent(new CustomEvent('segments:changed', { detail: payload }))
+        return {}
+
       default:
         return {}
     }

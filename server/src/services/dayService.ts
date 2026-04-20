@@ -132,10 +132,25 @@ export function listDays(tripId: string | number) {
     notesByDayId[note.day_id].push(note);
   }
 
+  // [460-fork] shared-segments — hydrate each segment-linked day with the
+  // segment title so the chip renders without a second round-trip.
+  const segmentIdsInUse = [...new Set(days.map(d => d.segment_id).filter((v): v is string => !!v))];
+  const segmentTitleById: Record<string, string> = {};
+  if (segmentIdsInUse.length > 0) {
+    const segPlaceholders = segmentIdsInUse.map(() => '?').join(',');
+    const segRows = db.prepare(
+      `SELECT id, title FROM segments WHERE id IN (${segPlaceholders})`,
+    ).all(...segmentIdsInUse) as Array<{ id: string; title: string }>;
+    for (const r of segRows) segmentTitleById[r.id] = r.title;
+  }
+
   const daysWithAssignments = days.map(day => ({
     ...day,
     assignments: assignmentsByDayId[day.id] || [],
     notes_items: notesByDayId[day.id] || [],
+    segment: day.segment_id
+      ? { id: day.segment_id, title: segmentTitleById[day.segment_id] || '' }
+      : null,
   }));
 
   return { days: daysWithAssignments };

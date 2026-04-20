@@ -213,6 +213,39 @@ describe('DELETE /api/segments/:id/trips/:tripId (leave)', () => {
   });
 });
 
+describe('GET /api/segments/invite/:token (preview)', () => {
+  it('returns minimal segment metadata for a valid token', async () => {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    const { segmentId, invite } = await setupSegment(alice.id, bob.id);
+    const res = await request(app).get(`/api/segments/invite/${invite.body.token}`).set('Cookie', authCookie(alice.id));
+    expect(res.status).toBe(200);
+    expect(res.body.segment.id).toBe(segmentId);
+    expect(res.body.segment.title).toBe('Adventure with the Smiths');
+    expect(res.body.accepted).toBe(true);
+    expect(new Date(res.body.expires_at).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('404 for unknown token', async () => {
+    const { user: alice } = createUser(testDb);
+    const res = await request(app).get('/api/segments/invite/nope').set('Cookie', authCookie(alice.id));
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('INVITE_NOT_FOUND');
+  });
+
+  it('410 for expired token', async () => {
+    const { user: alice } = createUser(testDb);
+    const trip = createTrip(testDb, alice.id, { title: 'T', start_date: '2027-06-10', end_date: '2027-06-11' });
+    const dayIds = dayIdsForDates(trip.id, ['2027-06-10']);
+    const seg = await request(app).post('/api/segments').set('Cookie', authCookie(alice.id)).send({ trip_id: trip.id, day_ids: dayIds, title: 'S' });
+    const inv = await request(app).post(`/api/segments/${seg.body.segment.id}/invites`).set('Cookie', authCookie(alice.id));
+    testDb.prepare("UPDATE segment_invites SET expires_at = datetime('now', '-1 day') WHERE token = ?").run(inv.body.token);
+    const res = await request(app).get(`/api/segments/invite/${inv.body.token}`).set('Cookie', authCookie(alice.id));
+    expect(res.status).toBe(410);
+    expect(res.body.code).toBe('INVITE_EXPIRED');
+  });
+});
+
 describe('Day edit on a shared day — cross-trip write via getAccessibleDay', () => {
   it('Bob can PUT a shared day (segment-linked) and the canonical row updates', async () => {
     const { user: alice } = createUser(testDb);

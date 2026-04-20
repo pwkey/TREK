@@ -11,6 +11,7 @@ import SettingsPage from './pages/SettingsPage'
 import VacayPage from './pages/VacayPage'
 import AtlasPage from './pages/AtlasPage'
 import SharedTripPage from './pages/SharedTripPage'
+import SegmentAcceptPage from './pages/SegmentAcceptPage' // [460-fork] Milestone 4
 import InAppNotificationsPage from './pages/InAppNotificationsPage.tsx'
 import { ToastContainer } from './components/shared/Toast'
 import SplashScreen from './components/shared/SplashScreen'
@@ -164,6 +165,15 @@ export default function App() {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/shared/:token" element={<SharedTripPage />} />
+        {/* [460-fork] Milestone 4 — accept a shared-segment invite. */}
+        <Route
+          path="/segments/accept/:token"
+          element={
+            <ProtectedRoute>
+              <SegmentAcceptPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/register" element={<LoginPage />} />
         <Route
           path="/dashboard"

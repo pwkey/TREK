@@ -22,13 +22,25 @@ export function listPlaces(
   tripId: string,
   filters: { search?: string; category?: string; tag?: string },
 ) {
+  // [460-fork] shared-segments — a trip also sees places assigned to any day
+  // in a segment it is linked to. The OR clause pulls those in via the
+  // assignment → day → segment → trip_segments chain; places not yet assigned
+  // to any day remain private to their home trip.
   let query = `
     SELECT DISTINCT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon
     FROM places p
     LEFT JOIN categories c ON p.category_id = c.id
-    WHERE p.trip_id = ?
+    WHERE (
+      p.trip_id = ?
+      OR p.id IN (
+        SELECT da.place_id
+          FROM day_assignments da
+          JOIN days d ON d.id = da.day_id
+         WHERE d.segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+      )
+    )
   `;
-  const params: (string | number)[] = [tripId];
+  const params: (string | number)[] = [tripId, tripId];
 
   if (filters.search) {
     query += ' AND (p.name LIKE ? OR p.address LIKE ? OR p.description LIKE ?)';

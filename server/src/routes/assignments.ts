@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { requireTripAccess } from '../middleware/tripAccess';
-import { broadcast } from '../websocket';
+import { broadcast, broadcastDayById } from '../websocket';
 import { checkPermission } from '../services/permissions';
 import {
   getAssignmentWithPlace,
@@ -44,7 +44,7 @@ router.post('/trips/:tripId/days/:dayId/assignments', authenticate, requireTripA
 
   const assignment = createAssignment(dayId, place_id, notes);
   res.status(201).json({ assignment });
-  broadcast(tripId, 'assignment:created', { assignment }, req.headers['x-socket-id'] as string);
+  broadcastDayById(dayId, tripId, 'assignment:created', { assignment }, req.headers['x-socket-id'] as string);
 });
 
 router.delete('/trips/:tripId/days/:dayId/assignments/:id', authenticate, requireTripAccess, (req: Request, res: Response) => {
@@ -58,7 +58,7 @@ router.delete('/trips/:tripId/days/:dayId/assignments/:id', authenticate, requir
 
   deleteAssignment(id);
   res.json({ success: true });
-  broadcast(tripId, 'assignment:deleted', { assignmentId: Number(id), dayId: Number(dayId) }, req.headers['x-socket-id'] as string);
+  broadcastDayById(dayId, tripId, 'assignment:deleted', { assignmentId: Number(id), dayId: Number(dayId) }, req.headers['x-socket-id'] as string);
 });
 
 router.put('/trips/:tripId/days/:dayId/assignments/reorder', authenticate, requireTripAccess, (req: Request, res: Response) => {
@@ -73,7 +73,7 @@ router.put('/trips/:tripId/days/:dayId/assignments/reorder', authenticate, requi
 
   reorderAssignments(dayId, orderedIds);
   res.json({ success: true });
-  broadcast(tripId, 'assignment:reordered', { dayId: Number(dayId), orderedIds }, req.headers['x-socket-id'] as string);
+  broadcastDayById(dayId, tripId, 'assignment:reordered', { dayId: Number(dayId), orderedIds }, req.headers['x-socket-id'] as string);
 });
 
 router.put('/trips/:tripId/assignments/:id/move', authenticate, requireTripAccess, (req: Request, res: Response) => {
@@ -92,7 +92,12 @@ router.put('/trips/:tripId/assignments/:id/move', authenticate, requireTripAcces
   const oldDayId = existing.day_id;
   const { assignment: updated } = moveAssignment(id, new_day_id, order_index, oldDayId);
   res.json({ assignment: updated });
-  broadcast(tripId, 'assignment:moved', { assignment: updated, oldDayId: Number(oldDayId), newDayId: Number(new_day_id) }, req.headers['x-socket-id'] as string);
+  // [460-fork] A move can cross segment boundaries — dispatch once per side so
+  // each audience sees the disappearance (old) and the appearance (new).
+  broadcastDayById(oldDayId, tripId, 'assignment:moved', { assignment: updated, oldDayId: Number(oldDayId), newDayId: Number(new_day_id) }, req.headers['x-socket-id'] as string);
+  if (Number(new_day_id) !== Number(oldDayId)) {
+    broadcastDayById(new_day_id, tripId, 'assignment:moved', { assignment: updated, oldDayId: Number(oldDayId), newDayId: Number(new_day_id) }, req.headers['x-socket-id'] as string);
+  }
 });
 
 router.get('/trips/:tripId/assignments/:id/participants', authenticate, requireTripAccess, (req: Request, res: Response) => {
@@ -115,7 +120,7 @@ router.put('/trips/:tripId/assignments/:id/time', authenticate, requireTripAcces
   const { place_time, end_time } = req.body;
   const updated = updateTime(id, place_time, end_time);
   res.json({ assignment: updated });
-  broadcast(Number(tripId), 'assignment:updated', { assignment: updated }, req.headers['x-socket-id'] as string);
+  broadcastDayById(updated!.day_id, tripId, 'assignment:updated', { assignment: updated }, req.headers['x-socket-id'] as string);
 });
 
 router.put('/trips/:tripId/assignments/:id/participants', authenticate, requireTripAccess, (req: Request, res: Response) => {
@@ -129,7 +134,14 @@ router.put('/trips/:tripId/assignments/:id/participants', authenticate, requireT
 
   const participants = setParticipants(id, user_ids);
   res.json({ participants });
-  broadcast(Number(tripId), 'assignment:participants', { assignmentId: Number(id), participants }, req.headers['x-socket-id'] as string);
+  // [460-fork] Participants are per-assignment metadata; scope the broadcast to
+  // the day's audience so shared assignments reach every linked trip.
+  const existingForDay = getAssignmentForTrip(id, tripId);
+  if (existingForDay) {
+    broadcastDayById(existingForDay.day_id, tripId, 'assignment:participants', { assignmentId: Number(id), participants }, req.headers['x-socket-id'] as string);
+  } else {
+    broadcast(Number(tripId), 'assignment:participants', { assignmentId: Number(id), participants }, req.headers['x-socket-id'] as string);
+  }
 });
 
 export default router;

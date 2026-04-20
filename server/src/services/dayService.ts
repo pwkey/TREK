@@ -75,7 +75,19 @@ export function getAssignmentsForDay(dayId: number | string) {
 // ---------------------------------------------------------------------------
 
 export function listDays(tripId: string | number) {
-  const days = db.prepare('SELECT * FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(tripId) as Day[];
+  // [460-fork] shared-segments union — BEGIN
+  // A trip sees its own day rows AND every day belonging to a segment it is
+  // linked to via trip_segments. Ordering is by date first so days from a
+  // shared segment interleave correctly with own days; day_number is the
+  // tiebreaker for same-date rows (e.g. pre-segment placeholders).
+  const days = db.prepare(`
+    SELECT DISTINCT d.*
+      FROM days d
+     WHERE d.trip_id = ?
+        OR d.segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+     ORDER BY COALESCE(d.date, ''), d.day_number ASC
+  `).all(tripId, tripId) as Day[];
+  // [460-fork] shared-segments union — END
 
   if (days.length === 0) {
     return { days: [] };
@@ -144,6 +156,25 @@ export function createDay(tripId: string | number, date?: string, notes?: string
 export function getDay(id: string | number, tripId: string | number) {
   return db.prepare('SELECT * FROM days WHERE id = ? AND trip_id = ?').get(id, tripId) as Day | undefined;
 }
+
+// [460-fork] shared-segments — BEGIN
+/**
+ * Returns a day if the caller's trip either owns it OR is linked to the
+ * segment that owns it. Used by the day-edit route so any linked-trip
+ * member can edit a shared day (per the OQ-A decision).
+ */
+export function getAccessibleDay(id: string | number, callerTripId: string | number) {
+  return db.prepare(`
+    SELECT d.*
+      FROM days d
+     WHERE d.id = ?
+       AND (
+         d.trip_id = ?
+         OR d.segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+       )
+  `).get(id, callerTripId, callerTripId) as Day | undefined;
+}
+// [460-fork] shared-segments — END
 
 export function updateDay(id: string | number, current: Day, fields: { notes?: string; title?: string | null }) {
   db.prepare('UPDATE days SET notes = ?, title = ? WHERE id = ?').run(

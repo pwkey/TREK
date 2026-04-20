@@ -204,6 +204,34 @@ function broadcastToUser(userId: number, payload: Record<string, unknown>, exclu
   }
 }
 
+// [460-fork] Shared segments (Milestone 4) — BEGIN
+/**
+ * Fan out an event to every trip linked to a segment. Called by day- and
+ * assignment-mutation paths when the affected row is part of a shared segment
+ * so that all linked households receive the update live.
+ */
+function broadcastToSegment(segmentId: string, eventType: string, payload: Record<string, unknown>, excludeSid?: number | string): void {
+  const rows = db.prepare('SELECT trip_id FROM trip_segments WHERE segment_id = ?').all(segmentId) as Array<{ trip_id: number }>;
+  for (const r of rows) broadcast(r.trip_id, eventType, { ...payload, segmentId }, excludeSid);
+}
+
+/**
+ * Broadcast a day-scoped mutation event to the correct audience: segment-wide
+ * if the day is part of a shared segment, trip-wide otherwise. Accepts either
+ * the whole day row or a day id; the latter looks up segment_id/trip_id.
+ */
+function broadcastDay(day: { id: number; trip_id: number; segment_id?: string | null }, eventType: string, payload: Record<string, unknown>, excludeSid?: number | string): void {
+  if (day.segment_id) broadcastToSegment(day.segment_id, eventType, payload, excludeSid);
+  else broadcast(day.trip_id, eventType, payload, excludeSid);
+}
+
+function broadcastDayById(dayId: number | string, fallbackTripId: number | string, eventType: string, payload: Record<string, unknown>, excludeSid?: number | string): void {
+  const row = db.prepare('SELECT id, trip_id, segment_id FROM days WHERE id = ?').get(dayId) as { id: number; trip_id: number; segment_id: string | null } | undefined;
+  if (row) broadcastDay(row, eventType, payload, excludeSid);
+  else broadcast(fallbackTripId, eventType, payload, excludeSid);
+}
+// [460-fork] Shared segments (Milestone 4) — END
+
 function getOnlineUserIds(): Set<number> {
   const ids = new Set<number>();
   if (!wss) return ids;
@@ -216,4 +244,4 @@ function getOnlineUserIds(): Set<number> {
   return ids;
 }
 
-export { setupWebSocket, broadcast, broadcastToUser, getOnlineUserIds };
+export { setupWebSocket, broadcast, broadcastToUser, broadcastToSegment, broadcastDay, broadcastDayById, getOnlineUserIds };

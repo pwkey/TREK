@@ -9,6 +9,7 @@ import { broadcast } from '../websocket';
 import { AuthRequest, Trip } from '../types';
 import { writeAudit, getClientIp, logInfo } from '../services/auditLog';
 import { autoAddPartnerToTrip as partnerAutoAdd } from '../services/partnerService';
+import { canDeleteTrip as segmentCanDeleteTrip } from '../services/segmentService';
 import { checkPermission } from '../services/permissions';
 import {
   listTrips,
@@ -379,6 +380,17 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
   const isMemberDel = tripOwnerId !== authReq.user.id;
   if (!checkPermission('trip_delete', authReq.user.role, tripOwnerId, authReq.user.id, isMemberDel))
     return res.status(403).json({ error: 'No permission to delete this trip' });
+
+  // [460-fork] shared-segments — block deletion of a trip that hosts segment
+  // days referenced by sibling trips (OQ-B). User must dissolve or rehome first.
+  const deleteCheck = segmentCanDeleteTrip(Number(req.params.id));
+  if (deleteCheck.ok === false) {
+    return res.status(409).json({
+      error: 'This trip hosts shared segments used by other trips. Leave or dissolve them before deleting.',
+      code: 'SEGMENT_REFERENCES_BLOCK_DELETE',
+      blocking_segment_ids: deleteCheck.blocking_segment_ids,
+    });
+  }
 
   const info = deleteTrip(req.params.id, authReq.user.id, authReq.user.role);
 

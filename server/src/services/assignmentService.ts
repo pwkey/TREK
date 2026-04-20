@@ -99,12 +99,37 @@ export function listDayAssignments(dayId: string | number) {
   });
 }
 
+// [460-fork] shared-segments — dayExists and placeExists accept either the
+// caller's own trip_id, OR any segment linkage chain the caller is part of.
+// Keeps cross-trip assignment writes working once a trip is linked to a
+// segment (per OQ-A: any linked-trip member can edit).
 export function dayExists(dayId: string | number, tripId: string | number) {
-  return !!db.prepare('SELECT id FROM days WHERE id = ? AND trip_id = ?').get(dayId, tripId);
+  return !!db.prepare(`
+    SELECT 1 FROM days d
+     WHERE d.id = ?
+       AND (
+         d.trip_id = ?
+         OR d.segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+       )
+     LIMIT 1
+  `).get(dayId, tripId, tripId);
 }
 
 export function placeExists(placeId: string | number, tripId: string | number) {
-  return !!db.prepare('SELECT id FROM places WHERE id = ? AND trip_id = ?').get(placeId, tripId);
+  return !!db.prepare(`
+    SELECT 1 FROM places p
+     WHERE p.id = ?
+       AND (
+         p.trip_id = ?
+         OR p.id IN (
+           SELECT da.place_id
+             FROM day_assignments da
+             JOIN days d ON d.id = da.day_id
+            WHERE d.segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+         )
+       )
+     LIMIT 1
+  `).get(placeId, tripId, tripId);
 }
 
 export function createAssignment(dayId: string | number, placeId: string | number, notes: string | null) {
@@ -118,10 +143,18 @@ export function createAssignment(dayId: string | number, placeId: string | numbe
   return getAssignmentWithPlace(result.lastInsertRowid);
 }
 
+// [460-fork] shared-segments — extend to accept assignments on shared days.
 export function assignmentExistsInDay(id: string | number, dayId: string | number, tripId: string | number) {
-  return !!db.prepare(
-    'SELECT da.id FROM day_assignments da JOIN days d ON da.day_id = d.id WHERE da.id = ? AND da.day_id = ? AND d.trip_id = ?'
-  ).get(id, dayId, tripId);
+  return !!db.prepare(`
+    SELECT 1 FROM day_assignments da
+      JOIN days d ON da.day_id = d.id
+     WHERE da.id = ? AND da.day_id = ?
+       AND (
+         d.trip_id = ?
+         OR d.segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+       )
+     LIMIT 1
+  `).get(id, dayId, tripId, tripId);
 }
 
 export function deleteAssignment(id: string | number) {
@@ -142,12 +175,17 @@ export function reorderAssignments(dayId: string | number, orderedIds: number[])
   }
 }
 
+// [460-fork] shared-segments — also return assignments on shared days.
 export function getAssignmentForTrip(id: string | number, tripId: string | number) {
   return db.prepare(`
     SELECT da.* FROM day_assignments da
-    JOIN days d ON da.day_id = d.id
-    WHERE da.id = ? AND d.trip_id = ?
-  `).get(id, tripId) as DayAssignment | undefined;
+      JOIN days d ON da.day_id = d.id
+     WHERE da.id = ?
+       AND (
+         d.trip_id = ?
+         OR d.segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+       )
+  `).get(id, tripId, tripId) as DayAssignment | undefined;
 }
 
 export function moveAssignment(id: string | number, newDayId: string | number, orderIndex: number, oldDayId: number) {

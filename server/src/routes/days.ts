@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { requireTripAccess } from '../middleware/tripAccess';
-import { broadcast } from '../websocket';
+import { broadcast, broadcastDay, broadcastDayById } from '../websocket';
 import { checkPermission } from '../services/permissions';
 import { AuthRequest } from '../types';
 import * as dayService from '../services/dayService';
@@ -23,6 +23,8 @@ router.post('/', authenticate, requireTripAccess, (req: Request, res: Response) 
 
   const day = dayService.createDay(tripId, date, notes);
   res.status(201).json({ day });
+  // [460-fork] day:created is always trip-scoped — a newly-created day cannot
+  // yet be part of a segment, so a plain trip broadcast is correct.
   broadcast(tripId, 'day:created', { day }, req.headers['x-socket-id'] as string);
 });
 
@@ -33,13 +35,14 @@ router.put('/:id', authenticate, requireTripAccess, (req: Request, res: Response
 
   const { tripId, id } = req.params;
 
-  const current = dayService.getDay(id, tripId);
+  // [460-fork] getAccessibleDay lets any linked-trip member edit a shared day.
+  const current = dayService.getAccessibleDay(id, tripId);
   if (!current) return res.status(404).json({ error: 'Day not found' });
 
   const { notes, title } = req.body;
   const day = dayService.updateDay(id, current, { notes, title });
   res.json({ day });
-  broadcast(tripId, 'day:updated', { day }, req.headers['x-socket-id'] as string);
+  broadcastDay(day as any, 'day:updated', { day }, req.headers['x-socket-id'] as string);
 });
 
 router.delete('/:id', authenticate, requireTripAccess, (req: Request, res: Response) => {
@@ -49,11 +52,15 @@ router.delete('/:id', authenticate, requireTripAccess, (req: Request, res: Respo
 
   const { tripId, id } = req.params;
 
-  if (!dayService.getDay(id, tripId)) return res.status(404).json({ error: 'Day not found' });
+  // [460-fork] Delete of a shared day is intentionally restricted to the home
+  // trip. Sibling trips that want to stop seeing the day use the leave-segment
+  // flow instead; strict getDay enforces this (returns null for a non-home caller).
+  const existing = dayService.getDay(id, tripId);
+  if (!existing) return res.status(404).json({ error: 'Day not found' });
 
   dayService.deleteDay(id);
   res.json({ success: true });
-  broadcast(tripId, 'day:deleted', { dayId: Number(id) }, req.headers['x-socket-id'] as string);
+  broadcastDay(existing, 'day:deleted', { dayId: Number(id) }, req.headers['x-socket-id'] as string);
 });
 
 // ---------------------------------------------------------------------------

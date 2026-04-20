@@ -84,7 +84,12 @@ function createTables(db: Database.Database): void {
       segment_id TEXT REFERENCES segments(id) ON DELETE SET NULL, -- [460-fork] Milestone 4
       UNIQUE(trip_id, day_number)
     );
-    CREATE INDEX IF NOT EXISTS idx_days_segment ON days(segment_id) WHERE segment_id IS NOT NULL;
+    -- [460-fork] Milestone 4: index on segment_id lives in migration 118 only.
+    -- On a fresh install the CREATE TABLE above creates the column and the
+    -- migration's CREATE INDEX IF NOT EXISTS is a no-op afterwards. On an
+    -- existing install the CREATE TABLE IF NOT EXISTS is a no-op (column
+    -- doesn't exist yet) and indexing it here would crash; migration 118
+    -- runs first an ALTER to add the column, then the index.
 
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

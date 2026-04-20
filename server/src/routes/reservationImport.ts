@@ -13,6 +13,7 @@ import { db } from '../db/database';
 import { extractReservationDraft } from '../services/reservationImport/extractor';
 import { extractPdfText } from '../services/reservationImport/pdfTextExtractor';
 import { extractRequestSchema, normaliseAutoAttach } from '../services/reservationImport/validation';
+import { matchPassengers, PassengerMatchCandidate } from '../services/reservationImport/passengerMatcher';
 import {
   findByClientMutationId,
   recordImportStart,
@@ -68,6 +69,25 @@ function singlePdfUpload(req: Request, res: Response, next: (err?: unknown) => v
 function cleanupTmp(filePath: string | undefined) {
   if (!filePath) return;
   fs.unlink(filePath, () => undefined);
+}
+
+// [460-fork] slice 5 — build the user+partner candidate list from the DB so the
+// matcher stays pure. Candidates are aliased on username, email local-part,
+// and the full email so the matcher can score token splits.
+function buildMatchCandidates(userId: number): PassengerMatchCandidate[] {
+  const user = db.prepare('SELECT id, username, email, partner_user_id FROM users WHERE id = ?').get(userId) as { id: number; username: string; email: string; partner_user_id: number | null } | undefined;
+  if (!user) return [];
+  const candidates: PassengerMatchCandidate[] = [aliasesFor(user.id, user.username, user.email)];
+  if (user.partner_user_id) {
+    const partner = db.prepare('SELECT id, username, email FROM users WHERE id = ?').get(user.partner_user_id) as { id: number; username: string; email: string } | undefined;
+    if (partner) candidates.push(aliasesFor(partner.id, partner.username, partner.email));
+  }
+  return candidates;
+}
+
+function aliasesFor(id: number, username: string, email: string): PassengerMatchCandidate {
+  const emailLocal = (email || '').split('@')[0] || '';
+  return { id, aliases: [username, emailLocal, email].filter(Boolean) };
 }
 
 function mapErrorToResponse(err: unknown): { status: number; body: Record<string, unknown> } {
@@ -131,12 +151,17 @@ router.post('/extract', authenticate, singlePdfUpload, async (req: Request, res:
       const existing = findByClientMutationId(tripId, clientMutationId);
       if (existing && existing.status === 'draft' && existing.parsed_json) {
         cleanupTmp(uploadedFile?.path);
+        const replayedDraft = JSON.parse(existing.parsed_json);
         return res.json({
           import_id: existing.id,
-          draft: JSON.parse(existing.parsed_json),
+          draft: replayedDraft,
           confidence: existing.confidence ?? 0,
           provider_used: existing.provider,
           attached_file_id: existing.source_file_id ?? null,
+          matched_user_ids: matchPassengers(
+            Array.isArray(replayedDraft?.passenger_names) ? replayedDraft.passenger_names : [],
+            buildMatchCandidates(authReq.user.id),
+          ),
           replayed: true,
         });
       }
@@ -199,6 +224,10 @@ router.post('/extract', authenticate, singlePdfUpload, async (req: Request, res:
         confidence: result.confidence,
         provider_used: result.provider_used,
         attached_file_id: attachedFileId,
+        matched_user_ids: matchPassengers(
+          result.draft.passenger_names ?? [],
+          buildMatchCandidates(authReq.user.id),
+        ),
       });
     } catch (innerErr) {
       const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);

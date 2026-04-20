@@ -31,5 +31,10 @@ export interface ReservationImportResponse {
   confidence: number
   provider_used: 'ollama' | 'anthropic' | 'openai'
   attached_file_id: number | null
+  /**
+   * Per-passenger user-id match (same length as draft.passenger_names).
+   * null for names we couldn't confidently map to the caller or their partner.
+   */
+  matched_user_ids: Array<number | null>
   replayed?: boolean
 }

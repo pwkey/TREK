@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import apiClient from '../../api/client'
 import { useTripStore } from '../../store/tripStore'
 import { useAddonStore } from '../../store/addonStore'
+import { useAuthStore } from '../../store/authStore'
 import Modal from '../shared/Modal'
 import CustomSelect from '../shared/CustomSelect'
 import { Plane, Hotel, Utensils, Train, Car, Ship, Ticket, FileText, Users, Paperclip, X, ExternalLink, Link2, Wand2 } from 'lucide-react'
@@ -98,6 +99,8 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
   const [uploadingFile, setUploadingFile] = useState(false)
   const [pendingFiles, setPendingFiles] = useState([])
   const [showFilePicker, setShowFilePicker] = useState(false)
+  const currentUserId = useAuthStore(s => s.user?.id ?? null)
+  const [matchedPassengers, setMatchedPassengers] = useState<Array<{ name: string; isSelf: boolean }>>([])
   const [linkedFileIds, setLinkedFileIds] = useState<number[]>([])
   const [unlinkedFileIds, setUnlinkedFileIds] = useState<number[]>([])
   // [460-fork] Smart Import (Milestone 2 slice 4)
@@ -208,6 +211,17 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
     }
     setForm(prev => ({ ...prev, ...next }))
     setAutoFilledFields(touched)
+    // [460-fork] slice 5 — surface passenger-name → user/partner matches.
+    const pairs: Array<{ name: string; isSelf: boolean }> = []
+    const seen = new Set<number>()
+    const ids = result.matched_user_ids ?? []
+    d.passenger_names.forEach((name, i) => {
+      const id = ids[i]
+      if (id == null || seen.has(id)) return
+      seen.add(id)
+      pairs.push({ name, isSelf: currentUserId != null && id === currentUserId })
+    })
+    setMatchedPassengers(pairs)
     // Auto-attach: if the server stashed the PDF into trip_files, link it to this reservation on save.
     if (result.attached_file_id) {
       setLinkedFileIds(prev => prev.includes(result.attached_file_id!) ? prev : [...prev, result.attached_file_id!])
@@ -392,6 +406,27 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
             >
               dismiss
             </button>
+          </div>
+        )}
+
+        {matchedPassengers.length > 0 && (
+          <div style={{
+            padding: '8px 12px', borderRadius: 8, fontSize: 12,
+            background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)',
+            color: 'var(--text-primary)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8,
+          }}>
+            <span style={{ fontWeight: 500 }}>Matched:</span>
+            {matchedPassengers.map(p => (
+              <span key={p.name} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '2px 8px', borderRadius: 999, fontSize: 11,
+                background: 'rgba(16, 185, 129, 0.15)', color: 'var(--text-primary)',
+              }}>
+                {p.name}
+                <span style={{ color: 'var(--text-muted)' }}>·</span>
+                {p.isSelf ? 'You' : 'Partner'}
+              </span>
+            ))}
           </div>
         )}
 

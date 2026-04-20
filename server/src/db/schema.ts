@@ -81,8 +81,10 @@ function createTables(db: Database.Database): void {
       date TEXT,
       notes TEXT,
       title TEXT,
+      segment_id TEXT REFERENCES segments(id) ON DELETE SET NULL, -- [460-fork] Milestone 4
       UNIQUE(trip_id, day_number)
     );
+    CREATE INDEX IF NOT EXISTS idx_days_segment ON days(segment_id) WHERE segment_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -480,6 +482,44 @@ function createTables(db: Database.Database): void {
       PRIMARY KEY (user_id, event_type, channel)
     );
     CREATE INDEX IF NOT EXISTS idx_ncp_user ON notification_channel_preferences(user_id);
+
+    -- [460-fork] Shared segments (Milestone 4) — BEGIN
+    CREATE TABLE IF NOT EXISTS segments (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      start_date TEXT,
+      end_date TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_segments_created_by ON segments(created_by);
+
+    CREATE TABLE IF NOT EXISTS trip_segments (
+      trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+      is_home INTEGER NOT NULL DEFAULT 0,
+      joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      joined_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      PRIMARY KEY (trip_id, segment_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_trip_segments_segment ON trip_segments(segment_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_trip_segments_home
+      ON trip_segments(segment_id) WHERE is_home = 1;
+
+    CREATE TABLE IF NOT EXISTS segment_invites (
+      id TEXT PRIMARY KEY,
+      segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+      token TEXT NOT NULL UNIQUE,
+      expires_at DATETIME NOT NULL,
+      accepted_at DATETIME,
+      accepted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_segment_invites_segment ON segment_invites(segment_id);
+    -- [460-fork] Shared segments (Milestone 4) — END
   `);
 }
 

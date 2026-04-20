@@ -931,6 +931,67 @@ function runMigrations(db: Database.Database): void {
           ON partner_invites(inviter_user_id, target_user_id) WHERE status = 'pending';
       `);
     },
+    // [460-fork] Shared segments (Milestone 4): segment descriptor.
+    // UUID primary key per CLAUDE.md §9. Keep at TAIL on rebase.
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS segments (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          start_date TEXT,
+          end_date TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_segments_created_by ON segments(created_by);
+      `);
+    },
+    // [460-fork] Shared segments (Milestone 4): join table between trips and segments.
+    // Exactly one is_home=1 row per segment, enforced via a partial unique index.
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS trip_segments (
+          trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+          segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+          is_home INTEGER NOT NULL DEFAULT 0,
+          joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          joined_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          PRIMARY KEY (trip_id, segment_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_trip_segments_segment ON trip_segments(segment_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_trip_segments_home
+          ON trip_segments(segment_id) WHERE is_home = 1;
+      `);
+    },
+    // [460-fork] Shared segments (Milestone 4): days.segment_id pointer.
+    // Null = ordinary trip-local day; non-null = day is part of that segment's canonical
+    // set and visible to every linked trip via the UNION read in dayService.listDays.
+    () => {
+      try {
+        db.exec('ALTER TABLE days ADD COLUMN segment_id TEXT REFERENCES segments(id) ON DELETE SET NULL');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      db.exec('CREATE INDEX IF NOT EXISTS idx_days_segment ON days(segment_id) WHERE segment_id IS NOT NULL;');
+    },
+    // [460-fork] Shared segments (Milestone 4): signed, single-use invite tokens.
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS segment_invites (
+          id TEXT PRIMARY KEY,
+          segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+          token TEXT NOT NULL UNIQUE,
+          expires_at DATETIME NOT NULL,
+          accepted_at DATETIME,
+          accepted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_segment_invites_segment ON segment_invites(segment_id);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

@@ -271,7 +271,36 @@ Why this is first after baseline: the native wrapper affects how we think about 
 - Auto-save without review. Always prefill-and-review.
 - Receipt OCR for expenses — separate feature, still out of scope.
 
-### Milestone 3 — Shared segments (the flagship data-model feature)
+### Milestone 3 — Partner pairing
+
+**Problem:** Trip membership is per-trip and manual. For spouses / lifelong travel partners who are on every trip together, being invited to each new trip is friction. And when a reservation PDF lists both names, the system treats them as two free-text strings rather than two real user accounts — observed 2026-04-20 after Peter imported a flight booking for himself and his partner and noted the missing link.
+
+**Design sketch:**
+
+- Symmetric, bidirectional partner relationship between two user accounts on the instance. Add `partner_user_id INTEGER REFERENCES users(id)` to `users`; enforce symmetry (if A.partner = B then B.partner = A) via application logic + a CHECK/trigger.
+- One-time pairing flow in Settings → Account: "Pair with partner" — pick another user by email → they receive a notification/accept link → both records update. Invites are time-limited (7 days). Only one partner per user; existing partner must be unpaired first.
+- On trip creation by a user with a partner, the partner is auto-added as a `trip_members` row with the same role (or a new `partner` role that inherits owner-equivalent permissions except "delete trip").
+- Optional one-time backfill on partnering: "Apply partnering to my existing trips?" — adds partner as trip_member across all trips the user currently owns.
+- Smart Import link: when the extractor returns `passenger_names[]`, fuzzy-match names against the user and their partner to tag the reservation with a `partner_visible` flag for UI presentation. No schema change needed on reservations.
+- Reservation sharing: no new mechanism — partner is a trip member, so the existing read path already shows them every reservation on shared trips.
+
+**Open questions to resolve in plan phase:**
+
+- Partner doesn't have an account yet — send a magic-link registration invite that auto-pairs on first signup, or require them to register separately first?
+- Single partner only (current position), or allow multiple? Single is the intended semantic for "spouse"; revisit later only if needed.
+- Unpair behaviour — do existing auto-added `trip_members` rows stay (as if manually added) or get removed? Probably stay, so trip history isn't silently pruned.
+- Does partner get owner-equivalent rights (add/edit places, edit days, import reservations) or just member rights? Probably owner-equivalent minus "delete trip".
+- Visual distinction in the trip members list (e.g. a small pair-of-rings icon next to partner's avatar)? Minor UX.
+
+**Don't do yet:**
+
+- Multi-partner or family-unit (3+ accounts) support.
+- Partner-as-admin (the instance admin role stays per-user).
+- Cross-partner setting inheritance (timezone, language, currency). Each user keeps their own.
+
+**Upstream contribution:** Probably upstreamable. Every two-person household using TREK hits this. Keep the UI copy neutral ("partner") not region-specific.
+
+### Milestone 4 — Shared segments (the flagship cross-household feature)
 
 **Problem:** Couple A and Couple B each have their own trip record. For days 7–11 they travel together. Both households want those days to appear in their own trip timeline and stay in sync.
 
@@ -289,11 +318,11 @@ Why this is first after baseline: the native wrapper affects how we think about 
 - If one party leaves the segment, does their copy of those days remain as a snapshot or get deleted?
 - How do per-person expenses on a shared day allocate between households?
 
-### Milestone 4 — Offline-first writes (cross-cutting)
+### Milestone 5 — Offline-first writes (cross-cutting)
 
-**This is not a standalone feature; it's a rewrite of how mutations flow through the app.** Specified in detail in §7. Build it now because Milestones 5+ assume it works.
+**This is not a standalone feature; it's a rewrite of how mutations flow through the app.** Specified in detail in §7. Build it now because Milestones 6+ assume it works.
 
-### Milestone 5 — Per-day journal with photos
+### Milestone 6 — Per-day journal with photos
 
 **Problem:** TREK is a planner. We also want it to be the place we record what actually happened.
 
@@ -306,11 +335,11 @@ Why this is first after baseline: the native wrapper affects how we think about 
 - Photos: drag-and-drop multiple on web, native camera picker on iOS/Android, client-side resize before upload, EXIF-preserved capture date.
 - Photos must work offline — queued locally, uploaded when online (see §7).
 
-### Milestone 6 — JSON export and import
+### Milestone 7 — JSON export and import
 
 Specified in §8. Build after offline + journal so exports include journal content and pending-sync items correctly.
 
-### Milestone 7 — Settle-up view
+### Milestone 8 — Settle-up view
 
 **Problem:** TREK tracks categorised expenses with splits. It doesn't answer "Alice owes Bob how much?"
 
@@ -321,7 +350,7 @@ Specified in §8. Build after offline + journal so exports include journal conte
 - UI: one screen showing net positions and a recommended settlement ("Alice pays Bob $214, Carol pays Alice $87").
 - Per-trip and per-segment views.
 
-### Milestone 8 — Pre-trip availability poll
+### Milestone 9 — Pre-trip availability poll
 
 **Problem:** Before a trip exists, we need to pick dates with another couple.
 
@@ -332,7 +361,7 @@ Specified in §8. Build after offline + journal so exports include journal conte
 - Once dates converge, one button creates a trip with those dates and invites the voters as members.
 - Consider: integrate with the existing Vacay addon so availability can be pre-filled from vacation-day records.
 
-### Milestone 9+ (deferred / reconsider after real use)
+### Milestone 10+ (deferred / reconsider after real use)
 
 - Closed-on-this-day warnings when a place is scheduled on a closed day.
 - Inter-stop travel time on the itinerary.

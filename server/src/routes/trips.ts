@@ -8,6 +8,7 @@ import { authenticate, demoUploadBlock } from '../middleware/auth';
 import { broadcast } from '../websocket';
 import { AuthRequest, Trip } from '../types';
 import { writeAudit, getClientIp, logInfo } from '../services/auditLog';
+import { autoAddPartnerToTrip as partnerAutoAdd } from '../services/partnerService';
 import { checkPermission } from '../services/permissions';
 import {
   listTrips,
@@ -353,6 +354,16 @@ router.post('/:id/copy', authenticate, (req: Request, res: Response) => {
   try {
     const newTripId = copyTrip();
     writeAudit({ userId: authReq.user.id, action: 'trip.copy', ip: getClientIp(req), details: { sourceTripId: Number(req.params.id), newTripId: Number(newTripId), title } });
+    // [460-fork] partner auto-add on copy — opt-in via explicit client flag.
+    // Copy is a deliberate duplication (e.g. template) where the user may not
+    // want the partner on the copy; the dashboard prompts yes/no/cancel.
+    if (req.body?.include_partner === true) {
+      try {
+        partnerAutoAdd(authReq.user.id, Number(newTripId), title);
+      } catch (err) {
+        console.error('[trips] partner auto-add on copy failed:', err);
+      }
+    }
     const trip = db.prepare(`${TRIP_SELECT} WHERE t.id = :tripId`).get({ userId: authReq.user.id, tripId: newTripId });
     res.status(201).json({ trip });
   } catch {

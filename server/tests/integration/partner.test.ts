@@ -16,8 +16,10 @@ const { testDb, dbMock } = vi.hoisted(() => {
       db,
       closeDb: () => {},
       reinitialize: () => {},
-      canAccessTrip: () => null,
-      isOwner: () => false,
+      canAccessTrip: (tripId: any, userId: number) =>
+        db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
+      isOwner: (tripId: any, userId: number) =>
+        !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
     },
   };
 });
@@ -209,6 +211,132 @@ describe('Partner pair/unpair via notification respond endpoint', () => {
 
     const aliceMe = await request(app).get('/api/auth/me').set('Cookie', authCookie(alice.id));
     expect(aliceMe.body.user.partner?.id).toBe(bob.id);
+  });
+});
+
+describe('Trip auto-add and backfill (slice 4)', () => {
+  function pairAliceBob() {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    testDb.prepare('UPDATE users SET partner_user_id = ? WHERE id = ?').run(bob.id, alice.id);
+    testDb.prepare('UPDATE users SET partner_user_id = ? WHERE id = ?').run(alice.id, bob.id);
+    return { alice, bob };
+  }
+
+  it('POST /api/trips auto-adds partner to new trip', async () => {
+    const { alice, bob } = pairAliceBob();
+    const res = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(alice.id))
+      .send({ title: 'Rome weekend', day_count: 3 });
+    expect(res.status).toBe(201);
+    const tripId = res.body.trip.id;
+    const member = testDb
+      .prepare('SELECT user_id, invited_by FROM trip_members WHERE trip_id = ? AND user_id = ?')
+      .get(tripId, bob.id) as any;
+    expect(member).toBeDefined();
+    expect(member.invited_by).toBe(alice.id);
+  });
+
+  it('POST /api/trips does not auto-add when creator has no partner', async () => {
+    const { user: alice } = createUser(testDb);
+    const res = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(alice.id))
+      .send({ title: 'Solo trip', day_count: 3 });
+    expect(res.status).toBe(201);
+    const tripId = res.body.trip.id;
+    const members = testDb.prepare('SELECT COUNT(*) as c FROM trip_members WHERE trip_id = ?').get(tripId) as any;
+    expect(members.c).toBe(0);
+  });
+
+  it('POST /api/trips/:id/copy auto-adds partner only when include_partner=true', async () => {
+    const { alice, bob } = pairAliceBob();
+    // Source trip; strip Bob so each copy path is a clean check.
+    const source = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(alice.id))
+      .send({ title: 'Source', day_count: 2 });
+    const sourceTripId = source.body.trip.id;
+    testDb.prepare('DELETE FROM trip_members WHERE trip_id = ? AND user_id = ?').run(sourceTripId, bob.id);
+
+    // Default (flag omitted) → partner NOT auto-added on copy.
+    const copyDefault = await request(app)
+      .post(`/api/trips/${sourceTripId}/copy`)
+      .set('Cookie', authCookie(alice.id))
+      .send({});
+    expect(copyDefault.status).toBe(201);
+    const defaultTripId = copyDefault.body.trip.id;
+    const defaultMember = testDb
+      .prepare('SELECT user_id FROM trip_members WHERE trip_id = ? AND user_id = ?')
+      .get(defaultTripId, bob.id);
+    expect(defaultMember).toBeUndefined();
+
+    // include_partner=true → partner IS auto-added.
+    const copyWith = await request(app)
+      .post(`/api/trips/${sourceTripId}/copy`)
+      .set('Cookie', authCookie(alice.id))
+      .send({ include_partner: true });
+    expect(copyWith.status).toBe(201);
+    const withTripId = copyWith.body.trip.id;
+    const withMember = testDb
+      .prepare('SELECT user_id FROM trip_members WHERE trip_id = ? AND user_id = ?')
+      .get(withTripId, bob.id);
+    expect(withMember).toBeDefined();
+
+    // include_partner=false → partner NOT auto-added.
+    const copyWithout = await request(app)
+      .post(`/api/trips/${sourceTripId}/copy`)
+      .set('Cookie', authCookie(alice.id))
+      .send({ include_partner: false });
+    expect(copyWithout.status).toBe(201);
+    const withoutTripId = copyWithout.body.trip.id;
+    const withoutMember = testDb
+      .prepare('SELECT user_id FROM trip_members WHERE trip_id = ? AND user_id = ?')
+      .get(withoutTripId, bob.id);
+    expect(withoutMember).toBeUndefined();
+  });
+
+  it('POST /me/partner/backfill-trips adds partner to all owned trips and is idempotent', async () => {
+    const { alice, bob } = pairAliceBob();
+    // Three trips; Bob manually on one already
+    const t1 = testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'A').lastInsertRowid as number;
+    testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'B');
+    testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'C');
+    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(t1, bob.id, alice.id);
+
+    const first = await request(app)
+      .post('/api/auth/me/partner/backfill-trips')
+      .set('Cookie', authCookie(alice.id));
+    expect(first.status).toBe(200);
+    expect(first.body.added).toBe(2);
+    expect(first.body.skipped).toBe(1);
+
+    const second = await request(app)
+      .post('/api/auth/me/partner/backfill-trips')
+      .set('Cookie', authCookie(alice.id));
+    expect(second.status).toBe(200);
+    expect(second.body.added).toBe(0);
+    expect(second.body.skipped).toBe(3);
+  });
+
+  it('POST /me/partner/backfill-trips returns 409 NOT_PAIRED when unpaired', async () => {
+    const { user: alice } = createUser(testDb);
+    const res = await request(app)
+      .post('/api/auth/me/partner/backfill-trips')
+      .set('Cookie', authCookie(alice.id));
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('NOT_PAIRED');
+  });
+
+  it('GET /me/partner reflects backfill_done flag', async () => {
+    const { alice } = pairAliceBob();
+    testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'One');
+    const before = await request(app).get('/api/auth/me/partner').set('Cookie', authCookie(alice.id));
+    expect(before.body.backfill_done).toBe(false);
+    await request(app).post('/api/auth/me/partner/backfill-trips').set('Cookie', authCookie(alice.id));
+    const after = await request(app).get('/api/auth/me/partner').set('Cookie', authCookie(alice.id));
+    expect(after.body.backfill_done).toBe(true);
   });
 });
 

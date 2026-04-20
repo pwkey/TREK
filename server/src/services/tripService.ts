@@ -3,6 +3,7 @@ import fs from 'fs';
 import { db, canAccessTrip, isOwner } from '../db/database';
 import { Trip, User } from '../types';
 import { listDays, listAccommodations } from './dayService';
+import { autoAddPartnerToTrip as partnerAutoAdd } from './partnerService';
 import { listBudgetItems } from './budgetService';
 import { listItems as listPackingItems } from './packingService';
 import { listReservations } from './reservationService';
@@ -155,6 +156,15 @@ export function createTrip(userId: number, data: CreateTripData, maxDays?: numbe
 
   const tripId = result.lastInsertRowid;
   generateDays(tripId, data.start_date || null, data.end_date || null, maxDays, data.day_count);
+
+  // [460-fork] partner auto-add — BEGIN
+  // If the creator has a paired partner, auto-add them as a trip_member.
+  try {
+    partnerAutoAdd(userId, Number(tripId), data.title);
+  } catch (err) {
+    console.error('[tripService] partner auto-add failed:', err);
+  }
+  // [460-fork] partner auto-add — END
 
   const trip = db.prepare(`${TRIP_SELECT} WHERE t.id = :tripId`).get({ userId, tripId });
   return { trip, tripId: Number(tripId), reminderDays: rd };

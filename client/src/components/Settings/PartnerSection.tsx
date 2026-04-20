@@ -5,7 +5,7 @@ import { useToast } from '../shared/Toast'
 import { useTranslation } from '../../i18n'
 import { getApiErrorMessage } from '../../types'
 import Section from './Section'
-import type { PartnerGetResponse, PartnerSnapshot, PartnerInviteView } from '../../types/partner'
+import type { PartnerGetResponse, PartnerSnapshot, PartnerInviteView, BackfillTripsResponse } from '../../types/partner'
 
 const MAX_MESSAGE_CHARS = 200
 
@@ -19,7 +19,7 @@ function genMutationId(): string {
 export default function PartnerSection() {
   const { t } = useTranslation()
   const toast = useToast()
-  const [data, setData] = useState<PartnerGetResponse>({ partner: null, incoming: [], outgoing: [] })
+  const [data, setData] = useState<PartnerGetResponse>({ partner: null, incoming: [], outgoing: [], backfill_done: false })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [showUnpairConfirm, setShowUnpairConfirm] = useState(false)
@@ -88,6 +88,23 @@ export default function PartnerSection() {
     }
   }
 
+  const handleBackfill = async () => {
+    setBusy('backfill')
+    try {
+      const result = (await authApi.partner.backfillTrips()) as BackfillTripsResponse
+      toast.success(
+        result.added === 0
+          ? 'Nothing to add — partner is already on all your trips.'
+          : `Added partner to ${result.added} trip${result.added === 1 ? '' : 's'}.`,
+      )
+      await refresh()
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Backfill failed'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const { partner, incoming, outgoing } = data
   const isInviting = busy === 'invite'
   const isUnpairing = busy === 'unpair'
@@ -104,7 +121,14 @@ export default function PartnerSection() {
             {t('common.loading')}
           </div>
         ) : partner ? (
-          <PartnerPairedView partner={partner} onUnpair={() => setShowUnpairConfirm(true)} unpairing={isUnpairing} />
+          <PartnerPairedView
+            partner={partner}
+            onUnpair={() => setShowUnpairConfirm(true)}
+            unpairing={isUnpairing}
+            backfillDone={data.backfill_done}
+            onBackfill={handleBackfill}
+            backfilling={busy === 'backfill'}
+          />
         ) : (
           <PartnerUnpairedView
             incoming={incoming}
@@ -132,34 +156,63 @@ export default function PartnerSection() {
   )
 }
 
-function PartnerPairedView({ partner, onUnpair, unpairing }: { partner: PartnerSnapshot; onUnpair: () => void; unpairing: boolean }) {
+function PartnerPairedView(props: {
+  partner: PartnerSnapshot
+  onUnpair: () => void
+  unpairing: boolean
+  backfillDone: boolean
+  onBackfill: () => void
+  backfilling: boolean
+}) {
+  const { partner, onUnpair, unpairing, backfillDone, onBackfill, backfilling } = props
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 16, borderRadius: 12, background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}>
-      {partner.avatar_url ? (
-        <img src={partner.avatar_url} alt={partner.username} style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }} />
-      ) : (
-        <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: 'var(--text-muted)' }}>
-          {partner.username.charAt(0).toUpperCase()}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 16, borderRadius: 12, background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}>
+        {partner.avatar_url ? (
+          <img src={partner.avatar_url} alt={partner.username} style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: 'var(--text-muted)' }}>
+            {partner.username.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Heart size={12} style={{ color: '#b8430b', fill: '#b8430b' }} /> Paired with {partner.username}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{partner.email}</div>
+        </div>
+        <button
+          onClick={onUnpair}
+          disabled={unpairing}
+          style={{
+            padding: '8px 14px', borderRadius: 8, border: '1px solid #dc2626',
+            background: 'transparent', color: '#dc2626', fontSize: 12, fontWeight: 600,
+            cursor: unpairing ? 'default' : 'pointer', fontFamily: 'inherit',
+            opacity: unpairing ? 0.5 : 1,
+          }}
+        >
+          {unpairing ? '…' : 'Unpair'}
+        </button>
+      </div>
+      {!backfillDone && (
+        <div style={{ padding: 14, borderRadius: 10, background: 'rgba(59, 130, 246, 0.06)', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+          <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 8 }}>
+            New trips you create automatically add {partner.username} as a member. Want to apply this to trips you've already created too?
+          </div>
+          <button
+            onClick={onBackfill}
+            disabled={backfilling}
+            style={{
+              padding: '8px 14px', borderRadius: 8, border: '1px solid #b8430b',
+              background: 'transparent', color: '#b8430b', fontSize: 12, fontWeight: 600,
+              cursor: backfilling ? 'default' : 'pointer', fontFamily: 'inherit',
+              opacity: backfilling ? 0.5 : 1,
+            }}
+          >
+            {backfilling ? 'Adding…' : 'Apply to existing trips'}
+          </button>
         </div>
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Heart size={12} style={{ color: '#b8430b', fill: '#b8430b' }} /> Paired with {partner.username}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{partner.email}</div>
-      </div>
-      <button
-        onClick={onUnpair}
-        disabled={unpairing}
-        style={{
-          padding: '8px 14px', borderRadius: 8, border: '1px solid #dc2626',
-          background: 'transparent', color: '#dc2626', fontSize: 12, fontWeight: 600,
-          cursor: unpairing ? 'default' : 'pointer', fontFamily: 'inherit',
-          opacity: unpairing ? 0.5 : 1,
-        }}
-      >
-        {unpairing ? '…' : 'Unpair'}
-      </button>
     </div>
   )
 }

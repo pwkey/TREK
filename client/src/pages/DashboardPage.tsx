@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { tripsApi } from '../api/client'
+import { tripsApi, authApi } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { useTranslation } from '../i18n'
@@ -556,6 +556,7 @@ export default function DashboardPage(): React.ReactElement {
   const [showWidgetSettings, setShowWidgetSettings] = useState<boolean | 'mobile'>(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => (localStorage.getItem('trek_dashboard_view') as 'grid' | 'list') || 'grid')
   const [deleteTrip, setDeleteTrip] = useState<DashboardTrip | null>(null)
+  const [copyPrompt, setCopyPrompt] = useState<{ trip: DashboardTrip; title: string; partnerName: string } | null>(null)
 
   const toggleViewMode = () => {
     setViewMode(prev => {
@@ -667,14 +668,28 @@ export default function DashboardPage(): React.ReactElement {
     setArchivedTrips(prev => prev.map(update))
   }
 
-  const handleCopy = async (trip: DashboardTrip) => {
+  const performCopy = async (trip: DashboardTrip, title: string, includePartner?: boolean) => {
     try {
-      const data = await tripsApi.copy(trip.id, { title: `${trip.title} (${t('dashboard.copySuffix')})` })
+      const data = await tripsApi.copy(trip.id, includePartner === undefined ? { title } : { title, include_partner: includePartner })
       setTrips(prev => sortTrips([data.trip, ...prev]))
       toast.success(t('dashboard.toast.copied'))
     } catch {
       toast.error(t('dashboard.toast.copyError'))
     }
+  }
+
+  const handleCopy = async (trip: DashboardTrip) => {
+    const title = `${trip.title} (${t('dashboard.copySuffix')})`
+    try {
+      const partnerRes = await authApi.partner.get()
+      if (partnerRes?.partner?.username) {
+        setCopyPrompt({ trip, title, partnerName: partnerRes.partner.username })
+        return
+      }
+    } catch {
+      // Partner lookup failed — fall through to a plain copy without the flag.
+    }
+    await performCopy(trip, title)
   }
 
   const today = new Date().toISOString().split('T')[0]
@@ -947,6 +962,16 @@ export default function DashboardPage(): React.ReactElement {
         message={t('dashboard.confirm.delete', { title: deleteTrip?.title || '' })}
       />
 
+      {copyPrompt && (
+        <CopyPartnerPrompt
+          partnerName={copyPrompt.partnerName}
+          tripTitle={copyPrompt.trip.title}
+          onYes={() => { const p = copyPrompt; setCopyPrompt(null); void performCopy(p.trip, p.title, true) }}
+          onNo={() => { const p = copyPrompt; setCopyPrompt(null); void performCopy(p.trip, p.title, false) }}
+          onCancel={() => setCopyPrompt(null)}
+        />
+      )}
+
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1 }
@@ -960,6 +985,66 @@ export default function DashboardPage(): React.ReactElement {
         @media(max-width: 1024px) { .trip-grid { grid-template-columns: repeat(2, 1fr); } }
         @media(max-width: 640px) { .trip-grid { grid-template-columns: 1fr; } }
       `}</style>
+    </div>
+  )
+}
+
+function CopyPartnerPrompt({
+  partnerName, tripTitle, onYes, onNo, onCancel,
+}: {
+  partnerName: string
+  tripTitle: string
+  onYes: () => void
+  onNo: () => void
+  onCancel: () => void
+}): React.ReactElement {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onCancel])
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center px-4"
+      style={{ backgroundColor: 'rgba(15, 23, 42, 0.5)' }}
+      onClick={onCancel}
+    >
+      <div
+        className="rounded-2xl shadow-2xl w-full max-w-sm p-6"
+        style={{ animation: 'modalIn 0.2s ease-out forwards', background: 'var(--bg-card)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+          Copy trip
+        </h3>
+        <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+          Include {partnerName} as a member of the copy of "{tripTitle}"?
+        </p>
+
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+            style={{ color: 'var(--text-secondary)', border: '1px solid var(--border-secondary)' }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onNo}
+            className="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+            style={{ color: 'var(--text-primary)', border: '1px solid var(--border-secondary)' }}
+          >
+            No
+          </button>
+          <button
+            onClick={onYes}
+            className="px-4 py-2 text-sm font-medium rounded-lg transition-colors text-white bg-blue-600 hover:bg-blue-700"
+          >
+            Yes
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

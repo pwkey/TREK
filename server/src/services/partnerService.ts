@@ -343,6 +343,107 @@ export function declineInvite(params: {
   return { ok: true };
 }
 
+// ---------------------------------------------------------------------------
+// Trip auto-add + backfill (slice 4)
+// ---------------------------------------------------------------------------
+
+/**
+ * On trip creation by `ownerId`, if that user has a partner, insert a
+ * trip_members row for the partner so they automatically see the trip
+ * without a manual invite. Safe to call from both the create and copy
+ * paths — ON CONFLICT DO NOTHING guards against duplicates. Fire-and-
+ * forget notification + websocket dispatch via the existing trip_invite
+ * event type (partner auto-adds are semantically a lightweight invite).
+ */
+export function autoAddPartnerToTrip(ownerId: number, tripId: number, tripTitle: string): { added: boolean; partnerId: number | null } {
+  const row = db.prepare('SELECT partner_user_id FROM users WHERE id = ?').get(ownerId) as { partner_user_id: number | null } | undefined;
+  const partnerId = row?.partner_user_id ?? null;
+  if (!partnerId) return { added: false, partnerId: null };
+
+  const result = db
+    .prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?) ON CONFLICT DO NOTHING')
+    .run(tripId, partnerId, ownerId);
+  const added = result.changes > 0;
+
+  if (added) {
+    const owner = db.prepare('SELECT username, email FROM users WHERE id = ?').get(ownerId) as { username: string; email: string } | undefined;
+    wsBroadcast(partnerId, { type: 'trip:member_added', tripId, tripTitle });
+    dispatchNotification('trip_invite', ownerId, partnerId, {
+      actor: owner?.email ?? 'Your partner',
+      trip: tripTitle,
+      tripId: String(tripId),
+    });
+  }
+
+  return { added, partnerId };
+}
+
+/**
+ * Opt-in one-time backfill: after pairing, add the partner as a trip_member
+ * on every trip the caller currently owns. Idempotent — re-running adds
+ * zero rows. Notification volume per user decision: aggregate if > 5 new
+ * trips, per-trip otherwise.
+ */
+export function backfillTrips(userId: number): { added: number; skipped: number; trip_ids: number[] } | PartnerServiceError {
+  const row = db.prepare('SELECT partner_user_id FROM users WHERE id = ?').get(userId) as { partner_user_id: number | null } | undefined;
+  const partnerId = row?.partner_user_id ?? null;
+  if (!partnerId) {
+    return { error: 'Not paired', code: 'NOT_PAIRED', status: 409 };
+  }
+
+  const trips = db
+    .prepare('SELECT id, title FROM trips WHERE user_id = ?')
+    .all(userId) as Array<{ id: number; title: string }>;
+
+  const addedTrips: Array<{ id: number; title: string }> = [];
+  let skipped = 0;
+
+  const txn = db.transaction(() => {
+    for (const trip of trips) {
+      const res = db
+        .prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?) ON CONFLICT DO NOTHING')
+        .run(trip.id, partnerId, userId);
+      if (res.changes > 0) addedTrips.push(trip);
+      else skipped++;
+    }
+    db.prepare(`
+      INSERT INTO settings (user_id, key, value) VALUES (?, 'partner_backfill_done', 'true')
+      ON CONFLICT(user_id, key) DO UPDATE SET value = 'true'
+    `).run(userId);
+  });
+  txn();
+
+  // Notify partner. ≤ 5: one notification per trip (preserves per-trip
+  // context). > 5: one aggregate notification (avoids spam).
+  if (addedTrips.length > 0) {
+    const owner = db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined;
+    const actor = owner?.email ?? 'Your partner';
+    if (addedTrips.length > 5) {
+      dispatchNotification('trip_invite', userId, partnerId, {
+        actor,
+        trip: `${addedTrips.length} trips`,
+      });
+    } else {
+      for (const trip of addedTrips) {
+        dispatchNotification('trip_invite', userId, partnerId, {
+          actor,
+          trip: trip.title,
+          tripId: String(trip.id),
+        });
+      }
+    }
+  }
+
+  return { added: addedTrips.length, skipped, trip_ids: addedTrips.map(t => t.id) };
+}
+
+export function hasBackfilledTrips(userId: number): boolean {
+  const row = db
+    .prepare("SELECT value FROM settings WHERE user_id = ? AND key = 'partner_backfill_done'")
+    .get(userId) as { value: string } | undefined;
+  return row?.value === 'true';
+}
+
 export function unpair(userId: number): { ok: true } | PartnerServiceError {
   const row = db
     .prepare('SELECT partner_user_id FROM users WHERE id = ?')

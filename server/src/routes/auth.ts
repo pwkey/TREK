@@ -332,6 +332,7 @@ router.get('/me/partner', authenticate, (req: Request, res: Response) => {
     partner: partnerSvc.getPartner(authReq.user.id),
     incoming: partnerSvc.listIncomingInvites(authReq.user.id),
     outgoing: partnerSvc.listOutgoingInvites(authReq.user.id),
+    backfill_done: partnerSvc.hasBackfilledTrips(authReq.user.id),
   });
 });
 
@@ -388,6 +389,21 @@ router.delete('/me/partner', authenticate, (req: Request, res: Response) => {
     ip: getClientIp(req),
   });
   res.json({ ok: true });
+});
+
+router.post('/me/partner/backfill-trips', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const result = partnerSvc.backfillTrips(authReq.user.id);
+  if ('error' in result) {
+    return res.status(result.status).json({ error: result.error, code: result.code });
+  }
+  writeAudit({
+    userId: authReq.user.id,
+    action: 'user.partner_backfill_trips',
+    ip: getClientIp(req),
+    details: { added: result.added, skipped: result.skipped },
+  });
+  res.json(result);
 });
 
 export default router;

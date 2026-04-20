@@ -18,4 +18,11 @@ export interface PartnerGetResponse {
   partner: PartnerSnapshot | null
   incoming: PartnerInviteView[]
   outgoing: PartnerInviteView[]
+  backfill_done: boolean
+}
+
+export interface BackfillTripsResponse {
+  added: number
+  skipped: number
+  trip_ids: number[]
 }

@@ -82,6 +82,7 @@ export const authApi = {
     respond: (notificationId: number, response: 'positive' | 'negative') =>
       apiClient.post(`/notifications/in-app/${notificationId}/respond`, { response }).then(r => r.data),
     unpair: () => apiClient.delete('/auth/me/partner').then(r => r.data),
+    backfillTrips: () => apiClient.post('/auth/me/partner/backfill-trips').then(r => r.data),
   },
 }
 
@@ -97,7 +98,7 @@ export const tripsApi = {
   getMembers: (id: number | string) => apiClient.get(`/trips/${id}/members`).then(r => r.data),
   addMember: (id: number | string, identifier: string) => apiClient.post(`/trips/${id}/members`, { identifier }).then(r => r.data),
   removeMember: (id: number | string, userId: number) => apiClient.delete(`/trips/${id}/members/${userId}`).then(r => r.data),
-  copy: (id: number | string, data?: { title?: string }) => apiClient.post(`/trips/${id}/copy`, data || {}).then(r => r.data),
+  copy: (id: number | string, data?: { title?: string; include_partner?: boolean }) => apiClient.post(`/trips/${id}/copy`, data || {}).then(r => r.data),
 }
 
 export const daysApi = {

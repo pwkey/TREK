@@ -256,6 +256,101 @@ describe('partnerService.unpair', () => {
   });
 });
 
+describe('partnerService.autoAddPartnerToTrip', () => {
+  function pairAliceBob() {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    testDb.prepare('UPDATE users SET partner_user_id = ? WHERE id = ?').run(bob.id, alice.id);
+    testDb.prepare('UPDATE users SET partner_user_id = ? WHERE id = ?').run(alice.id, bob.id);
+    return { alice, bob };
+  }
+
+  it('adds partner as trip_member when owner is paired', async () => {
+    const { alice, bob } = pairAliceBob();
+    const tripRes = testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'Paris');
+    const tripId = tripRes.lastInsertRowid as number;
+    const result = partnerService.autoAddPartnerToTrip(alice.id, tripId, 'Paris');
+    expect(result.added).toBe(true);
+    expect(result.partnerId).toBe(bob.id);
+    const member = testDb.prepare('SELECT user_id, invited_by FROM trip_members WHERE trip_id = ? AND user_id = ?').get(tripId, bob.id) as any;
+    expect(member).toBeDefined();
+    expect(member.invited_by).toBe(alice.id);
+  });
+
+  it('is a no-op when owner has no partner', async () => {
+    const { user: alice } = createUser(testDb);
+    const tripRes = testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'Solo');
+    const result = partnerService.autoAddPartnerToTrip(alice.id, tripRes.lastInsertRowid as number, 'Solo');
+    expect(result.added).toBe(false);
+    expect(result.partnerId).toBeNull();
+  });
+
+  it('is idempotent when partner is already a trip_member', async () => {
+    const { alice, bob } = pairAliceBob();
+    const tripRes = testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'Tokyo');
+    const tripId = tripRes.lastInsertRowid as number;
+    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(tripId, bob.id, alice.id);
+    const result = partnerService.autoAddPartnerToTrip(alice.id, tripId, 'Tokyo');
+    expect(result.added).toBe(false);
+    expect(result.partnerId).toBe(bob.id);
+  });
+});
+
+describe('partnerService.backfillTrips', () => {
+  function pairAliceBob() {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    testDb.prepare('UPDATE users SET partner_user_id = ? WHERE id = ?').run(bob.id, alice.id);
+    testDb.prepare('UPDATE users SET partner_user_id = ? WHERE id = ?').run(alice.id, bob.id);
+    return { alice, bob };
+  }
+
+  it('adds partner to all owned trips that do not already have them', async () => {
+    const { alice, bob } = pairAliceBob();
+    const t1 = testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'A').lastInsertRowid as number;
+    const t2 = testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'B').lastInsertRowid as number;
+    const t3 = testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'C').lastInsertRowid as number;
+    // Bob already on t1 manually
+    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(t1, bob.id, alice.id);
+    const result = partnerService.backfillTrips(alice.id);
+    expect('added' in result).toBe(true);
+    if (!('added' in result)) return;
+    expect(result.added).toBe(2); // t2 and t3
+    expect(result.skipped).toBe(1); // t1
+    expect(result.trip_ids.sort()).toEqual([t2, t3].sort());
+  });
+
+  it('is idempotent on re-run', async () => {
+    const { alice } = pairAliceBob();
+    testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'One');
+    testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'Two');
+    const first = partnerService.backfillTrips(alice.id);
+    const second = partnerService.backfillTrips(alice.id);
+    if (!('added' in first) || !('added' in second)) throw new Error('expected success');
+    expect(first.added).toBe(2);
+    expect(second.added).toBe(0);
+    expect(second.skipped).toBe(2);
+  });
+
+  it('NOT_PAIRED when caller has no partner', async () => {
+    const { user: alice } = createUser(testDb);
+    const result = partnerService.backfillTrips(alice.id);
+    expect('error' in result).toBe(true);
+    if ('error' in result) {
+      expect(result.code).toBe('NOT_PAIRED');
+    }
+  });
+
+  it('sets settings.partner_backfill_done to "true"', async () => {
+    const { alice } = pairAliceBob();
+    testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(alice.id, 'Only');
+    partnerService.backfillTrips(alice.id);
+    const row = testDb.prepare("SELECT value FROM settings WHERE user_id = ? AND key = 'partner_backfill_done'").get(alice.id) as any;
+    expect(row.value).toBe('true');
+    expect(partnerService.hasBackfilledTrips(alice.id)).toBe(true);
+  });
+});
+
 describe('partnerService.getPartner / listIncomingInvites / listOutgoingInvites', () => {
   it('reads back the paired user', async () => {
     const { user: alice } = createUser(testDb);

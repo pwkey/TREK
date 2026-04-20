@@ -8,6 +8,7 @@ import QRCode from 'qrcode';
 import { randomBytes, createHash } from 'crypto';
 import { db } from '../db/database';
 import { JWT_SECRET } from '../config';
+import { getPartner } from './partnerService';
 import { validatePassword } from './passwordPolicy';
 import { encryptMfaSecret, decryptMfaSecret } from './mfaCrypto';
 import { getAllPermissions } from './permissions';
@@ -394,7 +395,9 @@ export function getCurrentUser(userId: number) {
   ).get(userId) as User | undefined;
   if (!user) return null;
   const base = stripUserForClient(user as User) as Record<string, unknown>;
-  return { ...base, avatar_url: avatarUrl(user) };
+  // [460-fork] Include partner snapshot so the client can show "You + Partner"
+  // chips and render the Partner Section state without an extra roundtrip.
+  return { ...base, avatar_url: avatarUrl(user), partner: getPartner(userId) };
 }
 
 // ---------------------------------------------------------------------------

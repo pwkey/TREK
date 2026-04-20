@@ -7,6 +7,7 @@ import { authenticate, optionalAuth, demoUploadBlock } from '../middleware/auth'
 import { AuthRequest, OptionalAuthRequest } from '../types';
 import { writeAudit, getClientIp } from '../services/auditLog';
 import { setAuthCookie, clearAuthCookie } from '../services/cookie';
+import * as partnerSvc from '../services/partnerService';
 import {
   getAppConfig,
   demoLogin,
@@ -320,6 +321,73 @@ router.post('/resource-token', authenticate, (req: Request, res: Response) => {
   const token = createResourceToken(authReq.user.id, req.body.purpose);
   if (!token) return res.status(503).json({ error: 'Service unavailable' });
   res.json(token);
+});
+
+// ── [460-fork] Partner pairing (Milestone 3) ────────────────────────────────
+// Additive block — keep contiguous to minimise upstream rebase conflicts.
+
+router.get('/me/partner', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  res.json({
+    partner: partnerSvc.getPartner(authReq.user.id),
+    incoming: partnerSvc.listIncomingInvites(authReq.user.id),
+    outgoing: partnerSvc.listOutgoingInvites(authReq.user.id),
+  });
+});
+
+router.post('/me/partner/invites', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const clientMutationId = (req.headers['x-client-mutation-id'] as string | undefined)?.trim() || null;
+  const { identifier, message } = req.body ?? {};
+  if (!identifier || typeof identifier !== 'string') {
+    return res.status(400).json({ error: 'identifier is required', code: 'INVALID_INPUT' });
+  }
+  const result = partnerSvc.sendInvite({
+    inviterId: authReq.user.id,
+    targetIdentifier: identifier,
+    message: typeof message === 'string' ? message : null,
+    clientMutationId,
+  });
+  if ('error' in result) {
+    return res.status(result.status).json({ error: result.error, code: result.code });
+  }
+  writeAudit({
+    userId: authReq.user.id,
+    action: 'user.partner_invite',
+    resource: result.invite.id,
+    ip: getClientIp(req),
+    details: { target_user_id: result.invite.target.id },
+  });
+  res.status(201).json({ invite: result.invite });
+});
+
+router.delete('/me/partner/invites/:inviteId', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const result = partnerSvc.cancelInvite({ userId: authReq.user.id, inviteId: req.params.inviteId });
+  if ('error' in result) {
+    return res.status(result.status).json({ error: result.error, code: result.code });
+  }
+  writeAudit({
+    userId: authReq.user.id,
+    action: 'user.partner_invite_cancel',
+    resource: req.params.inviteId,
+    ip: getClientIp(req),
+  });
+  res.json({ ok: true });
+});
+
+router.delete('/me/partner', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const result = partnerSvc.unpair(authReq.user.id);
+  if ('error' in result) {
+    return res.status(result.status).json({ error: result.error, code: result.code });
+  }
+  writeAudit({
+    userId: authReq.user.id,
+    action: 'user.partner_unpair',
+    ip: getClientIp(req),
+  });
+  res.json({ ok: true });
 });
 
 export default router;

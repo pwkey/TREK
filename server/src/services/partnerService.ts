@@ -1,6 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import { db } from '../db/database';
 
+// Dispatch wrappers — broken out for testability and to keep the sync
+// invite/accept paths from awaiting network / filesystem side effects.
+// Both use lazy require so we don't tangle the partner <-> notification <->
+// websocket import cycle.
+function wsBroadcast(userId: number, message: Record<string, unknown>): void {
+  try {
+    const { broadcastToUser } = require('../websocket');
+    broadcastToUser(userId, message);
+  } catch { /* websocket not available in this context (e.g. tests) */ }
+}
+
+function dispatchNotification(event: string, actorId: number, targetUserId: number, params: Record<string, string>, inApp?: Record<string, unknown>): void {
+  // Fire-and-forget; we never want notification failures to break the core
+  // partner-pair transaction. Use dynamic import to avoid circular imports.
+  import('./notificationService').then(({ send }) => {
+    send({ event: event as any, actorId, scope: 'user', targetId: targetUserId, params, inApp: inApp as any }).catch(() => { /* swallow */ });
+  }).catch(() => { /* swallow */ });
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -204,6 +223,15 @@ export function sendInvite(params: {
     // Should never happen — both users existed microseconds ago.
     return { error: 'Invite could not be rendered', code: 'USER_NOT_FOUND', status: 500 };
   }
+
+  // Notify the target via WebSocket + in-app boolean notification with callbacks.
+  wsBroadcast(target.id, { type: 'partner:invite', from: view.inviter, inviteId });
+  dispatchNotification('partner_invite', inviterId, target.id, { actor: view.inviter.username }, {
+    type: 'boolean',
+    positiveCallback: { action: 'partner_invite_accept', payload: { inviteId } },
+    negativeCallback: { action: 'partner_invite_decline', payload: { inviteId } },
+  });
+
   return { invite: view };
 }
 
@@ -287,8 +315,10 @@ export function acceptInvite(params: {
     return { error: 'Either user was paired before this invite could be accepted', code: 'ALREADY_PAIRED', status: 409 };
   }
 
-  const partner = userSnapshot(invite.inviter_user_id);
-  return { partner: partner! };
+  const partner = userSnapshot(invite.inviter_user_id)!;
+  // Tell the inviter the pairing completed, real-time and in-app.
+  wsBroadcast(invite.inviter_user_id, { type: 'partner:response', inviteId, status: 'accepted' });
+  return { partner };
 }
 
 export function declineInvite(params: {
@@ -309,6 +339,7 @@ export function declineInvite(params: {
     SET status = 'declined', responded_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, updated_by = ?
     WHERE id = ? AND status = 'pending'
   `).run(params.userId, params.inviteId);
+  wsBroadcast(invite.inviter_user_id, { type: 'partner:response', inviteId: params.inviteId, status: 'declined' });
   return { ok: true };
 }
 

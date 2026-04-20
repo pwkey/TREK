@@ -19,4 +19,22 @@ registerAction('test_deny', async () => {
   console.log('[notifications] Test deny action executed');
 });
 
+// [460-fork] Partner pairing (Milestone 3) — boolean notification callbacks.
+// Dynamic import (not require) so Vitest's ESM resolver finds it the same
+// way production tsx does. Breaks the partnerService ↔ notificationService
+// import cycle.
+registerAction('partner_invite_accept', async (payload, respondingUserId) => {
+  const inviteId = typeof payload.inviteId === 'string' ? payload.inviteId : null;
+  if (!inviteId) return;
+  const mod = await import('./partnerService');
+  mod.acceptInvite({ userId: respondingUserId, inviteId });
+});
+
+registerAction('partner_invite_decline', async (payload, respondingUserId) => {
+  const inviteId = typeof payload.inviteId === 'string' ? payload.inviteId : null;
+  if (!inviteId) return;
+  const mod = await import('./partnerService');
+  mod.declineInvite({ userId: respondingUserId, inviteId });
+});
+
 export { registerAction, getAction };

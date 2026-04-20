@@ -105,6 +105,14 @@ const EVENT_NOTIFICATION_CONFIG: Record<string, EventNotifConfig> = {
     navigateTextKey: 'notif.action.view_packing',
     navigateTarget: p => (p.tripId ? `/trips/${p.tripId}` : null),
   },
+  // [460-fork] Partner pairing (Milestone 3) — boolean notification with
+  // positive/negative callbacks dispatched via inAppNotificationActions.
+  partner_invite: {
+    inAppType: 'simple', // overridden by inApp.type='boolean' at call site
+    titleKey: 'notif.partner_invite.title',
+    textKey: 'notif.partner_invite.text',
+    navigateTarget: () => '/settings?tab=account',
+  },
   version_available: {
     inAppType: 'navigate',
     titleKey: 'notif.version_available.title',

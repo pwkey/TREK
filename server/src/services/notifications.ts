@@ -94,7 +94,11 @@ const I18N: Record<string, EmailStrings> = {
 interface EventText { title: string; body: string }
 type EventTextFn = (params: Record<string, string>) => EventText
 
-const EVENT_TEXTS: Record<string, Record<NotifEventType, EventTextFn>> = {
+// [460-fork] Changed from Record<NotifEventType, ...> to Partial<...> so
+// new events can ship with English text only and fall back via the en map
+// (line 242) without forcing translations for every language. Applies
+// generally, not just to fork-added events.
+const EVENT_TEXTS: Record<string, Partial<Record<NotifEventType, EventTextFn>>> = {
   en: {
     trip_invite: p => ({ title: `Trip invite: "${p.trip}"`, body: `${p.actor} invited ${p.invitee || 'a member'} to the trip "${p.trip}".` }),
     booking_change: p => ({ title: `New booking: ${p.booking}`, body: `${p.actor} added a new ${p.type} "${p.booking}" to "${p.trip}".` }),
@@ -104,6 +108,7 @@ const EVENT_TEXTS: Record<string, Record<NotifEventType, EventTextFn>> = {
     collab_message: p => ({ title: `New message in "${p.trip}"`, body: `${p.actor}: ${p.preview}` }),
     packing_tagged: p => ({ title: `Packing: ${p.category}`, body: `${p.actor} assigned you to the "${p.category}" packing category in "${p.trip}".` }),
     version_available: p => ({ title: 'New TREK version available', body: `TREK ${p.version} is now available. Visit the admin panel to update.` }),
+    partner_invite: p => ({ title: 'Partner pair request', body: `${p.actor} wants to pair as partners. Open the app to accept or decline.` }),
   },
   de: {
     trip_invite: p => ({ title: `Einladung zu "${p.trip}"`, body: `${p.actor} hat ${p.invitee || 'ein Mitglied'} zur Reise "${p.trip}" eingeladen.` }),

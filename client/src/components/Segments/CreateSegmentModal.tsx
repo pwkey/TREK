@@ -2,11 +2,11 @@
 // Lets the trip owner pick a contiguous range of days on their own trip,
 // name the resulting segment, and receive a signed invite URL to send to
 // another household.
-import { useEffect, useMemo, useState } from 'react'
-import { Check, Copy, Link2, Users } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Check, Copy, Link2, LogOut, Users } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { useToast } from '../shared/Toast'
-import { segmentsApi } from '../../api/segments'
+import { segmentsApi, type SegmentSummaryForTrip } from '../../api/segments'
 import { getApiErrorMessage } from '../../types'
 import type { Day } from '../../types'
 
@@ -40,6 +40,16 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<Created | null>(null)
   const [copied, setCopied] = useState(false)
+  const [existingSegments, setExistingSegments] = useState<SegmentSummaryForTrip[]>([])
+  const [leavingId, setLeavingId] = useState<string | null>(null)
+  const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null)
+
+  const refreshExisting = useCallback(async () => {
+    try {
+      const res = await segmentsApi.listForTrip(tripId)
+      setExistingSegments(res.segments)
+    } catch { /* silent — list is non-critical */ }
+  }, [tripId])
 
   useEffect(() => {
     if (!isOpen) {
@@ -50,8 +60,12 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
       setError(null)
       setCreated(null)
       setCopied(false)
+      setConfirmLeaveId(null)
+      setLeavingId(null)
+      return
     }
-  }, [isOpen])
+    void refreshExisting()
+  }, [isOpen, refreshExisting])
 
   const selectedDayIds = useMemo(() => {
     if (!startDate || !endDate) return []
@@ -84,10 +98,26 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
       const url = `${window.location.origin}/segments/accept/${invite.token}`
       setCreated({ segmentId: segment.segment.id, inviteUrl: url, expiresAt: invite.expires_at })
       onCreated?.()
+      void refreshExisting()
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Failed to create shared segment'))
     } finally {
       setBusy(false)
+    }
+  }
+
+  const leave = async (segmentId: string) => {
+    setLeavingId(segmentId)
+    try {
+      await segmentsApi.leave(segmentId, tripId)
+      toast.success('Left shared segment — memento copy kept on your trip')
+      await refreshExisting()
+      onCreated?.()
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Failed to leave segment'))
+    } finally {
+      setLeavingId(null)
+      setConfirmLeaveId(null)
     }
   }
 
@@ -177,6 +207,104 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {existingSegments.length > 0 && (
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+                Shared segments on this trip
+              </div>
+              {existingSegments.map(seg => {
+                const range = seg.start_date && seg.end_date
+                  ? `${formatDate(seg.start_date)} – ${formatDate(seg.end_date)}`
+                  : ''
+                const otherCount = Math.max(0, seg.linked_trip_count - 1)
+                return (
+                  <div key={seg.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: 10, borderRadius: 10,
+                    border: '1px solid var(--border-primary)', background: 'var(--bg-card)',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Link2 size={12} style={{ color: '#0e7a5a', flexShrink: 0 }} />
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {seg.title}
+                        </span>
+                        {seg.is_home && (
+                          <span style={{
+                            padding: '1px 6px', borderRadius: 999, fontSize: 10, fontWeight: 600,
+                            background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb',
+                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                          }}>home</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {range}{range && otherCount > 0 ? ' · ' : ''}
+                        {otherCount > 0 && `${otherCount} other trip${otherCount === 1 ? '' : 's'}`}
+                      </div>
+                    </div>
+                    {confirmLeaveId === seg.id ? (
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmLeaveId(null)}
+                          disabled={leavingId === seg.id}
+                          style={{
+                            padding: '6px 10px', borderRadius: 6,
+                            border: '1px solid var(--border-primary)', background: 'var(--bg-card)',
+                            fontSize: 11, fontWeight: 500, color: 'var(--text-primary)',
+                            cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => leave(seg.id)}
+                          disabled={leavingId === seg.id}
+                          style={{
+                            padding: '6px 10px', borderRadius: 6,
+                            border: '1px solid #dc2626', background: '#dc2626',
+                            fontSize: 11, fontWeight: 600, color: 'white',
+                            cursor: leavingId === seg.id ? 'default' : 'pointer', fontFamily: 'inherit',
+                            opacity: leavingId === seg.id ? 0.5 : 1,
+                          }}
+                        >
+                          {leavingId === seg.id ? 'Leaving…' : 'Confirm leave'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmLeaveId(seg.id)}
+                        disabled={seg.is_home}
+                        title={seg.is_home ? "You're the home trip — dissolve the segment or have no siblings before leaving" : 'Leave this segment; a memento copy of the shared days stays on your trip'}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          padding: '6px 10px', borderRadius: 6,
+                          border: `1px solid ${seg.is_home ? 'var(--border-primary)' : '#dc2626'}`,
+                          background: 'transparent',
+                          fontSize: 11, fontWeight: 500,
+                          color: seg.is_home ? 'var(--text-muted)' : '#dc2626',
+                          cursor: seg.is_home ? 'default' : 'pointer', fontFamily: 'inherit',
+                          opacity: seg.is_home ? 0.5 : 1,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <LogOut size={11} />
+                        Leave
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+              {confirmLeaveId && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 4 }}>
+                  Confirming will copy the shared days into your trip as plain rows. The segment continues for the other households.
+                </div>
+              )}
+            </section>
+          )}
+
           <div style={{
             display: 'flex', alignItems: 'flex-start', gap: 10,
             padding: 10, borderRadius: 8,

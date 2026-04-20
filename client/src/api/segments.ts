@@ -36,7 +36,15 @@ export interface InvitePreview {
   accepted: boolean
 }
 
+export interface SegmentSummaryForTrip extends SegmentRow {
+  is_home: boolean
+  linked_trip_count: number
+}
+
 export const segmentsApi = {
+  listForTrip: (tripId: number) =>
+    apiClient.get(`/trips/${tripId}/segments`).then(r => r.data as { segments: SegmentSummaryForTrip[] }),
+
   create: (data: { trip_id: number; day_ids: number[]; title: string }) =>
     apiClient.post('/segments', data).then(r => r.data as SegmentView),
 

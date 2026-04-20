@@ -634,8 +634,15 @@ export default function DashboardPage(): React.ReactElement {
       setTrips(prev => prev.filter(t => t.id !== deleteTrip.id))
       setArchivedTrips(prev => prev.filter(t => t.id !== deleteTrip.id))
       toast.success(t('dashboard.toast.deleted'))
-    } catch {
-      toast.error(t('dashboard.toast.deleteError'))
+    } catch (err: unknown) {
+      // [460-fork] Milestone 4 — surface shared-segment block as a helpful
+      // message rather than a generic delete-failure toast.
+      const errObj = err as { response?: { status?: number; data?: { code?: string } } }
+      if (errObj?.response?.status === 409 && errObj?.response?.data?.code === 'SEGMENT_REFERENCES_BLOCK_DELETE') {
+        toast.error('This trip hosts shared segments used by other households. Leave or dissolve them before deleting.')
+      } else {
+        toast.error(t('dashboard.toast.deleteError'))
+      }
     }
     setDeleteTrip(null)
   }

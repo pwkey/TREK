@@ -9,7 +9,7 @@ import { broadcast } from '../websocket';
 import { AuthRequest, Trip } from '../types';
 import { writeAudit, getClientIp, logInfo } from '../services/auditLog';
 import { autoAddPartnerToTrip as partnerAutoAdd } from '../services/partnerService';
-import { canDeleteTrip as segmentCanDeleteTrip } from '../services/segmentService';
+import { canDeleteTrip as segmentCanDeleteTrip, listSegmentsForTrip } from '../services/segmentService';
 import { checkPermission } from '../services/permissions';
 import {
   listTrips,
@@ -404,6 +404,21 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
 });
 
 // ── List members ──────────────────────────────────────────────────────────
+
+// [460-fork] Milestone 4 — segments this trip is linked to (for the manage UI).
+router.get('/:id/segments', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const access = canAccessTrip(req.params.id, authReq.user.id);
+  if (!access) return res.status(404).json({ error: 'Trip not found' });
+  const segments = listSegmentsForTrip(Number(req.params.id));
+  const tripId = Number(req.params.id);
+  const annotated = segments.map(s => {
+    const home = db.prepare('SELECT trip_id FROM trip_segments WHERE segment_id = ? AND is_home = 1').get(s.id) as { trip_id: number } | undefined;
+    const linkedCount = (db.prepare('SELECT COUNT(*) AS c FROM trip_segments WHERE segment_id = ?').get(s.id) as { c: number }).c;
+    return { ...s, is_home: home?.trip_id === tripId, linked_trip_count: linkedCount };
+  });
+  res.json({ segments: annotated });
+});
 
 router.get('/:id/members', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;

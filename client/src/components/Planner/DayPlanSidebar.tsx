@@ -4,7 +4,7 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2 } from 'lucide-react'
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { assignmentsApi, reservationsApi } from '../../api/client'
@@ -18,6 +18,7 @@ import WeatherWidget from '../Weather/WeatherWidget'
 import { useToast } from '../shared/Toast'
 import { getCategoryIcon } from '../shared/categoryIcons'
 import { useTripStore } from '../../store/tripStore'
+import CreateSegmentModal from '../Segments/CreateSegmentModal' // [460-fork] Milestone 4
 import { useCanDo } from '../../store/permissionsStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useTranslation } from '../../i18n'
@@ -130,6 +131,9 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const [undoHover, setUndoHover] = useState(false)
   const [pdfHover, setPdfHover] = useState(false)
   const [icsHover, setIcsHover] = useState(false)
+  // [460-fork] Milestone 4 — share-days dialog state
+  const [shareHover, setShareHover] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const [dropTargetKey, _setDropTargetKey] = useState(null)
   const dropTargetRef = useRef(null)
   const setDropTargetKey = (key) => { dropTargetRef.current = key; _setDropTargetKey(key) }
@@ -890,6 +894,40 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
               </div>
             )}
           </div>
+          {/* [460-fork] Milestone 4 — share-days trigger */}
+          {canEditDays && (
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                onClick={() => setShareOpen(true)}
+                onMouseEnter={() => setShareHover(true)}
+                onMouseLeave={() => setShareHover(false)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 30, height: 30, borderRadius: 8,
+                  border: '1px solid var(--border-primary)', background: 'none',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'color 0.15s, border-color 0.15s',
+                }}
+                title="Share these days with another household"
+                aria-label="Share these days with another household"
+              >
+                <Link2 size={14} strokeWidth={2} />
+              </button>
+              {shareHover && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                  whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 200,
+                  background: 'var(--bg-card, white)', color: 'var(--text-primary, #111827)',
+                  fontSize: 11, fontWeight: 500, padding: '5px 10px',
+                  borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  border: '1px solid var(--border-faint, #e5e7eb)',
+                }}>
+                  Share days with another household
+                </div>
+              )}
+            </div>
+          )}
           {onUndo && (
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <button
@@ -1887,6 +1925,15 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
         </div>
       )}
       <ContextMenu menu={ctxMenu.menu} onClose={ctxMenu.close} />
+
+      {/* [460-fork] Milestone 4 — share-days modal */}
+      <CreateSegmentModal
+        isOpen={shareOpen}
+        onClose={() => setShareOpen(false)}
+        tripId={tripId}
+        days={days}
+        onCreated={() => { void useTripStore.getState().refreshDays(tripId) }}
+      />
     </div>
   )
 })

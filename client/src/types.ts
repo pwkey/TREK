@@ -36,6 +36,7 @@ export interface Day {
   notes: string | null
   assignments: Assignment[]
   notes_items: DayNote[]
+  segment_id?: string | null // [460-fork] Milestone 4: shared-segment pointer
 }
 
 export interface Place {

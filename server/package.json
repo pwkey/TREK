@@ -1,5 +1,5 @@
 {
-  "name": "trek-server",
+  "name": "460-trip-planner-server",
   "version": "2.9.14",
   "main": "src/index.ts",
   "scripts": {

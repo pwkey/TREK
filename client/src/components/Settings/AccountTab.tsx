@@ -103,9 +103,9 @@ export default function AccountTab(): React.ReactElement {
 
   const printBackupCodes = () => {
     if (!backupCodesText) return
-    const html = `<!doctype html><html><head><meta charset="utf-8"/><title>TREK MFA Backup Codes</title>
+    const html = `<!doctype html><html><head><meta charset="utf-8"/><title>460 Trip Planner MFA Backup Codes</title>
       <style>body{font-family:Arial,sans-serif;padding:32px}h1{font-size:20px}pre{font-size:16px;line-height:1.6}</style>
-      </head><body><h1>TREK MFA Backup Codes</h1><p>${new Date().toLocaleString()}</p><pre>${backupCodesText}</pre></body></html>`
+      </head><body><h1>460 Trip Planner MFA Backup Codes</h1><p>${new Date().toLocaleString()}</p><pre>${backupCodesText}</pre></body></html>`
     const w = window.open('', '_blank', 'width=900,height=700')
     if (!w) return
     w.document.open()

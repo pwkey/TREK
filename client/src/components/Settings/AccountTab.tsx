@@ -8,6 +8,7 @@ import { authApi, adminApi } from '../../api/client'
 import { getApiErrorMessage } from '../../types'
 import type { UserWithOidc } from '../../types'
 import Section from './Section'
+import PartnerSection from './PartnerSection'
 
 const MFA_BACKUP_SESSION_KEY = 'trek_mfa_backup_codes_pending'
 
@@ -502,6 +503,9 @@ export default function AccountTab(): React.ReactElement {
           </button>
         </div>
       </Section>
+
+      {/* [460-fork] Partner pairing (Milestone 3) */}
+      <PartnerSection />
 
       {/* Delete Account Blocked */}
       {showDeleteConfirm === 'blocked' && (

@@ -70,6 +70,19 @@ export const authApi = {
     create: (name: string) => apiClient.post('/auth/mcp-tokens', { name }).then(r => r.data),
     delete: (id: number) => apiClient.delete(`/auth/mcp-tokens/${id}`).then(r => r.data),
   },
+  // [460-fork] Partner pairing (Milestone 3)
+  partner: {
+    get: () => apiClient.get('/auth/me/partner').then(r => r.data),
+    invite: (data: { identifier: string; message?: string; clientMutationId?: string }) =>
+      apiClient.post('/auth/me/partner/invites', { identifier: data.identifier, message: data.message }, {
+        headers: data.clientMutationId ? { 'X-Client-Mutation-Id': data.clientMutationId } : undefined,
+      }).then(r => r.data),
+    cancelInvite: (inviteId: string) =>
+      apiClient.delete(`/auth/me/partner/invites/${inviteId}`).then(r => r.data),
+    respond: (notificationId: number, response: 'positive' | 'negative') =>
+      apiClient.post(`/notifications/in-app/${notificationId}/respond`, { response }).then(r => r.data),
+    unpair: () => apiClient.delete('/auth/me/partner').then(r => r.data),
+  },
 }
 
 export const tripsApi = {

@@ -525,6 +525,20 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_segment_invites_segment ON segment_invites(segment_id);
     -- [460-fork] Shared segments (Milestone 4) — END
+
+    -- [460-fork] Offline-first idempotency (Milestone 5) — BEGIN
+    CREATE TABLE IF NOT EXISTS client_mutations (
+      client_mutation_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL,
+      method TEXT NOT NULL,
+      status_code INTEGER NOT NULL,
+      response_body TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, client_mutation_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_client_mutations_created ON client_mutations(created_at);
+    -- [460-fork] Offline-first idempotency (Milestone 5) — END
   `);
 }
 

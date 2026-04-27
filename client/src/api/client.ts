@@ -9,12 +9,28 @@ const apiClient: AxiosInstance = axios.create({
   },
 })
 
-// Request interceptor - add socket ID
+// Request interceptor - add socket ID + auto-generate mutation id
 apiClient.interceptors.request.use(
   (config) => {
     const sid = getSocketId()
     if (sid) {
       config.headers['X-Socket-Id'] = sid
+    }
+    // [460-fork] Milestone 5 — auto-attach a fresh client_mutation_id to
+    // every state-changing request (POST/PUT/PATCH/DELETE) so the server
+    // idempotency middleware can dedupe retries. Callers that want to
+    // control the id (e.g. queue replays) set it explicitly and we leave
+    // their value alone.
+    const method = (config.method || 'get').toLowerCase()
+    if (method !== 'get' && method !== 'head' && method !== 'options') {
+      const headers = config.headers as Record<string, unknown>
+      const existing = (headers['X-Client-Mutation-Id'] || headers['x-client-mutation-id']) as string | undefined
+      if (!existing) {
+        const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+          ? (crypto as Crypto).randomUUID()
+          : `mid-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+        config.headers['X-Client-Mutation-Id'] = id
+      }
     }
     return config
   },

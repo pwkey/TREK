@@ -11,7 +11,7 @@
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 
 export const DB_NAME = '460tp-local'
-export const DB_VERSION = 1
+export const DB_VERSION = 2
 
 interface TripRecord {
   id: number
@@ -50,6 +50,24 @@ interface MetaRecord {
   value: unknown
 }
 
+export interface QueuedMutationRecord {
+  id: string
+  endpoint: string
+  method: 'POST' | 'PUT' | 'DELETE'
+  payload: unknown
+  /** Optional record-level updated_at observed at queue time, sent as the
+   *  conflict precondition when the mutation eventually replays. */
+  observed_updated_at?: string | null
+  created_at: number
+  attempts: number
+  /** When the next retry is allowed (epoch ms). Used to back off failures. */
+  next_attempt_at: number
+  last_error: string | null
+  /** 'pending' | 'failed' (max attempts reached) — UI surfaces 'failed' for
+   *  user resolution. */
+  status: 'pending' | 'failed'
+}
+
 interface LocalDb extends DBSchema {
   trips: { key: number; value: TripRecord }
   days: { key: number; value: DayRecord; indexes: { 'by-trip': number } }
@@ -57,6 +75,7 @@ interface LocalDb extends DBSchema {
   assignments: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
   dayNotes: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
   reservations: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
+  mutations: { key: string; value: QueuedMutationRecord }
   _meta: { key: string; value: MetaRecord }
 }
 
@@ -79,6 +98,10 @@ export function getDb(): Promise<LocalDbHandle> {
           db.createObjectStore('dayNotes', { keyPath: 'id' }).createIndex('by-trip', 'trip_id')
           db.createObjectStore('reservations', { keyPath: 'id' }).createIndex('by-trip', 'trip_id')
           db.createObjectStore('_meta', { keyPath: 'key' })
+        }
+        if (oldVersion < 2) {
+          // Slice 2 — persistent mutation queue.
+          db.createObjectStore('mutations', { keyPath: 'id' })
         }
       },
     })

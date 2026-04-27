@@ -992,6 +992,25 @@ function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_segment_invites_segment ON segment_invites(segment_id);
       `);
     },
+    // [460-fork] Offline-first writes (Milestone 5): per-(user, mutation_id)
+    // response cache so a queued mutation that gets retried after network
+    // hiccups returns the same result instead of being applied twice.
+    // Daily cleanup in scheduler.ts evicts rows older than 30 days.
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS client_mutations (
+          client_mutation_id TEXT NOT NULL,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          endpoint TEXT NOT NULL,
+          method TEXT NOT NULL,
+          status_code INTEGER NOT NULL,
+          response_body TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id, client_mutation_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_mutations_created ON client_mutations(created_at);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

@@ -235,6 +235,32 @@ function stop(): void {
   if (demoTask) { demoTask.stop(); demoTask = null; }
   if (reminderTask) { reminderTask.stop(); reminderTask = null; }
   if (versionCheckTask) { versionCheckTask.stop(); versionCheckTask = null; }
+  if (clientMutationsCleanupTask) { clientMutationsCleanupTask.stop(); clientMutationsCleanupTask = null; }
 }
 
-export { start, stop, startDemoReset, startTripReminders, startVersionCheck, loadSettings, saveSettings, VALID_INTERVALS };
+// [460-fork] Milestone 5 — daily cleanup of the idempotency response cache.
+// Rows older than 30 days are no longer worth keeping; clients that still
+// retry a mutation that old should re-derive a new mutation id.
+let clientMutationsCleanupTask: ScheduledTask | null = null;
+
+function startClientMutationsCleanup(): void {
+  if (clientMutationsCleanupTask) { clientMutationsCleanupTask.stop(); clientMutationsCleanupTask = null; }
+  const tz = process.env.TZ || 'UTC';
+  clientMutationsCleanupTask = cron.schedule('30 3 * * *', () => {
+    try {
+      const { db } = require('./db/database');
+      const result = db
+        .prepare("DELETE FROM client_mutations WHERE created_at < datetime('now', '-30 days')")
+        .run();
+      if (result.changes > 0) {
+        const { logInfo: li } = require('./services/auditLog');
+        li(`Cleaned up ${result.changes} expired client_mutations row(s).`);
+      }
+    } catch (err: unknown) {
+      const { logError: le } = require('./services/auditLog');
+      le(`client_mutations cleanup failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }, { timezone: tz });
+}
+
+export { start, stop, startDemoReset, startTripReminders, startVersionCheck, startClientMutationsCleanup, loadSettings, saveSettings, VALID_INTERVALS };

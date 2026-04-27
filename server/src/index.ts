@@ -48,6 +48,7 @@ const server = app.listen(PORT, () => {
   scheduler.startTripReminders();
   scheduler.startVersionCheck();
   scheduler.startDemoReset();
+  scheduler.startClientMutationsCleanup(); // [460-fork] Milestone 5
   const { startTokenCleanup } = require('./services/ephemeralTokens');
   startTokenCleanup();
   import('./websocket').then(({ setupWebSocket }) => {

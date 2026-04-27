@@ -44,6 +44,7 @@ export interface Day {
   notes?: string | null;
   title?: string | null;
   segment_id?: string | null; // [460-fork] Milestone 4: shared-segment pointer
+  updated_at?: string; // [460-fork] Milestone 5 slice 4: precondition currency
 }
 
 export interface Place {

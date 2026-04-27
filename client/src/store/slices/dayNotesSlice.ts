@@ -18,8 +18,12 @@ export interface DayNotesSlice {
 
 export const createDayNotesSlice = (set: SetState, get: GetState): DayNotesSlice => ({
   updateDayNotes: async (tripId, dayId, notes) => {
+    // [460-fork] Milestone 5 slice 4 — pass the day's last-known updated_at as
+    // the precondition; if the server has moved on, the mutation gets parked
+    // as a conflict for the user to review instead of silently overwriting.
+    const observed = get().days.find(d => d.id === parseInt(String(dayId)))?.updated_at ?? null
     try {
-      await daysApi.update(tripId, dayId, { notes })
+      await daysApi.update(tripId, dayId, { notes }, observed)
       set(state => ({
         days: state.days.map(d => d.id === parseInt(String(dayId)) ? { ...d, notes } : d)
       }))
@@ -29,8 +33,9 @@ export const createDayNotesSlice = (set: SetState, get: GetState): DayNotesSlice
   },
 
   updateDayTitle: async (tripId, dayId, title) => {
+    const observed = get().days.find(d => d.id === parseInt(String(dayId)))?.updated_at ?? null
     try {
-      await daysApi.update(tripId, dayId, { title })
+      await daysApi.update(tripId, dayId, { title }, observed)
       set(state => ({
         days: state.days.map(d => d.id === parseInt(String(dayId)) ? { ...d, title } : d)
       }))

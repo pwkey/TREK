@@ -82,6 +82,7 @@ function createTables(db: Database.Database): void {
       notes TEXT,
       title TEXT,
       segment_id TEXT REFERENCES segments(id) ON DELETE SET NULL, -- [460-fork] Milestone 4
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- [460-fork] Milestone 5 slice 4
       UNIQUE(trip_id, day_number)
     );
     -- [460-fork] Milestone 4: index on segment_id lives in migration 118 only.
@@ -538,6 +539,25 @@ function createTables(db: Database.Database): void {
       PRIMARY KEY (user_id, client_mutation_id)
     );
     CREATE INDEX IF NOT EXISTS idx_client_mutations_created ON client_mutations(created_at);
+
+    CREATE TABLE IF NOT EXISTS client_mutation_conflicts (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      client_mutation_id TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      method TEXT NOT NULL,
+      record_type TEXT NOT NULL,
+      record_id INTEGER NOT NULL,
+      mine_payload TEXT NOT NULL,
+      theirs_snapshot TEXT NOT NULL,
+      observed_updated_at TEXT NOT NULL,
+      server_updated_at TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      resolved_at DATETIME,
+      resolved_choice TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_client_mutation_conflicts_user
+      ON client_mutation_conflicts(user_id, resolved_at);
     -- [460-fork] Offline-first idempotency (Milestone 5) — END
   `);
 }

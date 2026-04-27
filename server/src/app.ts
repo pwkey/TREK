@@ -35,6 +35,7 @@ import backupRoutes from './routes/backup';
 import oidcRoutes from './routes/oidc';
 import vacayRoutes from './routes/vacay';
 import segmentsRoutes from './routes/segments'; // [460-fork] Milestone 4
+import conflictsRoutes from './routes/conflicts'; // [460-fork] Milestone 5
 import atlasRoutes from './routes/atlas';
 import memoriesRoutes from './routes/memories/unified';
 import notificationRoutes from './routes/notifications';
@@ -194,6 +195,7 @@ export function createApp(): express.Application {
   app.get('/api/health', (_req: Request, res: Response) => res.json({ status: 'ok' }));
   app.use('/api', assignmentsRoutes);
   app.use('/api/segments', segmentsRoutes); // [460-fork] Milestone 4
+  app.use('/api/conflicts', conflictsRoutes); // [460-fork] Milestone 5
   app.use('/api/tags', tagsRoutes);
   app.use('/api/categories', categoriesRoutes);
   app.use('/api/admin', adminRoutes);

@@ -204,7 +204,10 @@ export function getAccessibleDay(id: string | number, callerTripId: string | num
 // [460-fork] shared-segments — END
 
 export function updateDay(id: string | number, current: Day, fields: { notes?: string; title?: string | null }) {
-  db.prepare('UPDATE days SET notes = ?, title = ? WHERE id = ?').run(
+  // [460-fork] Milestone 5 — bump updated_at so the precondition currency
+  // moves forward on every successful write. Stale-write detection in the
+  // route uses this column.
+  db.prepare('UPDATE days SET notes = ?, title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
     fields.notes || null,
     'title' in fields ? (fields.title ?? null) : current.title,
     id

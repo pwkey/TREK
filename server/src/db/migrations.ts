@@ -1011,6 +1011,42 @@ function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_client_mutations_created ON client_mutations(created_at);
       `);
     },
+    // [460-fork] Offline-first conflicts (Milestone 5 slice 4): days.updated_at
+    // is the precondition currency for stale-write detection. Existing day
+    // rows get the current timestamp on the ALTER so the column is never NULL.
+    () => {
+      try {
+        db.exec(`ALTER TABLE days ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`);
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      db.exec(`UPDATE days SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL`);
+    },
+    // [460-fork] Offline-first conflicts: a queued mutation that arrives with
+    // an If-Unmodified-Since precondition that no longer matches the current
+    // record is parked here for the user to resolve via the conflicts panel.
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS client_mutation_conflicts (
+          id TEXT PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          client_mutation_id TEXT NOT NULL,
+          endpoint TEXT NOT NULL,
+          method TEXT NOT NULL,
+          record_type TEXT NOT NULL,
+          record_id INTEGER NOT NULL,
+          mine_payload TEXT NOT NULL,
+          theirs_snapshot TEXT NOT NULL,
+          observed_updated_at TEXT NOT NULL,
+          server_updated_at TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          resolved_at DATETIME,
+          resolved_choice TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_mutation_conflicts_user
+          ON client_mutation_conflicts(user_id, resolved_at);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

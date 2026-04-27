@@ -9,6 +9,7 @@ import { getApiErrorMessage } from '../../types'
 import type { UserWithOidc } from '../../types'
 import Section from './Section'
 import PartnerSection from './PartnerSection'
+import ConflictsSection from './ConflictsSection' // [460-fork] Milestone 5 slice 4
 
 const MFA_BACKUP_SESSION_KEY = 'trek_mfa_backup_codes_pending'
 
@@ -506,6 +507,9 @@ export default function AccountTab(): React.ReactElement {
 
       {/* [460-fork] Partner pairing (Milestone 3) */}
       <PartnerSection />
+
+      {/* [460-fork] Sync conflicts (Milestone 5 slice 4) — only renders when there's something pending */}
+      <ConflictsSection />
 
       {/* Delete Account Blocked */}
       {showDeleteConfirm === 'blocked' && (

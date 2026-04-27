@@ -5,6 +5,7 @@ import { broadcast, broadcastDay, broadcastDayById } from '../websocket';
 import { checkPermission } from '../services/permissions';
 import { AuthRequest } from '../types';
 import * as dayService from '../services/dayService';
+import { parkAsConflict } from '../services/conflictsService'; // [460-fork] Milestone 5 slice 4
 
 const router = express.Router({ mergeParams: true });
 
@@ -38,6 +39,33 @@ router.put('/:id', authenticate, requireTripAccess, (req: Request, res: Response
   // [460-fork] getAccessibleDay lets any linked-trip member edit a shared day.
   const current = dayService.getAccessibleDay(id, tripId);
   if (!current) return res.status(404).json({ error: 'Day not found' });
+
+  // [460-fork] Milestone 5 slice 4 — stale-write precondition. If the queued
+  // mutation observed an older updated_at than the server now has, park it
+  // as a conflict for the user to resolve via Settings → Pending conflicts.
+  const observed = req.header('If-Unmodified-Since')?.trim();
+  if (observed && current.updated_at && observed !== current.updated_at) {
+    const mutationId = (req.header('X-Client-Mutation-Id') || '').trim();
+    if (mutationId) {
+      const conflictId = parkAsConflict({
+        userId: authReq.user.id,
+        clientMutationId: mutationId,
+        endpoint: req.path,
+        method: 'PUT',
+        recordType: 'day',
+        recordId: Number(id),
+        minePayload: req.body,
+        theirsSnapshot: { id: current.id, title: current.title, notes: current.notes, updated_at: current.updated_at },
+        observedUpdatedAt: observed,
+        serverUpdatedAt: current.updated_at,
+      });
+      return res.status(409).json({
+        error: 'Record was updated since you queued this change',
+        code: 'STALE_WRITE',
+        conflict_id: conflictId,
+      });
+    }
+  }
 
   const { notes, title } = req.body;
   const day = dayService.updateDay(id, current, { notes, title });

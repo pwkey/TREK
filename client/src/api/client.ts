@@ -153,7 +153,14 @@ export const tripsApi = {
 export const daysApi = {
   list: (tripId: number | string) => apiClient.get(`/trips/${tripId}/days`).then(r => r.data),
   create: (tripId: number | string, data: Record<string, unknown>) => apiClient.post(`/trips/${tripId}/days`, data).then(r => r.data),
-  update: (tripId: number | string, dayId: number | string, data: Record<string, unknown>) => apiClient.put(`/trips/${tripId}/days/${dayId}`, data).then(r => r.data),
+  // [460-fork] Milestone 5 slice 4 — `observedUpdatedAt` opts the caller into
+  // stale-write conflict detection: the server compares to the record's
+  // current updated_at and parks the mutation as a conflict on mismatch.
+  update: (tripId: number | string, dayId: number | string, data: Record<string, unknown>, observedUpdatedAt?: string | null) => {
+    const headers: Record<string, string> = {}
+    if (observedUpdatedAt) headers['If-Unmodified-Since'] = observedUpdatedAt
+    return apiClient.put(`/trips/${tripId}/days/${dayId}`, data, { headers }).then(r => r.data)
+  },
   delete: (tripId: number | string, dayId: number | string) => apiClient.delete(`/trips/${tripId}/days/${dayId}`).then(r => r.data),
 }
 

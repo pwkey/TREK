@@ -37,10 +37,10 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Response interceptor - handle 401
+// Response interceptor - handle 401, MFA, and queue retryable mutation failures
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401 && (error.response?.data as { code?: string } | undefined)?.code === 'AUTH_REQUIRED') {
       if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register') && !window.location.pathname.startsWith('/shared/')) {
         const currentPath = window.location.pathname + window.location.search
@@ -54,6 +54,39 @@ apiClient.interceptors.response.use(
     ) {
       window.location.href = '/settings?mfa=required'
     }
+
+    // [460-fork] Milestone 5 — auto-queue retryable mutation failures.
+    // Network unreachable, 5xx, 408 (timeout), 429 (rate-limited) → the
+    // mutation goes into the IndexedDB queue and the syncWorker replays it
+    // when connectivity / load improves. The original error still propagates
+    // to the caller so existing toasts continue to fire; subsequent slices
+    // will introduce optimistic UX that suppresses the error when the call
+    // succeeds in queueing.
+    try {
+      const config = error.config as { method?: string; url?: string; data?: unknown; headers?: Record<string, unknown> } | undefined
+      const method = (config?.method || 'get').toLowerCase()
+      const isMutation = method !== 'get' && method !== 'head' && method !== 'options'
+      const status = error.response?.status as number | undefined
+      const isRetryable = status === undefined || status >= 500 || status === 408 || status === 429
+      if (isMutation && isRetryable && config?.url) {
+        const headers = config.headers || {}
+        const mutationId = (headers['X-Client-Mutation-Id'] || headers['x-client-mutation-id']) as string | undefined
+        if (mutationId) {
+          const { enqueue } = await import('../db/mutationQueue')
+          await enqueue({
+            id: mutationId,
+            endpoint: config.url,
+            method: method.toUpperCase() as 'POST' | 'PUT' | 'DELETE',
+            payload: config.data,
+          })
+        }
+      }
+    } catch (queueErr) {
+      // If queueing itself fails, let the original network error propagate
+      // unchanged — there is nothing useful we can do here.
+      console.error('[client] failed to enqueue retryable mutation:', queueErr)
+    }
+
     return Promise.reject(error)
   }
 )

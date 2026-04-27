@@ -12,6 +12,7 @@ import VacayPage from './pages/VacayPage'
 import AtlasPage from './pages/AtlasPage'
 import SharedTripPage from './pages/SharedTripPage'
 import SegmentAcceptPage from './pages/SegmentAcceptPage' // [460-fork] Milestone 4
+import { startSyncWorker, stopSyncWorker } from './db/syncWorker' // [460-fork] Milestone 5
 import InAppNotificationsPage from './pages/InAppNotificationsPage.tsx'
 import { ToastContainer } from './components/shared/Toast'
 import SplashScreen from './components/shared/SplashScreen'
@@ -127,6 +128,14 @@ export default function App() {
       loadSettings()
     }
   }, [isAuthenticated])
+
+  // [460-fork] Milestone 5 — drain queued mutations while the tab is open.
+  // Runs once at app boot and periodically after that; lifecycle covers
+  // both the initial mount and HMR.
+  useEffect(() => {
+    startSyncWorker()
+    return () => stopSyncWorker()
+  }, [])
 
   const location = useLocation()
   const isSharedPage = location.pathname.startsWith('/shared/')

@@ -90,7 +90,7 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
     setBusy(true)
     try {
       const segment = await segmentsApi.create({
-        trip_id: tripId,
+        trip_id: Number(tripId),
         day_ids: selectedDayIds,
         title: title.trim(),
       })

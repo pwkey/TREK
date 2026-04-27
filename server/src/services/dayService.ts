@@ -133,23 +133,35 @@ export function listDays(tripId: string | number) {
   }
 
   // [460-fork] shared-segments — hydrate each segment-linked day with the
-  // segment title so the chip renders without a second round-trip.
+  // segment title so the chip renders without a second round-trip. We only
+  // surface the chip when the segment has at least 2 linked trips: a
+  // segment whose only linked trip is the home (e.g. after every sibling
+  // has left) is technically still a segment but isn't meaningfully shared,
+  // so the day looks like an ordinary trip-local row to the viewer. The
+  // segment_id stays on the row so the manage list can still surface it
+  // for re-invite.
   const segmentIdsInUse = [...new Set(days.map(d => d.segment_id).filter((v): v is string => !!v))];
   const segmentTitleById: Record<string, string> = {};
   if (segmentIdsInUse.length > 0) {
     const segPlaceholders = segmentIdsInUse.map(() => '?').join(',');
-    const segRows = db.prepare(
-      `SELECT id, title FROM segments WHERE id IN (${segPlaceholders})`,
-    ).all(...segmentIdsInUse) as Array<{ id: string; title: string }>;
-    for (const r of segRows) segmentTitleById[r.id] = r.title;
+    const segRows = db.prepare(`
+      SELECT s.id, s.title, COUNT(ts.trip_id) AS linked_count
+        FROM segments s
+        LEFT JOIN trip_segments ts ON ts.segment_id = s.id
+       WHERE s.id IN (${segPlaceholders})
+       GROUP BY s.id
+    `).all(...segmentIdsInUse) as Array<{ id: string; title: string; linked_count: number }>;
+    for (const r of segRows) {
+      if (r.linked_count > 1) segmentTitleById[r.id] = r.title;
+    }
   }
 
   const daysWithAssignments = days.map(day => ({
     ...day,
     assignments: assignmentsByDayId[day.id] || [],
     notes_items: notesByDayId[day.id] || [],
-    segment: day.segment_id
-      ? { id: day.segment_id, title: segmentTitleById[day.segment_id] || '' }
+    segment: day.segment_id && segmentTitleById[day.segment_id]
+      ? { id: day.segment_id, title: segmentTitleById[day.segment_id] }
       : null,
   }));
 

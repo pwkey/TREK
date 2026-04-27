@@ -157,6 +157,29 @@ describe('GET /api/trips/:tripId/days (union with segment-linked days)', () => {
     expect(segmentDays).toHaveLength(3);
   });
 
+  it('hydrates the segment chip on days only when the segment has ≥2 linked trips', async () => {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    const { aTrip, bTrip, segmentId } = await setupSegment(alice.id, bob.id);
+
+    // While Bob is linked: Alice's shared days carry segment metadata.
+    let aRes = await request(app).get(`/api/trips/${aTrip.id}/days`).set('Cookie', authCookie(alice.id));
+    let withSegment = aRes.body.days.filter((d: any) => d.segment != null);
+    expect(withSegment).toHaveLength(3);
+    expect(withSegment[0].segment.id).toBe(segmentId);
+
+    // Bob leaves → only home (Alice) is linked → chip hides on Alice's view too.
+    await request(app).delete(`/api/segments/${segmentId}/trips/${bTrip}`).set('Cookie', authCookie(bob.id));
+    aRes = await request(app).get(`/api/trips/${aTrip.id}/days`).set('Cookie', authCookie(alice.id));
+    withSegment = aRes.body.days.filter((d: any) => d.segment != null);
+    expect(withSegment).toHaveLength(0);
+
+    // The segment_id pointer is still on the underlying day row so the
+    // manage list can offer re-invite.
+    const stillLinked = testDb.prepare('SELECT COUNT(*) AS c FROM days WHERE segment_id = ?').get(segmentId) as { c: number };
+    expect(stillLinked.c).toBe(3);
+  });
+
   it('does not leak segment days to an unrelated caller', async () => {
     const { user: alice } = createUser(testDb);
     const { user: bob } = createUser(testDb);

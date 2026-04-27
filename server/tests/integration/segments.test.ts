@@ -224,6 +224,9 @@ describe('GET /api/segments/invite/:token (preview)', () => {
     expect(res.body.segment.title).toBe('Adventure with the Smiths');
     expect(res.body.accepted).toBe(true);
     expect(new Date(res.body.expires_at).getTime()).toBeGreaterThan(Date.now());
+    expect(res.body.inviter.id).toBe(alice.id);
+    expect(res.body.inviter.username).toBe(alice.username);
+    expect(res.body.inviter.email).toBe(alice.email);
   });
 
   it('404 for unknown token', async () => {

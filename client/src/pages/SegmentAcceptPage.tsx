@@ -134,6 +134,11 @@ export default function SegmentAcceptPage() {
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Segment</div>
                 <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{preview.segment.title}</div>
                 {segmentDateLabel && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{segmentDateLabel}</div>}
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border-faint)', fontSize: 12, color: 'var(--text-muted)' }}>
+                  Invited by{' '}
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{preview.inviter.username}</span>
+                  {' '}<span style={{ color: 'var(--text-muted)' }}>&lt;{preview.inviter.email}&gt;</span>
+                </div>
               </section>
 
               <section style={{ padding: 16, borderRadius: 12, background: 'var(--bg-card)', border: '1px solid var(--border-primary)', display: 'flex', flexDirection: 'column', gap: 10 }}>

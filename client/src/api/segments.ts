@@ -32,6 +32,7 @@ export interface LeaveResult {
 
 export interface InvitePreview {
   segment: { id: string; title: string; start_date: string | null; end_date: string | null }
+  inviter: { id: number; username: string; email: string }
   expires_at: string
   accepted: boolean
 }

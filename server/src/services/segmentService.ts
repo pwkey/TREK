@@ -245,22 +245,31 @@ export function createInvite(params: { segmentId: string; userId: number }): Cre
   return { id, token, expires_at: expires };
 }
 
+export interface InviterSnapshot {
+  id: number;
+  username: string;
+  email: string;
+}
+
 export interface InvitePreview {
   segment: Pick<SegmentRow, 'id' | 'title' | 'start_date' | 'end_date'>;
+  inviter: InviterSnapshot;
   expires_at: string;
   accepted: boolean;
 }
 
 /**
  * Look up a segment invite by its bearer token and return the minimal preview
- * the accepter needs to decide — title, date range, expiry. Does NOT leak
- * sibling-trip titles or member lists. Any authenticated user can call this
- * with a valid token; bad/expired tokens produce the usual error codes.
+ * the accepter needs to decide — title, date range, expiry, AND who sent it
+ * so the accepter can verify they recognise the inviter before linking a
+ * trip. Does NOT leak sibling-trip titles or member lists. Any authenticated
+ * user can call this with a valid token; bad/expired tokens produce the usual
+ * error codes.
  */
 export function getInvitePreview(token: string): InvitePreview | SegmentServiceError {
   const invite = db.prepare(
-    'SELECT segment_id, expires_at, accepted_at FROM segment_invites WHERE token = ?',
-  ).get(token) as { segment_id: string; expires_at: string; accepted_at: string | null } | undefined;
+    'SELECT segment_id, expires_at, accepted_at, created_by FROM segment_invites WHERE token = ?',
+  ).get(token) as { segment_id: string; expires_at: string; accepted_at: string | null; created_by: number } | undefined;
   if (!invite) return { error: 'Invite not found', code: 'INVITE_NOT_FOUND', status: 404 };
   if (new Date(invite.expires_at).getTime() < Date.now()) {
     return { error: 'Invite has expired', code: 'INVITE_EXPIRED', status: 410 };
@@ -269,7 +278,11 @@ export function getInvitePreview(token: string): InvitePreview | SegmentServiceE
     'SELECT id, title, start_date, end_date FROM segments WHERE id = ?',
   ).get(invite.segment_id) as Pick<SegmentRow, 'id' | 'title' | 'start_date' | 'end_date'> | undefined;
   if (!seg) return { error: 'Segment not found', code: 'SEGMENT_NOT_FOUND', status: 404 };
-  return { segment: seg, expires_at: invite.expires_at, accepted: invite.accepted_at != null };
+  const inviter = db.prepare(
+    'SELECT id, username, email FROM users WHERE id = ?',
+  ).get(invite.created_by) as InviterSnapshot | undefined;
+  if (!inviter) return { error: 'Inviter no longer exists', code: 'INVITE_NOT_FOUND', status: 404 };
+  return { segment: seg, inviter, expires_at: invite.expires_at, accepted: invite.accepted_at != null };
 }
 
 export function acceptInvite(params: AcceptInviteParams): SegmentView | SegmentServiceError {

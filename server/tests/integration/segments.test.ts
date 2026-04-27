@@ -157,7 +157,7 @@ describe('GET /api/trips/:tripId/days (union with segment-linked days)', () => {
     expect(segmentDays).toHaveLength(3);
   });
 
-  it('hydrates the segment chip on days only when the segment has ≥2 linked trips', async () => {
+  it('the last sibling leaving auto-dissolves the segment and clears the chip on the home', async () => {
     const { user: alice } = createUser(testDb);
     const { user: bob } = createUser(testDb);
     const { aTrip, bTrip, segmentId } = await setupSegment(alice.id, bob.id);
@@ -168,16 +168,24 @@ describe('GET /api/trips/:tripId/days (union with segment-linked days)', () => {
     expect(withSegment).toHaveLength(3);
     expect(withSegment[0].segment.id).toBe(segmentId);
 
-    // Bob leaves → only home (Alice) is linked → chip hides on Alice's view too.
-    await request(app).delete(`/api/segments/${segmentId}/trips/${bTrip}`).set('Cookie', authCookie(bob.id));
+    // Bob leaves → segment auto-dissolves.
+    const leaveRes = await request(app).delete(`/api/segments/${segmentId}/trips/${bTrip}`).set('Cookie', authCookie(bob.id));
+    expect(leaveRes.status).toBe(200);
+    expect(leaveRes.body.dissolved).toBe(true);
+
+    // Alice's days no longer have the segment hydrated (and the underlying
+    // segment_id pointer was cleared by the cascade).
     aRes = await request(app).get(`/api/trips/${aTrip.id}/days`).set('Cookie', authCookie(alice.id));
     withSegment = aRes.body.days.filter((d: any) => d.segment != null);
     expect(withSegment).toHaveLength(0);
 
-    // The segment_id pointer is still on the underlying day row so the
-    // manage list can offer re-invite.
-    const stillLinked = testDb.prepare('SELECT COUNT(*) AS c FROM days WHERE segment_id = ?').get(segmentId) as { c: number };
-    expect(stillLinked.c).toBe(3);
+    // Segment record is gone.
+    const segRow = testDb.prepare('SELECT id FROM segments WHERE id = ?').get(segmentId);
+    expect(segRow).toBeUndefined();
+
+    // It also disappears from the trip's manage list.
+    const segListRes = await request(app).get(`/api/trips/${aTrip.id}/segments`).set('Cookie', authCookie(alice.id));
+    expect(segListRes.body.segments).toHaveLength(0);
   });
 
   it('does not leak segment days to an unrelated caller', async () => {

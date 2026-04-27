@@ -212,7 +212,7 @@ describe('segmentService.acceptInvite (replace_own)', () => {
 });
 
 describe('segmentService.removeTripFromSegment', () => {
-  it('non-home trip leaves: canonical days stay on home trip, leaver gets cloned memento rows', () => {
+  it('last sibling leaves a 2-trip segment → segment auto-dissolves, leaver keeps memento clones', () => {
     const { user: alice } = createUser(testDb);
     const { user: bob } = createUser(testDb);
     const aTrip = createTrip(testDb, alice.id, { title: 'A', start_date: '2027-06-10', end_date: '2027-06-12' });
@@ -225,19 +225,50 @@ describe('segmentService.removeTripFromSegment', () => {
     segmentService.acceptInvite({ token: inv.token, userId: bob.id, targetTripId: bTrip.id });
 
     const leave = segmentService.removeTripFromSegment({ segmentId: seg.segment.id, tripId: bTrip.id, userId: bob.id });
-    expect('cloned_day_ids' in leave).toBe(true);
-    if (!('cloned_day_ids' in leave)) return;
+    if (!('cloned_day_ids' in leave)) throw new Error('expected success');
     expect(leave.cloned_day_ids).toHaveLength(2);
+    expect(leave.dissolved).toBe(true);
 
-    // Segment still has its canonical rows on Alice's trip.
-    const stillOnA = testDb.prepare('SELECT COUNT(*) AS c FROM days WHERE segment_id = ? AND trip_id = ?').get(seg.segment.id, aTrip.id) as { c: number };
-    expect(stillOnA.c).toBe(2);
-    // Bob's trip now owns plain-copy rows (segment_id NULL) for those dates.
+    // Segment record is gone.
+    const segRow = testDb.prepare('SELECT id FROM segments WHERE id = ?').get(seg.segment.id);
+    expect(segRow).toBeUndefined();
+    // Alice's day rows still exist, but their segment_id pointer was cleared
+    // by the ON DELETE SET NULL cascade.
+    const aliceRows = testDb.prepare('SELECT segment_id FROM days WHERE trip_id = ? AND date IN (?, ?)').all(aTrip.id, '2027-06-10', '2027-06-11') as Array<{ segment_id: string | null }>;
+    expect(aliceRows).toHaveLength(2);
+    for (const r of aliceRows) expect(r.segment_id).toBeNull();
+    // Bob's trip has the plain memento copies.
     const bPlain = testDb.prepare('SELECT COUNT(*) AS c FROM days WHERE trip_id = ? AND segment_id IS NULL').get(bTrip.id) as { c: number };
     expect(bPlain.c).toBeGreaterThanOrEqual(2);
-    // trip_segments link is gone.
-    const link = testDb.prepare('SELECT 1 FROM trip_segments WHERE trip_id = ? AND segment_id = ?').get(bTrip.id, seg.segment.id);
-    expect(link).toBeUndefined();
+  });
+
+  it('one of two siblings leaves a 3-trip segment → no dissolve', () => {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    const { user: carol } = createUser(testDb);
+    const aTrip = createTrip(testDb, alice.id, { title: 'A', start_date: '2027-06-10', end_date: '2027-06-11' });
+    const bTrip = createTrip(testDb, bob.id, { title: 'B', start_date: '2027-06-10', end_date: '2027-06-11' });
+    const cTrip = createTrip(testDb, carol.id, { title: 'C', start_date: '2027-06-10', end_date: '2027-06-11' });
+    const aIds = dayIdsForTrip(aTrip.id, ['2027-06-10']);
+    const seg = segmentService.createSegment({ userId: alice.id, tripId: aTrip.id, dayIds: aIds, title: 'S' });
+    if (!('segment' in seg)) throw new Error('setup');
+
+    const inv1 = segmentService.createInvite({ segmentId: seg.segment.id, userId: alice.id });
+    if (!('token' in inv1)) throw new Error('setup');
+    segmentService.acceptInvite({ token: inv1.token, userId: bob.id, targetTripId: bTrip.id });
+    const inv2 = segmentService.createInvite({ segmentId: seg.segment.id, userId: alice.id });
+    if (!('token' in inv2)) throw new Error('setup');
+    segmentService.acceptInvite({ token: inv2.token, userId: carol.id, targetTripId: cTrip.id });
+
+    const leave = segmentService.removeTripFromSegment({ segmentId: seg.segment.id, tripId: bTrip.id, userId: bob.id });
+    if (!('cloned_day_ids' in leave)) throw new Error('expected success');
+    expect(leave.dissolved).toBe(false);
+
+    // Segment still exists, Alice + Carol still linked.
+    const segRow = testDb.prepare('SELECT id FROM segments WHERE id = ?').get(seg.segment.id);
+    expect(segRow).toBeDefined();
+    const remaining = testDb.prepare('SELECT trip_id FROM trip_segments WHERE segment_id = ?').all(seg.segment.id) as Array<{ trip_id: number }>;
+    expect(remaining.map(r => r.trip_id).sort()).toEqual([aTrip.id, cTrip.id].sort());
   });
 
   it('home trip cannot leave — must dissolve or rehome first', () => {

@@ -76,15 +76,15 @@ router.delete('/:id/trips/:tripId', authenticate, (req: Request, res: Response) 
   const authReq = req as AuthRequest;
   const tripId = Number(req.params.tripId);
   if (!Number.isFinite(tripId)) return res.status(400).json({ error: 'Invalid trip id', code: 'INVALID_INPUT' });
+  // Capture every linked trip BEFORE the leave so we can notify even when the
+  // segment auto-dissolves (in which case listTripIdsForSegment returns []
+  // afterwards and the home trip would otherwise miss the event).
+  const tripsToNotify = segmentService.listTripIdsForSegment(req.params.id);
   const result = segmentService.removeTripFromSegment({ segmentId: req.params.id, tripId, userId: authReq.user.id });
   if ('error' in result) return sendErr(res, result);
-  writeAudit({ userId: authReq.user.id, action: 'segment.leave', ip: getClientIp(req), details: { segmentId: req.params.id, tripId, clonedDayCount: result.cloned_day_ids.length } });
-  // Notify the leaving trip AND every remaining linked trip so their UIs
-  // drop the chip / refresh membership counts.
-  const payload = { segmentId: req.params.id, leftTripId: tripId };
-  broadcast(tripId, 'segment:detached', payload, req.headers['x-socket-id'] as string);
-  const remaining = segmentService.listTripIdsForSegment(req.params.id);
-  for (const linkedTripId of remaining) {
+  writeAudit({ userId: authReq.user.id, action: 'segment.leave', ip: getClientIp(req), details: { segmentId: req.params.id, tripId, clonedDayCount: result.cloned_day_ids.length, dissolved: result.dissolved } });
+  const payload = { segmentId: req.params.id, leftTripId: tripId, dissolved: result.dissolved };
+  for (const linkedTripId of tripsToNotify) {
     broadcast(linkedTripId, 'segment:detached', payload, req.headers['x-socket-id'] as string);
   }
   res.json(result);

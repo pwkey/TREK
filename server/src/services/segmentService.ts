@@ -80,6 +80,9 @@ export interface AcceptInviteParams {
 export interface LeaveResult {
   segment_id: string;
   cloned_day_ids: number[];
+  /** True when this leave dropped the linked-trip count to 1 and the segment
+   *  was auto-dissolved as a result. Tells the caller to clean up its UI. */
+  dissolved: boolean;
 }
 
 export interface DeleteBlockInfo {
@@ -351,6 +354,7 @@ export function removeTripFromSegment(params: { segmentId: string; tripId: numbe
   let nextDayNumber = (maxRow?.max ?? 0) + 1;
 
   const cloned: number[] = [];
+  let dissolved = false;
   const txn = db.transaction(() => {
     const ins = db.prepare('INSERT INTO days (trip_id, day_number, date, notes, title) VALUES (?, ?, ?, ?, ?)');
     for (const d of segmentDays) {
@@ -358,10 +362,23 @@ export function removeTripFromSegment(params: { segmentId: string; tripId: numbe
       cloned.push(Number(r.lastInsertRowid));
     }
     db.prepare('DELETE FROM trip_segments WHERE trip_id = ? AND segment_id = ?').run(tripId, segmentId);
+
+    // [460-fork] Auto-dissolve when the leaver was the last sibling. The home
+    // trip cannot leave, so what remains is at most the home trip itself; if
+    // that's the only link left, the segment is no longer being shared with
+    // anyone and is just clutter on the home owner's manage list. Deleting
+    // the segment row cascades trip_segments + segment_invites and triggers
+    // ON DELETE SET NULL on every days.segment_id pointer, so the home
+    // owner's day rows revert cleanly to ordinary trip-local days.
+    const remaining = (db.prepare('SELECT COUNT(*) AS c FROM trip_segments WHERE segment_id = ?').get(segmentId) as { c: number }).c;
+    if (remaining <= 1) {
+      db.prepare('DELETE FROM segments WHERE id = ?').run(segmentId);
+      dissolved = true;
+    }
   });
   txn();
 
-  return { segment_id: segmentId, cloned_day_ids: cloned };
+  return { segment_id: segmentId, cloned_day_ids: cloned, dissolved };
 }
 
 // ---------------------------------------------------------------------------

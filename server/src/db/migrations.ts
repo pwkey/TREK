@@ -1012,11 +1012,17 @@ function runMigrations(db: Database.Database): void {
       `);
     },
     // [460-fork] Offline-first conflicts (Milestone 5 slice 4): days.updated_at
-    // is the precondition currency for stale-write detection. Existing day
-    // rows get the current timestamp on the ALTER so the column is never NULL.
+    // is the precondition currency for stale-write detection.
+    //
+    // SQLite forbids non-constant defaults (CURRENT_TIMESTAMP) in ALTER TABLE
+    // ADD COLUMN, so we add the column without a default and immediately
+    // backfill every existing row to "now". Schema.ts retains the DEFAULT on
+    // the CREATE TABLE so fresh installs get auto-stamping; updateDay sets
+    // updated_at = CURRENT_TIMESTAMP on every write so post-migration rows
+    // stay accurate after any edit.
     () => {
       try {
-        db.exec(`ALTER TABLE days ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`);
+        db.exec(`ALTER TABLE days ADD COLUMN updated_at DATETIME`);
       } catch (err: any) {
         if (!err.message?.includes('duplicate column name')) throw err;
       }

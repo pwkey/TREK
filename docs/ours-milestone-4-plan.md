@@ -1,6 +1,6 @@
 # Milestone 4 Implementation Plan — Shared Segments
 
-**Status:** approved 2026-04-20 — open questions resolved, implementation starting on slice 1
+**Status:** all 5 slices shipped + manually verified end-to-end on 2026-04-27. Browser-test pass surfaced (a) a startup bug in slice 1's schema.ts (fixed), (b) a string-vs-number tripId on POST /api/segments (fixed), (c) a missing inviter on the accept page (added), (d) a stale "Adventure with Bob" entry that prompted auto-dissolve when the last sibling leaves (added), (e) a missing path to mint additional invite tokens for an existing segment (added), (f) a missing home-owner escape hatch when siblings won't leave (added: dissolveSegment + DELETE /api/segments/:id + UI). All in `docs/ours-m4-browser-test-checklist.md`.
 **Date:** 2026-04-20
 **Feature spec:** `CLAUDE.md` §6 Milestone 4
 **Architecture context:** `docs/ours-architecture-map.md`

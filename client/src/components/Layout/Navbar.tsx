@@ -8,6 +8,7 @@ import { useTranslation } from '../../i18n'
 import { Plane, LogOut, Settings, ChevronDown, Shield, ArrowLeft, Users, Moon, Sun, Monitor, CalendarDays, Briefcase, Globe } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import InAppNotificationBell from './InAppNotificationBell.tsx'
+import SyncIndicator from '../Sync/SyncIndicator' // [460-fork] Milestone 5
 
 const ADDON_ICONS: Record<string, LucideIcon> = { CalendarDays, Briefcase, Globe }
 
@@ -163,6 +164,9 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
         {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
       </button>
+
+      {/* [460-fork] Milestone 5 — sync indicator (online/offline dot) */}
+      {user && <SyncIndicator />}
 
       {/* Notification bell — only in trip view on mobile, everywhere on desktop */}
       {user && tripId && <InAppNotificationBell />}

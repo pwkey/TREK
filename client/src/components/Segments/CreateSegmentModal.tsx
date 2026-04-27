@@ -44,6 +44,8 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
   const [leavingId, setLeavingId] = useState<string | null>(null)
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null)
   const [mintingId, setMintingId] = useState<string | null>(null)
+  const [dissolvingId, setDissolvingId] = useState<string | null>(null)
+  const [confirmDissolveId, setConfirmDissolveId] = useState<string | null>(null)
 
   const refreshExisting = useCallback(async () => {
     try {
@@ -63,6 +65,8 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
       setCopied(false)
       setConfirmLeaveId(null)
       setLeavingId(null)
+      setConfirmDissolveId(null)
+      setDissolvingId(null)
       return
     }
     void refreshExisting()
@@ -118,6 +122,21 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
       toast.error(getApiErrorMessage(err, 'Failed to create invite link'))
     } finally {
       setMintingId(null)
+    }
+  }
+
+  const dissolve = async (segmentId: string) => {
+    setDissolvingId(segmentId)
+    try {
+      await segmentsApi.dissolve(segmentId)
+      toast.success('Segment dissolved — every linked trip now has plain copies of those days')
+      await refreshExisting()
+      onCreated?.()
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Failed to dissolve segment'))
+    } finally {
+      setDissolvingId(null)
+      setConfirmDissolveId(null)
     }
   }
 
@@ -257,7 +276,37 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
                         {otherCount > 0 && `${otherCount} other trip${otherCount === 1 ? '' : 's'}`}
                       </div>
                     </div>
-                    {confirmLeaveId === seg.id ? (
+                    {confirmDissolveId === seg.id ? (
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDissolveId(null)}
+                          disabled={dissolvingId === seg.id}
+                          style={{
+                            padding: '6px 10px', borderRadius: 6,
+                            border: '1px solid var(--border-primary)', background: 'var(--bg-card)',
+                            fontSize: 11, fontWeight: 500, color: 'var(--text-primary)',
+                            cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => dissolve(seg.id)}
+                          disabled={dissolvingId === seg.id}
+                          style={{
+                            padding: '6px 10px', borderRadius: 6,
+                            border: '1px solid #dc2626', background: '#dc2626',
+                            fontSize: 11, fontWeight: 600, color: 'white',
+                            cursor: dissolvingId === seg.id ? 'default' : 'pointer', fontFamily: 'inherit',
+                            opacity: dissolvingId === seg.id ? 0.5 : 1,
+                          }}
+                        >
+                          {dissolvingId === seg.id ? 'Dissolving…' : 'Confirm dissolve'}
+                        </button>
+                      </div>
+                    ) : confirmLeaveId === seg.id ? (
                       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                         <button
                           type="button"
@@ -310,25 +359,44 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
                             {mintingId === seg.id ? 'Minting…' : 'Get invite link'}
                           </button>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => setConfirmLeaveId(seg.id)}
-                          disabled={seg.is_home}
-                          title={seg.is_home ? "You're the home trip — have all siblings leave first to dissolve" : 'Leave this segment; a memento copy of the shared days stays on your trip'}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 4,
-                            padding: '6px 10px', borderRadius: 6,
-                            border: `1px solid ${seg.is_home ? 'var(--border-primary)' : '#dc2626'}`,
-                            background: 'transparent',
-                            fontSize: 11, fontWeight: 500,
-                            color: seg.is_home ? 'var(--text-muted)' : '#dc2626',
-                            cursor: seg.is_home ? 'default' : 'pointer', fontFamily: 'inherit',
-                            opacity: seg.is_home ? 0.5 : 1,
-                          }}
-                        >
-                          <LogOut size={11} />
-                          Leave
-                        </button>
+                        {seg.is_home && seg.linked_trip_count > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDissolveId(seg.id)}
+                            title="End the segment for everyone. Each linked trip keeps a plain copy of the shared days."
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 4,
+                              padding: '6px 10px', borderRadius: 6,
+                              border: '1px solid #dc2626',
+                              background: 'transparent',
+                              fontSize: 11, fontWeight: 500,
+                              color: '#dc2626',
+                              cursor: 'pointer', fontFamily: 'inherit',
+                            }}
+                          >
+                            <LogOut size={11} />
+                            Dissolve
+                          </button>
+                        )}
+                        {!seg.is_home && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmLeaveId(seg.id)}
+                            title="Leave this segment; a memento copy of the shared days stays on your trip"
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 4,
+                              padding: '6px 10px', borderRadius: 6,
+                              border: '1px solid #dc2626',
+                              background: 'transparent',
+                              fontSize: 11, fontWeight: 500,
+                              color: '#dc2626',
+                              cursor: 'pointer', fontFamily: 'inherit',
+                            }}
+                          >
+                            <LogOut size={11} />
+                            Leave
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -337,6 +405,11 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
               {confirmLeaveId && (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 4 }}>
                   Confirming will copy the shared days into your trip as plain rows. The segment continues for the other households.
+                </div>
+              )}
+              {confirmDissolveId && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 4 }}>
+                  Confirming ends the segment for everyone. Each linked trip — yours and every other household's — keeps a plain copy of the shared days. Existing invite links stop working.
                 </div>
               )}
             </section>

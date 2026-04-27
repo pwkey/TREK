@@ -282,6 +282,58 @@ describe('segmentService.removeTripFromSegment', () => {
   });
 });
 
+describe('segmentService.dissolveSegment', () => {
+  function buildLinked(siblingCount: number) {
+    const { user: alice } = createUser(testDb);
+    const aTrip = createTrip(testDb, alice.id, { title: 'A', start_date: '2027-06-10', end_date: '2027-06-12' });
+    const aIds = dayIdsForTrip(aTrip.id, ['2027-06-10', '2027-06-11']);
+    const seg = segmentService.createSegment({ userId: alice.id, tripId: aTrip.id, dayIds: aIds, title: 'S' });
+    if (!('segment' in seg)) throw new Error('setup');
+    const siblings: Array<{ user: any; trip: any }> = [];
+    for (let i = 0; i < siblingCount; i++) {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id, { title: `Sib ${i}`, start_date: '2027-06-10', end_date: '2027-06-12' });
+      const inv = segmentService.createInvite({ segmentId: seg.segment.id, userId: alice.id });
+      if (!('token' in inv)) throw new Error('setup');
+      segmentService.acceptInvite({ token: inv.token, userId: user.id, targetTripId: trip.id });
+      siblings.push({ user, trip });
+    }
+    return { alice, aTrip, segmentId: seg.segment.id, siblings };
+  }
+
+  it('clones days into every sibling trip and deletes the segment', () => {
+    const { alice, segmentId, siblings } = buildLinked(2);
+    const result = segmentService.dissolveSegment({ segmentId, userId: alice.id });
+    if (!('cloned_by_trip' in result)) throw new Error('expected success');
+    expect(Object.keys(result.cloned_by_trip)).toHaveLength(2);
+    for (const sib of siblings) {
+      expect(result.cloned_by_trip[sib.trip.id]).toHaveLength(2);
+      // Sibling now owns plain rows for those dates.
+      const c = testDb.prepare('SELECT COUNT(*) AS c FROM days WHERE trip_id = ? AND segment_id IS NULL').get(sib.trip.id) as { c: number };
+      expect(c.c).toBeGreaterThanOrEqual(2);
+    }
+    // Segment is gone.
+    expect(testDb.prepare('SELECT id FROM segments WHERE id = ?').get(segmentId)).toBeUndefined();
+    // Cascades cleared trip_segments + segment_invites.
+    expect(testDb.prepare('SELECT COUNT(*) AS c FROM trip_segments WHERE segment_id = ?').get(segmentId)).toMatchObject({ c: 0 });
+    expect(testDb.prepare('SELECT COUNT(*) AS c FROM segment_invites WHERE segment_id = ?').get(segmentId)).toMatchObject({ c: 0 });
+  });
+
+  it('rejects dissolve from a non-home caller', () => {
+    const { segmentId, siblings } = buildLinked(1);
+    const result = segmentService.dissolveSegment({ segmentId, userId: siblings[0].user.id });
+    expect('error' in result && result.code).toBe('NOT_TRIP_OWNER');
+    // Segment is unchanged.
+    expect(testDb.prepare('SELECT id FROM segments WHERE id = ?').get(segmentId)).toBeDefined();
+  });
+
+  it('returns SEGMENT_NOT_FOUND for an unknown id', () => {
+    const { user } = createUser(testDb);
+    const result = segmentService.dissolveSegment({ segmentId: 'nope', userId: user.id });
+    expect('error' in result && result.code).toBe('SEGMENT_NOT_FOUND');
+  });
+});
+
 describe('segmentService.canDeleteTrip', () => {
   it('permits deletion of a trip with no segments', () => {
     const { user } = createUser(testDb);

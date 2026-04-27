@@ -382,6 +382,54 @@ export function removeTripFromSegment(params: { segmentId: string; tripId: numbe
 }
 
 // ---------------------------------------------------------------------------
+// Dissolve (home-owner one-click teardown)
+// ---------------------------------------------------------------------------
+
+export interface DissolveResult {
+  segment_id: string;
+  /** Map of sibling trip_id -> the day_ids cloned into it as memento. */
+  cloned_by_trip: Record<number, number[]>;
+}
+
+/**
+ * Home-owner escape hatch when siblings won't leave on their own. Clones the
+ * segment days into each sibling trip as plain trip-owned rows (so each side
+ * keeps a memento), then deletes the segment row — the FK cascades clear
+ * trip_segments + segment_invites and the ON DELETE SET NULL on
+ * days.segment_id reverts the home's day rows back to ordinary trip-local.
+ */
+export function dissolveSegment(params: { segmentId: string; userId: number }): DissolveResult | SegmentServiceError {
+  const { segmentId, userId } = params;
+  const home = db.prepare('SELECT trip_id FROM trip_segments WHERE segment_id = ? AND is_home = 1').get(segmentId) as { trip_id: number } | undefined;
+  if (!home) return { error: 'Segment not found', code: 'SEGMENT_NOT_FOUND', status: 404 };
+  if (!isTripOwner(home.trip_id, userId)) {
+    return { error: 'Only the home trip owner can dissolve a segment', code: 'NOT_TRIP_OWNER', status: 403 };
+  }
+
+  const siblings = (db.prepare('SELECT trip_id FROM trip_segments WHERE segment_id = ? AND is_home = 0').all(segmentId) as Array<{ trip_id: number }>).map(r => r.trip_id);
+  const segmentDays = db.prepare('SELECT date, notes, title FROM days WHERE segment_id = ? ORDER BY date').all(segmentId) as Array<{ date: string | null; notes: string | null; title: string | null }>;
+
+  const clonedByTrip: Record<number, number[]> = {};
+  const txn = db.transaction(() => {
+    const ins = db.prepare('INSERT INTO days (trip_id, day_number, date, notes, title) VALUES (?, ?, ?, ?, ?)');
+    for (const tripId of siblings) {
+      const maxRow = db.prepare('SELECT MAX(day_number) AS max FROM days WHERE trip_id = ?').get(tripId) as { max: number | null };
+      let nextDayNumber = (maxRow?.max ?? 0) + 1;
+      const ids: number[] = [];
+      for (const d of segmentDays) {
+        const r = ins.run(tripId, nextDayNumber++, d.date, d.notes, d.title);
+        ids.push(Number(r.lastInsertRowid));
+      }
+      clonedByTrip[tripId] = ids;
+    }
+    db.prepare('DELETE FROM segments WHERE id = ?').run(segmentId);
+  });
+  txn();
+
+  return { segment_id: segmentId, cloned_by_trip: clonedByTrip };
+}
+
+// ---------------------------------------------------------------------------
 // Delete-trip safety gate
 // ---------------------------------------------------------------------------
 

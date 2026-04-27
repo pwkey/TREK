@@ -71,6 +71,22 @@ router.post('/accept', authenticate, (req: Request, res: Response) => {
   res.json(result);
 });
 
+// Dissolve a segment outright (home-owner only). Clones the days into every
+// sibling trip as memento and deletes the segment record. Used when siblings
+// won't leave on their own and the home owner needs to free up the trip.
+router.delete('/:id', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const tripsToNotify = segmentService.listTripIdsForSegment(req.params.id);
+  const result = segmentService.dissolveSegment({ segmentId: req.params.id, userId: authReq.user.id });
+  if ('error' in result) return sendErr(res, result);
+  writeAudit({ userId: authReq.user.id, action: 'segment.dissolve', ip: getClientIp(req), details: { segmentId: req.params.id, sibling_trip_count: Object.keys(result.cloned_by_trip).length } });
+  const payload = { segmentId: req.params.id, dissolved: true };
+  for (const linkedTripId of tripsToNotify) {
+    broadcast(linkedTripId, 'segment:detached', payload, req.headers['x-socket-id'] as string);
+  }
+  res.json(result);
+});
+
 // Leave a segment (non-home only). Clones the segment days into plain trip-owned rows.
 router.delete('/:id/trips/:tripId', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;

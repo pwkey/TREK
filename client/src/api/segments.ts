@@ -63,4 +63,7 @@ export const segmentsApi = {
 
   leave: (segmentId: string, tripId: number) =>
     apiClient.delete(`/segments/${segmentId}/trips/${tripId}`).then(r => r.data as LeaveResult),
+
+  dissolve: (segmentId: string) =>
+    apiClient.delete(`/segments/${segmentId}`).then(r => r.data as { segment_id: string; cloned_by_trip: Record<number, number[]> }),
 }

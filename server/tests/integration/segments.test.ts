@@ -222,6 +222,36 @@ describe('DELETE /api/trips/:id — blocked when hosting segment days', () => {
   });
 });
 
+describe('DELETE /api/segments/:id (dissolve)', () => {
+  it('home owner dissolves the segment; siblings receive memento days; trip can then be deleted', async () => {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    const { aTrip, bTrip, segmentId } = await setupSegment(alice.id, bob.id);
+
+    // Pre-dissolve: trip delete on Alice is blocked.
+    const blockRes = await request(app).delete(`/api/trips/${aTrip.id}`).set('Cookie', authCookie(alice.id));
+    expect(blockRes.status).toBe(409);
+
+    const res = await request(app).delete(`/api/segments/${segmentId}`).set('Cookie', authCookie(alice.id));
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body.cloned_by_trip)).toEqual([String(bTrip)]);
+
+    // Segment record gone, Alice's trip can now be deleted.
+    expect(testDb.prepare('SELECT id FROM segments WHERE id = ?').get(segmentId)).toBeUndefined();
+    const okRes = await request(app).delete(`/api/trips/${aTrip.id}`).set('Cookie', authCookie(alice.id));
+    expect(okRes.status).toBe(200);
+  });
+
+  it('rejects dissolve from a non-home caller', async () => {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    const { segmentId } = await setupSegment(alice.id, bob.id);
+    const res = await request(app).delete(`/api/segments/${segmentId}`).set('Cookie', authCookie(bob.id));
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('NOT_TRIP_OWNER');
+  });
+});
+
 describe('DELETE /api/segments/:id/trips/:tripId (leave)', () => {
   it('non-home leaves → clones memento days, trip_segments link gone', async () => {
     const { user: alice } = createUser(testDb);

@@ -4,10 +4,11 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download } from 'lucide-react'
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
-import { assignmentsApi, reservationsApi } from '../../api/client'
+import { assignmentsApi, reservationsApi, tripsApi } from '../../api/client'
+import { writeTripSnapshot } from '../../db/localDb' // [460-fork] Milestone 5 slice 5
 import { downloadTripPDF } from '../PDF/TripPDF'
 import { calculateRoute, generateGoogleMapsUrl, optimizeRoute } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
@@ -135,6 +136,9 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   // [460-fork] Milestone 4 — share-days dialog state
   const [shareHover, setShareHover] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  // [460-fork] Milestone 5 slice 5 — download-for-offline state
+  const [offlineHover, setOfflineHover] = useState(false)
+  const [offlineBusy, setOfflineBusy] = useState(false)
   const [dropTargetKey, _setDropTargetKey] = useState(null)
   const dropTargetRef = useRef(null)
   const setDropTargetKey = (key) => { dropTargetRef.current = key; _setDropTargetKey(key) }
@@ -892,6 +896,55 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                 border: '1px solid var(--border-faint, #e5e7eb)',
               }}>
                 {t('dayplan.icsTooltip')}
+              </div>
+            )}
+          </div>
+          {/* [460-fork] Milestone 5 slice 5 — download for offline */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              onClick={async () => {
+                if (offlineBusy) return
+                setOfflineBusy(true)
+                try {
+                  const bundle = await tripsApi.offlineBundle(tripId)
+                  await writeTripSnapshot({
+                    trip: bundle.trip,
+                    days: bundle.days,
+                    places: bundle.places,
+                  })
+                  toast.success('Trip downloaded for offline use')
+                } catch {
+                  toast.error('Could not download trip for offline')
+                } finally {
+                  setOfflineBusy(false)
+                }
+              }}
+              onMouseEnter={() => setOfflineHover(true)}
+              onMouseLeave={() => setOfflineHover(false)}
+              disabled={offlineBusy}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 30, height: 30, borderRadius: 8,
+                border: '1px solid var(--border-primary)', background: 'none',
+                color: 'var(--text-primary)',
+                cursor: offlineBusy ? 'default' : 'pointer', fontFamily: 'inherit',
+                opacity: offlineBusy ? 0.5 : 1,
+              }}
+              title="Download this trip for offline use"
+              aria-label="Download this trip for offline use"
+            >
+              <Download size={14} strokeWidth={2} />
+            </button>
+            {offlineHover && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 200,
+                background: 'var(--bg-card, white)', color: 'var(--text-primary, #111827)',
+                fontSize: 11, fontWeight: 500, padding: '5px 10px',
+                borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                border: '1px solid var(--border-faint, #e5e7eb)',
+              }}>
+                Download for offline
               </div>
             )}
           </div>

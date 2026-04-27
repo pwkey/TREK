@@ -11,6 +11,13 @@ import { writeAudit, getClientIp, logInfo } from '../services/auditLog';
 import { autoAddPartnerToTrip as partnerAutoAdd } from '../services/partnerService';
 import { canDeleteTrip as segmentCanDeleteTrip, listSegmentsForTrip } from '../services/segmentService';
 import { checkPermission } from '../services/permissions';
+import { listDays } from '../services/dayService';
+import { listPlaces } from '../services/placeService';
+import { listReservations } from '../services/reservationService';
+import { listBudgetItems } from '../services/budgetService';
+import { listItems as listPackingItems } from '../services/packingService';
+import { listItems as listTodoItems } from '../services/todoService';
+import { listFiles } from '../services/fileService';
 import {
   listTrips,
   createTrip,
@@ -418,6 +425,42 @@ router.get('/:id/segments', authenticate, (req: Request, res: Response) => {
     return { ...s, is_home: home?.trip_id === tripId, linked_trip_count: linkedCount };
   });
   res.json({ segments: annotated });
+});
+
+// [460-fork] Milestone 5 slice 5 — single-shot trip data dump for offline
+// pre-cache. Aggregates everything the planner needs to render the trip
+// without any further API calls. Files come back as metadata only — the
+// caller pre-fetches binaries via the Workbox cache. M7 (JSON export/import)
+// will reuse this endpoint shape for archival bundles.
+router.get('/:id/offline-bundle', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const tripId = Number(req.params.id);
+  const access = canAccessTrip(tripId, authReq.user.id);
+  if (!access) return res.status(404).json({ error: 'Trip not found' });
+
+  const trip = db.prepare(`${TRIP_SELECT} WHERE t.id = :tripId`).get({ userId: authReq.user.id, tripId });
+  if (!trip) return res.status(404).json({ error: 'Trip not found' });
+
+  const daysPayload = listDays(tripId); // includes assignments + notes_items + segment summary
+  const places = listPlaces(String(tripId), {});
+  const reservations = listReservations(tripId);
+  const budgetItems = listBudgetItems(tripId);
+  const packingItems = listPackingItems(tripId);
+  const todoItems = listTodoItems(tripId);
+  const files = listFiles(tripId, false);
+
+  res.json({
+    schema_version: 1,
+    bundled_at: new Date().toISOString(),
+    trip,
+    days: daysPayload.days,
+    places,
+    reservations,
+    budget_items: budgetItems,
+    packing_items: packingItems,
+    todo_items: todoItems,
+    files,
+  });
 });
 
 router.get('/:id/members', authenticate, (req: Request, res: Response) => {

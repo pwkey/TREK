@@ -13,6 +13,7 @@ import AtlasPage from './pages/AtlasPage'
 import SharedTripPage from './pages/SharedTripPage'
 import SegmentAcceptPage from './pages/SegmentAcceptPage' // [460-fork] Milestone 4
 import { startSyncWorker, stopSyncWorker } from './db/syncWorker' // [460-fork] Milestone 5
+import { startCapacitorLifecycle, stopCapacitorLifecycle } from './capacitor' // [460-fork] Milestone 5 slice 5
 import InAppNotificationsPage from './pages/InAppNotificationsPage.tsx'
 import { ToastContainer } from './components/shared/Toast'
 import SplashScreen from './components/shared/SplashScreen'
@@ -134,7 +135,11 @@ export default function App() {
   // both the initial mount and HMR.
   useEffect(() => {
     startSyncWorker()
-    return () => stopSyncWorker()
+    void startCapacitorLifecycle()
+    return () => {
+      stopSyncWorker()
+      stopCapacitorLifecycle()
+    }
   }, [])
 
   const location = useLocation()

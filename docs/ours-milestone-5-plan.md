@@ -1,6 +1,6 @@
 # Milestone 5 Implementation Plan — Offline-first writes
 
-**Status:** approved 2026-04-27 — open questions resolved (see §9), implementation starting on slice 1
+**Status:** all 5 slices shipped on 2026-04-27. Browser-test pass deferred — slices are individually unit/integration-tested but the end-to-end "edit offline → reconnect → see sync" walkthrough has not been done in a real browser yet. Add a checklist analogous to `docs/ours-m4-browser-test-checklist.md` before declaring M5 done. Honest scope cuts vs the original plan: per-callsite optimistic UI was pushed off slice 3 (see commit body), and Workbox Background Sync was deferred from slice 5 (we have an in-page sync worker + Capacitor lifecycle hook, but not a service-worker-level Background Sync queue) — both noted because they're real gaps for Safari-PWA users.
 **Date:** 2026-04-27
 **Feature spec:** `CLAUDE.md` §6 Milestone 5 + §7 (the offline-first architecture spec)
 **Architecture context:** `docs/ours-architecture-map.md`

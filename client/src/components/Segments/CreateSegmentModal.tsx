@@ -43,6 +43,7 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
   const [existingSegments, setExistingSegments] = useState<SegmentSummaryForTrip[]>([])
   const [leavingId, setLeavingId] = useState<string | null>(null)
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null)
+  const [mintingId, setMintingId] = useState<string | null>(null)
 
   const refreshExisting = useCallback(async () => {
     try {
@@ -103,6 +104,20 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
       setError(getApiErrorMessage(err, 'Failed to create shared segment'))
     } finally {
       setBusy(false)
+    }
+  }
+
+  const mintInviteFor = async (seg: SegmentSummaryForTrip) => {
+    setMintingId(seg.id)
+    try {
+      const invite = await segmentsApi.createInvite(seg.id)
+      const url = `${window.location.origin}/segments/accept/${invite.token}`
+      // Reuse the post-create success state to show the URL + copy button.
+      setCreated({ segmentId: seg.id, inviteUrl: url, expiresAt: invite.expires_at })
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Failed to create invite link'))
+    } finally {
+      setMintingId(null)
     }
   }
 
@@ -273,26 +288,48 @@ export default function CreateSegmentModal({ isOpen, onClose, tripId, days, onCr
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmLeaveId(seg.id)}
-                        disabled={seg.is_home}
-                        title={seg.is_home ? "You're the home trip — dissolve the segment or have no siblings before leaving" : 'Leave this segment; a memento copy of the shared days stays on your trip'}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 4,
-                          padding: '6px 10px', borderRadius: 6,
-                          border: `1px solid ${seg.is_home ? 'var(--border-primary)' : '#dc2626'}`,
-                          background: 'transparent',
-                          fontSize: 11, fontWeight: 500,
-                          color: seg.is_home ? 'var(--text-muted)' : '#dc2626',
-                          cursor: seg.is_home ? 'default' : 'pointer', fontFamily: 'inherit',
-                          opacity: seg.is_home ? 0.5 : 1,
-                          flexShrink: 0,
-                        }}
-                      >
-                        <LogOut size={11} />
-                        Leave
-                      </button>
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        {seg.is_home && (
+                          <button
+                            type="button"
+                            onClick={() => mintInviteFor(seg)}
+                            disabled={mintingId === seg.id}
+                            title="Generate a fresh invite link to share with another household"
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 4,
+                              padding: '6px 10px', borderRadius: 6,
+                              border: '1px solid var(--text-primary)',
+                              background: 'transparent',
+                              fontSize: 11, fontWeight: 500,
+                              color: 'var(--text-primary)',
+                              cursor: mintingId === seg.id ? 'default' : 'pointer', fontFamily: 'inherit',
+                              opacity: mintingId === seg.id ? 0.5 : 1,
+                            }}
+                          >
+                            <Link2 size={11} />
+                            {mintingId === seg.id ? 'Minting…' : 'Get invite link'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setConfirmLeaveId(seg.id)}
+                          disabled={seg.is_home}
+                          title={seg.is_home ? "You're the home trip — have all siblings leave first to dissolve" : 'Leave this segment; a memento copy of the shared days stays on your trip'}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            padding: '6px 10px', borderRadius: 6,
+                            border: `1px solid ${seg.is_home ? 'var(--border-primary)' : '#dc2626'}`,
+                            background: 'transparent',
+                            fontSize: 11, fontWeight: 500,
+                            color: seg.is_home ? 'var(--text-muted)' : '#dc2626',
+                            cursor: seg.is_home ? 'default' : 'pointer', fontFamily: 'inherit',
+                            opacity: seg.is_home ? 0.5 : 1,
+                          }}
+                        >
+                          <LogOut size={11} />
+                          Leave
+                        </button>
+                      </div>
                     )}
                   </div>
                 )

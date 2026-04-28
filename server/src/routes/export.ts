@@ -9,10 +9,28 @@
 // hashes, api keys, or session tokens.
 import express, { Request, Response } from 'express';
 import archiver from 'archiver';
+import path from 'node:path';
+import fs from 'node:fs';
 import { authenticate } from '../middleware/auth';
 import { canAccessTrip, db } from '../db/database';
 import { AuthRequest } from '../types';
 import { exportTrip, planTripBundle, makeExportFilename } from '../services/exportService';
+
+// [460-fork] Milestone 7 slice 5 — bundle the standalone viewer alongside
+// every export. The viewer is a self-contained HTML file built by the
+// client at npm prebuild time. We look in dev (client/public) first
+// then prod (client/dist) so this works in both layouts.
+function findViewerHtml(): string | null {
+  const candidates = [
+    path.resolve(__dirname, '../../../client/public/viewer.html'),
+    path.resolve(__dirname, '../../../client/dist/viewer.html'),
+    path.resolve(__dirname, '../../public/viewer.html'),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
 
 const router = express.Router({ mergeParams: true });
 
@@ -92,6 +110,13 @@ router.get('/:tripId/export/bundle', authenticate, (req: Request, res: Response)
   archive.pipe(res);
 
   archive.append(JSON.stringify(plan.envelope, null, 2), { name: 'trip.json' });
+  // Ship the standalone offline viewer alongside every bundle so a
+  // user with just bundle.zip always has the rendering tool. If the
+  // file isn't present (e.g. fresh checkout where prebuild hasn't run
+  // yet), degrade silently — the bundle still imports + restores fine
+  // without it; the viewer is a convenience for fully-offline review.
+  const viewerPath = findViewerHtml();
+  if (viewerPath) archive.file(viewerPath, { name: 'viewer.html' });
   for (const att of plan.attachments) {
     archive.file(att.diskPath, { name: att.archivePath });
   }

@@ -230,6 +230,40 @@ describe('Bundle (.zip with attachments)', () => {
     expect(buf[3]).toBe(0x04);
   });
 
+  it('EXPORT-013 — bundle includes viewer.html when client/public has it', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const viewerPath = path.resolve(__dirname, '../../../client/public/viewer.html');
+    if (!fs.existsSync(viewerPath)) {
+      // Skip in environments where the client viewer hasn't been built;
+      // the route handles this case gracefully and the bundle is still
+      // valid without it.
+      return;
+    }
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'With Viewer' });
+
+    const res = await request(app)
+      .get(`/api/trips/${trip.id}/export/bundle`)
+      .set('Cookie', authCookie(user.id))
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (c: Buffer) => chunks.push(c));
+        response.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+
+    const unzipper = (await import('unzipper')).default;
+    const directory = await unzipper.Open.buffer(res.body as Buffer);
+    const viewerEntry = directory.files.find((f) => f.path === 'viewer.html');
+    expect(viewerEntry).toBeDefined();
+    const viewerBuf = await viewerEntry!.buffer();
+    // Sanity-check it looks like our viewer (rather than some random
+    // file accidentally appended): contains the title we set.
+    expect(viewerBuf.toString('utf8')).toContain('460 Trip Planner — Trip Viewer');
+  });
+
   it('EXPORT-009 — non-member returns 404 for bundle too', async () => {
     const { user: owner } = createUser(testDb);
     const { user: stranger } = createUser(testDb);

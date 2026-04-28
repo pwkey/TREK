@@ -17,6 +17,7 @@ import { BookOpen, Calendar, MapPin, X } from 'lucide-react'
 import { useTripStore } from '../../store/tripStore'
 import { useTranslation } from '../../i18n'
 import PhotoImg from './PhotoImg'
+import DayPhotoMap from './DayPhotoMap'
 import type { Day, AssignmentsMap } from '../../types'
 import type { DayPhoto } from '../../store/slices/dayPhotosSlice'
 
@@ -156,6 +157,13 @@ function DayCard({ tripId, day, assignments, locale, onPhotoClick }: DayCardProp
           <div style={{ fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>
             No journal entry for this day.
           </div>
+        )}
+
+        {/* Per-day map of geotagged photos. Only renders when at least
+            one photo on this day has EXIF GPS — silently absent otherwise
+            so non-geotagged days stay compact. */}
+        {hasPhotos && photos.some(p => p.lat !== null && p.lng !== null) && (
+          <DayPhotoMap photos={photos} onMarkerClick={onPhotoClick} />
         )}
 
         {/* Photos */}

@@ -88,7 +88,10 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
     // planner has SOMETHING to render on a cold start while the network
     // call is still in flight (or while offline). The server fetch below
     // overwrites whatever this populates whenever it eventually returns.
-    void hydrateFromLocalMirror(Number(tripId), set).catch(() => {/* silent */})
+    // We AWAIT this so the catch path below can decide whether to swallow
+    // a network failure (cache hit → user sees cached planner) or rethrow
+    // (no cache → page-level toast + redirect).
+    const hydrated = await hydrateFromLocalMirror(Number(tripId), set).catch(() => false)
 
     try {
       const [tripData, daysData, placesData, packingData, todoData, tagsData, categoriesData] = await Promise.all([
@@ -125,6 +128,15 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
       // next cold start (or an offline reload) can hydrate from it.
       void persistTripSnapshotToMirror(tripData.trip, daysData.days, placesData.places).catch(() => {/* silent */})
     } catch (err: unknown) {
+      // [460-fork] Milestone 5 — if the local mirror gave us a usable trip,
+      // the network failure isn't fatal. Render the cached planner and
+      // suppress the page-level redirect; mutations stay queueable while
+      // offline. Without this, "Download for offline" → reload offline
+      // bounces the user to /dashboard before the hydrated state shows.
+      if (hydrated) {
+        set({ isLoading: false })
+        return
+      }
       const message = err instanceof Error ? err.message : 'Unknown error'
       set({ isLoading: false, error: message })
       throw err
@@ -200,11 +212,12 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
 
 type SetTripState = (partial: Partial<TripStoreState> | ((s: TripStoreState) => Partial<TripStoreState>)) => void
 
-async function hydrateFromLocalMirror(tripId: number, set: SetTripState): Promise<void> {
+async function hydrateFromLocalMirror(tripId: number, set: SetTripState): Promise<boolean> {
   const snap = await readTripSnapshot(tripId)
-  if (!snap) return
+  if (!snap || !snap.trip) return false
   // If a fresher server response has already populated the store, don't
-  // clobber it — we only fill in if `trip` is still null.
+  // clobber it — we only fill in if `trip` is still null. Either way, we
+  // return true so loadTrip knows there is local data to fall back on.
   set((s) => {
     if (s.trip && s.trip.id === tripId) return {}
     const assignmentsMap: AssignmentsMap = {}
@@ -222,6 +235,7 @@ async function hydrateFromLocalMirror(tripId: number, set: SetTripState): Promis
       dayNotes: dayNotesMap,
     }
   })
+  return true
 }
 
 async function persistTripSnapshotToMirror(trip: Trip, days: Day[], places: Place[]): Promise<void> {

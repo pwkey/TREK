@@ -1083,7 +1083,10 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                     />
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0 }}>
+                      <span
+                        title={day.title || t('dayplan.dayN', { n: index + 1 })}
+                        style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0 }}
+                      >
                         {day.title || t('dayplan.dayN', { n: index + 1 })}
                       </span>
                       {canEditDays && <button

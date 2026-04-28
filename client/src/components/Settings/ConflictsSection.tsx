@@ -115,25 +115,25 @@ export default function ConflictsSection() {
               </div>
 
               {textFields.length > 0 && (
-                <details style={{ fontSize: 12 }}>
-                  <summary style={{ cursor: 'pointer', color: 'var(--text-muted)' }}>Combine: edit a merged version</summary>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                    {textFields.map(f => {
-                      const value = combineState[c.id]?.[f] ?? mergeText(mine[f], theirs[f])
-                      return (
-                        <label key={f} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{f}</span>
-                          <textarea
-                            value={value}
-                            onChange={e => setCombineState(s => ({ ...s, [c.id]: { ...(s[c.id] || {}), [f]: e.target.value } }))}
-                            rows={3}
-                            style={{ padding: 8, borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit' }}
-                          />
-                        </label>
-                      )
-                    })}
-                  </div>
-                </details>
+                <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    Combine — edit before applying. The Combine button below uses these values.
+                  </span>
+                  {textFields.map(f => {
+                    const value = combineState[c.id]?.[f] ?? mergeText(mine[f], theirs[f])
+                    return (
+                      <label key={f} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{f}</span>
+                        <textarea
+                          value={value}
+                          onChange={e => setCombineState(s => ({ ...s, [c.id]: { ...(s[c.id] || {}), [f]: e.target.value } }))}
+                          rows={3}
+                          style={{ padding: 8, borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit' }}
+                        />
+                      </label>
+                    )
+                  })}
+                </div>
               )}
 
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

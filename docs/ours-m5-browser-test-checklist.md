@@ -80,18 +80,28 @@ The right setup is **regular Chrome + Chrome incognito**, both signed in as the 
 
 ### 4c. Combine
 
-- Repeat the offline-edit setup but on **notes**, not title (the Combine button only appears for text fields). Make Alice's offline notes a paragraph; make tab B's online notes a different paragraph.
-- After the conflict appears, expand the **Combine: edit a merged version** section. The textarea is pre-seeded with your text, a `---` separator, then the server's text.
-- Edit the merged text however you like. Click **Combine**. Toast: "Combined version applied".
-- Refresh. The day's notes contain your edited combined version.
+The Combine UI surfaces a textarea for every text field on the record — `TEXT_FIELDS_BY_RECORD['day'] = ['notes', 'title']` — so any text-field conflict on a day shows it. Use **title** for this test (the only text field with a UI binding right now; `day.notes` exists in the schema but has no editor wired in yet).
+
+- Repeat the offline-edit setup on the day **title**: tab A offline → "Tab A's offline title for combine"; tab B online → "Server moved on, combine variant".
+- Tab A reconnects, queue replays, conflict appears, click the yellow indicator to land on the conflicts section.
+- The conflict row shows a "Combine — edit before applying" section with a textarea per text field, pre-seeded with your text, a `---` separator, then the server's text. (A `notes` textarea also appears even though we didn't edit notes — it's pre-seeded from current values; leave it or merge it too.)
+- Edit the title textarea however you like, **then** click the **Combine** button. The button always uses whatever's in the textareas — if you don't edit, you get the default `mine + --- + theirs` merge. Toast: "Combined version applied".
+- Refresh tab A. The day's title now matches your edited combined version.
 
 ## 5. Download for offline (slice 5)
+
+The download has two halves: writing the trip's full payload to IndexedDB so the React layer can hydrate from it, and caching the app shell (HTML/JS/CSS) so the page can even load when offline. Slice 5 ships the first half. The second half is the service worker's job; it only runs in a production build (`vite-plugin-pwa`'s `generateSW` precaches built assets at build time, not Vite's HMR-served dev modules).
+
+**Data-layer verification (works against `npm run dev`):**
 
 - On any trip's planner, look at the day-plan sidebar header (where PDF, ICS, Share live).
 - A **Download** icon (cloud) is next to them.
 - Click it. Toast: "Trip downloaded for offline use".
-- (Behind the scenes: the trip's full payload is now in your local IndexedDB.)
-- Set DevTools to **Offline**. Hit Ctrl+R. The planner still shows the trip exactly as it was when you clicked Download — including any places, reservations, etc.
+- DevTools → Application → IndexedDB → `460tp-local` → `trips` should show a row keyed by the trip id. `days` and `places` should also have rows tagged by `trip_id`. That confirms the bundle landed.
+
+**Offline-shell verification (deferred to production build):**
+
+This needs `cd client && npm run build && npm run preview` against the same backend, with `vite preview` configured to proxy `/api` → `:3001`. Going offline + Ctrl+R against the preview should render the planner from the SW-cached shell + the IndexedDB trip. We're skipping it for this verification pass because the dev-mode SW doesn't reliably cache HMR-served modules, so a positive result in dev wouldn't prove anything. Re-test as part of the M1 native build pass (Capacitor wraps a production build anyway).
 
 ## 6. Capacitor lifecycle (defer to mobile build)
 

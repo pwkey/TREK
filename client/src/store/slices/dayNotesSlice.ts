@@ -1,7 +1,7 @@
 import { daysApi, dayNotesApi } from '../../api/client'
 import type { StoreApi } from 'zustand'
 import type { TripStoreState } from '../tripStore'
-import type { DayNote } from '../../types'
+import type { Day, DayNote } from '../../types'
 import { getApiErrorMessage } from '../../types'
 
 type SetState = StoreApi<TripStoreState>['setState']
@@ -35,6 +35,13 @@ export const createDayNotesSlice = (set: SetState, get: GetState): DayNotesSlice
     // 408/429) keep the optimistic state because the queue will replay; any
     // other 4xx (including 409 conflict-parked) rolls back so local truth
     // matches server truth until the user resolves.
+    //
+    // On success we replace the local row with the FULL day record from the
+    // response — not just the field we changed. The server's broadcast
+    // suppression (X-Socket-Id) means the originating client never receives
+    // its own day:updated event, so without this we'd never refresh
+    // updated_at locally; the next edit would then send a stale
+    // If-Unmodified-Since and the server would 409-park as a conflict.
     const dayIdNum = parseInt(String(dayId))
     const prev = get().days.find(d => d.id === dayIdNum)
     const observed = prev?.updated_at ?? null
@@ -43,7 +50,13 @@ export const createDayNotesSlice = (set: SetState, get: GetState): DayNotesSlice
       days: state.days.map(d => d.id === dayIdNum ? { ...d, notes } : d)
     }))
     try {
-      await daysApi.update(tripId, dayId, { notes }, observed)
+      const result = await daysApi.update(tripId, dayId, { notes }, observed)
+      const updated = (result as { day?: Day } | undefined)?.day
+      if (updated) {
+        set(state => ({
+          days: state.days.map(d => d.id === dayIdNum ? { ...d, ...updated } : d),
+        }))
+      }
     } catch (err: unknown) {
       if (isQueueableError(err)) return
       set(state => ({
@@ -62,7 +75,13 @@ export const createDayNotesSlice = (set: SetState, get: GetState): DayNotesSlice
       days: state.days.map(d => d.id === dayIdNum ? { ...d, title } : d)
     }))
     try {
-      await daysApi.update(tripId, dayId, { title }, observed)
+      const result = await daysApi.update(tripId, dayId, { title }, observed)
+      const updated = (result as { day?: Day } | undefined)?.day
+      if (updated) {
+        set(state => ({
+          days: state.days.map(d => d.id === dayIdNum ? { ...d, ...updated } : d),
+        }))
+      }
     } catch (err: unknown) {
       if (isQueueableError(err)) return
       set(state => ({

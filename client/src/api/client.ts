@@ -49,7 +49,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401 && (error.response?.data as { code?: string } | undefined)?.code === 'AUTH_REQUIRED') {
-      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register') && !window.location.pathname.startsWith('/shared/')) {
+      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register') && !window.location.pathname.startsWith('/shared/') && !window.location.pathname.startsWith('/poll/')) {
         const currentPath = window.location.pathname + window.location.search
         window.location.href = '/login?redirect=' + encodeURIComponent(currentPath)
       }
@@ -463,6 +463,7 @@ export interface PollVote {
   poll_id: number
   option_id: number
   voter_name: string
+  voter_email: string | null
   voter_browser_id: string
   choice: 'yes' | 'no' | 'maybe'
   comment: string | null
@@ -488,8 +489,20 @@ export const pollsApi = {
   delete: (id: number) => apiClient.delete(`/polls/${id}`).then(r => r.data),
   // Public — no auth headers needed but axios's defaults are harmless on a public endpoint.
   getPublic: (token: string) => apiClient.get(`/polls/share/${token}`).then(r => r.data as { poll: Poll }),
-  submitVotes: (token: string, payload: { voter_name: string; voter_browser_id: string; choices: { option_id: number; choice: 'yes' | 'no' | 'maybe'; comment?: string | null }[] }) =>
+  submitVotes: (token: string, payload: { voter_name: string; voter_email?: string | null; voter_browser_id: string; choices: { option_id: number; choice: 'yes' | 'no' | 'maybe'; comment?: string | null }[] }) =>
     apiClient.post(`/polls/share/${token}/votes`, payload).then(r => r.data as { votes: PollVote[] }),
+  // [460-fork] Milestone 9 slice 3 — convert a poll's winning option into a trip.
+  convertToTrip: (id: number, payload: { option_id: number; title?: string }) =>
+    apiClient.post(`/polls/${id}/convert`, payload).then(r => r.data as {
+      trip_id: number
+      invited_user_ids: number[]
+      manual_invite_hints: { name: string; email: string | null; choice: 'yes' | 'maybe' }[]
+    }),
+  // [460-fork] Milestone 9 slice 4 — Vacay-addon pre-fill (auth required).
+  vacayPrefill: (token: string) =>
+    apiClient.get(`/polls/share/${token}/vacay-prefill`).then(r => r.data as {
+      prefill: { option_id: number; suggested: 'yes' | 'no' | 'maybe'; total_days: number; vacay_days: number }[]
+    }),
 }
 
 export const weatherApi = {

@@ -4,7 +4,8 @@
 // and shows per-poll results with copy-share-link affordance. Slice 9.3
 // "convert winning option to a trip" is a follow-up.
 import { useEffect, useState } from 'react'
-import { Plus, Copy, Trash2, Calendar, Link2, Vote } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Copy, Trash2, Calendar, Link2, Vote, ArrowRight } from 'lucide-react'
 import Navbar from '../components/Layout/Navbar'
 import { useToast } from '../components/shared/Toast'
 import { pollsApi, type Poll, type PollOption, type PollVote } from '../api/client'
@@ -118,12 +119,33 @@ export default function PollsPage() {
 
 function PollDetail({ pollId, onDelete }: { pollId: number; onDelete: (id: number) => void }) {
   const toast = useToast()
+  const navigate = useNavigate()
   const [poll, setPoll] = useState<Poll | null>(null)
   const [loading, setLoading] = useState(true)
+  const [convertBusy, setConvertBusy] = useState<number | null>(null) // option id being converted
   useEffect(() => {
     setLoading(true)
     pollsApi.get(pollId).then(r => setPoll(r.poll)).catch(() => toast.error('Could not load poll')).finally(() => setLoading(false))
   }, [pollId])
+
+  const onConvert = async (option: PollOption) => {
+    if (!poll) return
+    if (poll.finalised_trip_id) {
+      toast.error('Already converted to a trip')
+      return
+    }
+    if (!confirm(`Create a trip for ${option.start_date} → ${option.end_date}? Voters who said yes/maybe and have an account on this instance (matched by email) will be auto-added as members.`)) return
+    setConvertBusy(option.id)
+    try {
+      const result = await pollsApi.convertToTrip(poll.id, { option_id: option.id })
+      toast.success(`Trip created. ${result.invited_user_ids.length} member(s) auto-invited; ${result.manual_invite_hints.length} need manual invite.`)
+      navigate(`/trips/${result.trip_id}`)
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string } }; message?: string }
+      toast.error(ax.response?.data?.error ?? ax.message ?? 'Could not convert poll')
+      setConvertBusy(null)
+    }
+  }
 
   if (loading || !poll) return <div style={{ padding: 32, color: 'var(--text-faint)' }}>Loading…</div>
 
@@ -163,6 +185,15 @@ function PollDetail({ pollId, onDelete }: { pollId: number; onDelete: (id: numbe
         </button>
       </div>
 
+      {poll.finalised_trip_id && (
+        <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: '#dcfce7', border: '1px solid #86efac', fontSize: 12, color: '#14532d', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontWeight: 600 }}>Trip created from this poll.</span>
+          <button type="button" onClick={() => navigate(`/trips/${poll.finalised_trip_id}`)} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: '1px solid #15803d', background: '#15803d', color: 'white', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>
+            Open trip <ArrowRight size={12} />
+          </button>
+        </div>
+      )}
+
       {/* Results matrix */}
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
@@ -172,6 +203,7 @@ function PollDetail({ pollId, onDelete }: { pollId: number; onDelete: (id: numbe
             <th style={{ ...th, width: 60, textAlign: 'center' }}>🤔</th>
             <th style={{ ...th, width: 60, textAlign: 'center' }}>👎</th>
             <th style={th}>Voters</th>
+            <th style={{ ...th, width: 110 }}></th>
           </tr>
         </thead>
         <tbody>
@@ -197,6 +229,19 @@ function PollDetail({ pollId, onDelete }: { pollId: number; onDelete: (id: numbe
                     {maybe.map(v => <Chip key={v.id} text={v.voter_name} bg="#fef9c3" color="#854d0e" />)}
                     {no.map(v => <Chip key={v.id} text={v.voter_name} bg="#fee2e2" color="#991b1b" />)}
                   </div>
+                </td>
+                <td style={td}>
+                  {!poll.finalised_trip_id && (
+                    <button
+                      type="button"
+                      onClick={() => onConvert(opt)}
+                      disabled={convertBusy === opt.id}
+                      title="Create a trip with these dates and auto-invite voters who have a matching email"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--accent)', background: 'var(--accent)', color: 'var(--accent-text)', cursor: 'pointer', fontSize: 11, fontFamily: 'inherit', fontWeight: 600 }}
+                    >
+                      {convertBusy === opt.id ? 'Creating…' : <>Make trip <ArrowRight size={11} /></>}
+                    </button>
+                  )}
                 </td>
               </tr>
             )

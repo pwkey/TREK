@@ -70,16 +70,53 @@ router.post('/share/:token/votes', (req: Request, res: Response) => {
   const poll = pollService.getPollByToken(token);
   if (!poll) return res.status(404).json({ error: 'Poll not found' });
 
-  const { voter_name, voter_browser_id, choices } = req.body ?? {};
+  const { voter_name, voter_email, voter_browser_id, choices } = req.body ?? {};
   if (typeof voter_name !== 'string' || !voter_name.trim()) return res.status(400).json({ error: 'voter_name required' });
   if (typeof voter_browser_id !== 'string' || !voter_browser_id.trim()) return res.status(400).json({ error: 'voter_browser_id required' });
   if (!Array.isArray(choices)) return res.status(400).json({ error: 'choices must be an array' });
+  // Email is optional; null/undefined/empty all mean "no email".
+  if (voter_email !== undefined && voter_email !== null && typeof voter_email !== 'string') {
+    return res.status(400).json({ error: 'voter_email must be a string or null' });
+  }
 
   try {
-    const votes = pollService.submitVotes(poll.id, voter_name, voter_browser_id, choices);
+    const votes = pollService.submitVotes(poll.id, voter_name, voter_browser_id, choices, voter_email);
     res.json({ votes });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Could not submit votes' });
+  }
+});
+
+// [460-fork] Milestone 9 slice 4 — Vacay-addon pre-fill suggestions.
+// Authenticated voter (any user with a session) can ask "based on my
+// vacay entries, which options should I say yes to?". The share token
+// scopes the lookup to one poll. Anonymous voters get 401 and the
+// client just hides the button.
+router.get('/share/:token/vacay-prefill', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const token = req.params.token;
+  if (!token) return res.status(400).json({ error: 'Missing token' });
+  const poll = pollService.getPollByToken(token);
+  if (!poll) return res.status(404).json({ error: 'Poll not found' });
+  res.json({ prefill: pollService.computeVacayPrefill(poll.id, authReq.user.id) });
+});
+
+// [460-fork] Milestone 9 slice 3 — convert a poll to a trip.
+router.post('/:id/convert', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid poll id' });
+  const { option_id, title } = req.body ?? {};
+  if (typeof option_id !== 'number') return res.status(400).json({ error: 'option_id required' });
+  try {
+    const result = pollService.convertPollToTrip(id, option_id, authReq.user.id, { title });
+    res.status(201).json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Could not convert poll';
+    if (/not found/i.test(msg)) return res.status(404).json({ error: msg });
+    if (/not authorised/i.test(msg)) return res.status(403).json({ error: msg });
+    if (/already converted/i.test(msg)) return res.status(409).json({ error: msg });
+    res.status(400).json({ error: msg });
   }
 });
 

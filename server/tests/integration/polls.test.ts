@@ -205,3 +205,101 @@ describe('Public share + voting', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('Convert poll to trip (slice 9.3)', () => {
+  it('POLL-009 — POST /:id/convert creates a trip with the option dates and sets finalised_trip_id', async () => {
+    const { user } = createUser(testDb);
+    const created = await request(app).post('/api/polls').set('Cookie', authCookie(user.id)).send({
+      title: 'Convert me',
+      options: [
+        { start_date: '2026-09-01', end_date: '2026-09-08' },
+        { start_date: '2026-09-15', end_date: '2026-09-22' },
+      ],
+    });
+    const pollId = created.body.poll.id;
+    const winningOptId = created.body.poll.options[1].id;
+
+    const res = await request(app).post(`/api/polls/${pollId}/convert`).set('Cookie', authCookie(user.id)).send({ option_id: winningOptId, title: 'Tuscany trip' });
+    expect(res.status).toBe(201);
+    expect(res.body.trip_id).toBeGreaterThan(0);
+
+    const trip = testDb.prepare('SELECT * FROM trips WHERE id = ?').get(res.body.trip_id) as { title: string; start_date: string; end_date: string; user_id: number };
+    expect(trip.title).toBe('Tuscany trip');
+    expect(trip.start_date).toBe('2026-09-15');
+    expect(trip.end_date).toBe('2026-09-22');
+    expect(trip.user_id).toBe(user.id);
+
+    const refreshed = await request(app).get(`/api/polls/${pollId}`).set('Cookie', authCookie(user.id));
+    expect(refreshed.body.poll.finalised_trip_id).toBe(res.body.trip_id);
+  });
+
+  it('POLL-010 — voter with matching email is auto-invited; unmatched surface as manual hints', async () => {
+    const { user: owner } = createUser(testDb, { email: 'owner@test.example.com' });
+    const { user: alice } = createUser(testDb, { email: 'alice@test.example.com' });
+    // bob has no account on this instance.
+
+    const created = await request(app).post('/api/polls').set('Cookie', authCookie(owner.id)).send({
+      title: 'Multi voter convert',
+      options: [{ start_date: '2026-10-05', end_date: '2026-10-12' }],
+    });
+    const pollId = created.body.poll.id;
+    const optId = created.body.poll.options[0].id;
+    const token = created.body.poll.share_token;
+
+    // Alice voted yes WITH her real email.
+    await request(app).post(`/api/polls/share/${token}/votes`).send({
+      voter_name: 'Alice', voter_email: 'alice@test.example.com', voter_browser_id: 'b-alice',
+      choices: [{ option_id: optId, choice: 'yes' }],
+    });
+    // Bob voted maybe WITHOUT email.
+    await request(app).post(`/api/polls/share/${token}/votes`).send({
+      voter_name: 'Bob', voter_browser_id: 'b-bob',
+      choices: [{ option_id: optId, choice: 'maybe' }],
+    });
+    // Carol voted no — should not show up in invites.
+    await request(app).post(`/api/polls/share/${token}/votes`).send({
+      voter_name: 'Carol', voter_email: 'carol@test.example.com', voter_browser_id: 'b-carol',
+      choices: [{ option_id: optId, choice: 'no' }],
+    });
+
+    const res = await request(app).post(`/api/polls/${pollId}/convert`).set('Cookie', authCookie(owner.id)).send({ option_id: optId });
+    expect(res.status).toBe(201);
+    expect(res.body.invited_user_ids).toEqual([alice.id]);
+    expect(res.body.manual_invite_hints).toHaveLength(1);
+    expect(res.body.manual_invite_hints[0].name).toBe('Bob');
+    expect(res.body.manual_invite_hints[0].email).toBeNull();
+
+    // Confirm trip_members row was created for Alice.
+    const member = testDb.prepare('SELECT user_id FROM trip_members WHERE trip_id = ?').get(res.body.trip_id) as { user_id: number };
+    expect(member.user_id).toBe(alice.id);
+  });
+
+  it('POLL-011 — converting twice returns 409', async () => {
+    const { user } = createUser(testDb);
+    const created = await request(app).post('/api/polls').set('Cookie', authCookie(user.id)).send({
+      title: 'Double convert',
+      options: [{ start_date: '2026-11-01', end_date: '2026-11-08' }],
+    });
+    const pollId = created.body.poll.id;
+    const optId = created.body.poll.options[0].id;
+
+    const r1 = await request(app).post(`/api/polls/${pollId}/convert`).set('Cookie', authCookie(user.id)).send({ option_id: optId });
+    expect(r1.status).toBe(201);
+    const r2 = await request(app).post(`/api/polls/${pollId}/convert`).set('Cookie', authCookie(user.id)).send({ option_id: optId });
+    expect(r2.status).toBe(409);
+  });
+
+  it('POLL-012 — non-owner cannot convert', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: stranger } = createUser(testDb);
+    const created = await request(app).post('/api/polls').set('Cookie', authCookie(owner.id)).send({
+      title: 'Owner-only convert',
+      options: [{ start_date: '2026-12-01', end_date: '2026-12-08' }],
+    });
+    const pollId = created.body.poll.id;
+    const optId = created.body.poll.options[0].id;
+
+    const res = await request(app).post(`/api/polls/${pollId}/convert`).set('Cookie', authCookie(stranger.id)).send({ option_id: optId });
+    expect(res.status).toBe(403);
+  });
+});

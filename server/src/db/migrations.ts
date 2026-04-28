@@ -1150,6 +1150,15 @@ function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_poll_votes_browser ON availability_poll_votes(voter_browser_id);
       `);
     },
+    // [460-fork] Milestone 9 slice 3 — voter email is optional. When
+    // present, the convert-poll-to-trip flow can match it against an
+    // existing user on the instance and auto-add them as a trip
+    // member; voters without email or without a matching account
+    // surface as "manual invite" hints for the owner.
+    () => {
+      try { db.exec(`ALTER TABLE availability_poll_votes ADD COLUMN voter_email TEXT`); }
+      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

@@ -1104,6 +1104,52 @@ function runMigrations(db: Database.Database): void {
       try { db.exec(`ALTER TABLE day_photos ADD COLUMN camera TEXT`); }
       catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
+    // [460-fork] Milestone 9 — pre-trip availability poll.
+    //
+    // Creator picks candidate date ranges, shares a link, voters tap
+    // yes/no/maybe per option without creating an account. The flow
+    // sits OUTSIDE the trip model intentionally — a poll exists before
+    // a trip does, and once dates converge the creator clicks "Create
+    // trip" to materialise it (slice 9.3).
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS availability_polls (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          description TEXT,
+          share_token TEXT NOT NULL UNIQUE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          expires_at DATETIME,
+          finalised_trip_id INTEGER REFERENCES trips(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_polls_owner ON availability_polls(owner_user_id);
+        CREATE INDEX IF NOT EXISTS idx_polls_token ON availability_polls(share_token);
+
+        CREATE TABLE IF NOT EXISTS availability_poll_options (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          poll_id INTEGER NOT NULL REFERENCES availability_polls(id) ON DELETE CASCADE,
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_poll_options_poll ON availability_poll_options(poll_id);
+
+        CREATE TABLE IF NOT EXISTS availability_poll_votes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          poll_id INTEGER NOT NULL REFERENCES availability_polls(id) ON DELETE CASCADE,
+          option_id INTEGER NOT NULL REFERENCES availability_poll_options(id) ON DELETE CASCADE,
+          voter_name TEXT NOT NULL,
+          voter_browser_id TEXT NOT NULL,
+          choice TEXT NOT NULL CHECK(choice IN ('yes', 'no', 'maybe')),
+          comment TEXT,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(poll_id, option_id, voter_browser_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON availability_poll_votes(poll_id);
+        CREATE INDEX IF NOT EXISTS idx_poll_votes_browser ON availability_poll_votes(voter_browser_id);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

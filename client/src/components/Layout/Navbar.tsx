@@ -5,7 +5,7 @@ import { useAuthStore } from '../../store/authStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAddonStore } from '../../store/addonStore'
 import { useTranslation } from '../../i18n'
-import { Plane, LogOut, Settings, ChevronDown, Shield, ArrowLeft, Users, Moon, Sun, Monitor, CalendarDays, Briefcase, Globe } from 'lucide-react'
+import { Plane, LogOut, Settings, ChevronDown, Shield, ArrowLeft, Users, Moon, Sun, Monitor, CalendarDays, Briefcase, Globe, Vote } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import InAppNotificationBell from './InAppNotificationBell.tsx'
 import SyncIndicator from '../Sync/SyncIndicator' // [460-fork] Milestone 5
@@ -109,6 +109,18 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
               onMouseLeave={e => { if (location.pathname !== '/dashboard') e.currentTarget.style.background = 'transparent' }}>
               <Briefcase className="w-3.5 h-3.5" />
               <span className="hidden md:inline">{t('nav.myTrips')}</span>
+            </Link>
+            {/* [460-fork] Milestone 9 — pre-trip availability polls */}
+            <Link to="/polls"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors flex-shrink-0"
+              style={{
+                color: location.pathname === '/polls' ? 'var(--text-primary)' : 'var(--text-muted)',
+                background: location.pathname === '/polls' ? 'var(--bg-hover)' : 'transparent',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={e => { if (location.pathname !== '/polls') e.currentTarget.style.background = 'transparent' }}>
+              <Vote className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Polls</span>
             </Link>
             {globalAddons.map(addon => {
               const Icon = ADDON_ICONS[addon.icon] || CalendarDays

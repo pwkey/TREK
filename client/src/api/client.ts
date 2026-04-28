@@ -450,6 +450,48 @@ export const reservationImportsApi = {
   },
 }
 
+// [460-fork] Milestone 9 — pre-trip availability polls.
+export interface PollOption {
+  id: number
+  poll_id: number
+  start_date: string
+  end_date: string
+  sort_order: number
+}
+export interface PollVote {
+  id: number
+  poll_id: number
+  option_id: number
+  voter_name: string
+  voter_browser_id: string
+  choice: 'yes' | 'no' | 'maybe'
+  comment: string | null
+  updated_at: string
+}
+export interface Poll {
+  id: number
+  owner_user_id?: number
+  title: string
+  description: string | null
+  share_token: string
+  created_at: string
+  expires_at: string | null
+  finalised_trip_id?: number | null
+  options: PollOption[]
+  votes?: PollVote[]
+}
+export const pollsApi = {
+  list: () => apiClient.get('/polls').then(r => r.data as { polls: Poll[] }),
+  create: (data: { title: string; description?: string | null; options: { start_date: string; end_date: string }[]; expires_at?: string | null }) =>
+    apiClient.post('/polls', data).then(r => r.data as { poll: Poll }),
+  get: (id: number) => apiClient.get(`/polls/${id}`).then(r => r.data as { poll: Poll }),
+  delete: (id: number) => apiClient.delete(`/polls/${id}`).then(r => r.data),
+  // Public — no auth headers needed but axios's defaults are harmless on a public endpoint.
+  getPublic: (token: string) => apiClient.get(`/polls/share/${token}`).then(r => r.data as { poll: Poll }),
+  submitVotes: (token: string, payload: { voter_name: string; voter_browser_id: string; choices: { option_id: number; choice: 'yes' | 'no' | 'maybe'; comment?: string | null }[] }) =>
+    apiClient.post(`/polls/share/${token}/votes`, payload).then(r => r.data as { votes: PollVote[] }),
+}
+
 export const weatherApi = {
   get: (lat: number, lng: number, date: string) => apiClient.get('/weather', { params: { lat, lng, date } }).then(r => r.data),
   getDetailed: (lat: number, lng: number, date: string, lang?: string) => apiClient.get('/weather/detailed', { params: { lat, lng, date, lang } }).then(r => r.data),

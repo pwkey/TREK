@@ -10,6 +10,8 @@ import AdminPage from './pages/AdminPage'
 import SettingsPage from './pages/SettingsPage'
 import VacayPage from './pages/VacayPage'
 import AtlasPage from './pages/AtlasPage'
+import PollsPage from './pages/PollsPage' // [460-fork] Milestone 9
+import PublicPollPage from './pages/PublicPollPage' // [460-fork] Milestone 9
 import SharedTripPage from './pages/SharedTripPage'
 import SegmentAcceptPage from './pages/SegmentAcceptPage' // [460-fork] Milestone 4
 import { startSyncWorker, stopSyncWorker } from './db/syncWorker' // [460-fork] Milestone 5
@@ -253,6 +255,16 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        {/* [460-fork] Milestone 9 — pre-trip availability polls */}
+        <Route
+          path="/polls"
+          element={
+            <ProtectedRoute>
+              <PollsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/poll/:token" element={<PublicPollPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </TranslationProvider>

@@ -10,6 +10,7 @@ import { createBudgetSlice } from './slices/budgetSlice'
 import { createReservationsSlice } from './slices/reservationsSlice'
 import { createFilesSlice } from './slices/filesSlice'
 import { createJournalSlice } from './slices/journalSlice' // [460-fork] Milestone 6 slice 1
+import { createDayPhotosSlice } from './slices/dayPhotosSlice' // [460-fork] Milestone 6 slice 2
 import { handleRemoteEvent } from './slices/remoteEventHandler'
 import { readTripSnapshot, writeTripSnapshot } from '../db/localDb' // [460-fork] Milestone 5
 import type {
@@ -27,6 +28,7 @@ import type { BudgetSlice } from './slices/budgetSlice'
 import type { ReservationsSlice } from './slices/reservationsSlice'
 import type { FilesSlice } from './slices/filesSlice'
 import type { JournalSlice } from './slices/journalSlice' // [460-fork] Milestone 6 slice 1
+import type { DayPhotosSlice } from './slices/dayPhotosSlice' // [460-fork] Milestone 6 slice 2
 
 export interface TripStoreState
   extends PlacesSlice,
@@ -37,7 +39,8 @@ export interface TripStoreState
     BudgetSlice,
     ReservationsSlice,
     FilesSlice,
-    JournalSlice {
+    JournalSlice,
+    DayPhotosSlice {
   trip: Trip | null
   days: Day[]
   places: Place[]
@@ -208,6 +211,7 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
   ...createReservationsSlice(set, get),
   ...createFilesSlice(set, get),
   ...createJournalSlice(set, get),
+  ...createDayPhotosSlice(set, get),
 }))
 
 // [460-fork] Milestone 5 — local-mirror adapters --------------------------

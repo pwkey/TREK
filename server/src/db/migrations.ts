@@ -1067,6 +1067,43 @@ function runMigrations(db: Database.Database): void {
         );
       `);
     },
+    // [460-fork] Milestone 6 slice 2 — per-day photo associations. The
+    // underlying file lives in trip_files (reuses uploads infrastructure);
+    // day_photos pins a file to a day with caption, capture-date, and
+    // position. ON DELETE CASCADE on both FKs keeps the join table
+    // self-cleaning when either side is deleted.
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS day_photos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          day_id INTEGER NOT NULL REFERENCES days(id) ON DELETE CASCADE,
+          upload_id INTEGER NOT NULL REFERENCES trip_files(id) ON DELETE CASCADE,
+          caption TEXT,
+          taken_at TEXT,
+          position INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_day_photos_day ON day_photos(day_id, position);
+        CREATE INDEX IF NOT EXISTS idx_day_photos_upload ON day_photos(upload_id);
+      `);
+    },
+    // [460-fork] Milestone 6 slice 2 — capture EXIF GPS so memoir mode
+    // (slice 3) can plot photos on a map. Decimal degrees, nullable.
+    () => {
+      try { db.exec(`ALTER TABLE day_photos ADD COLUMN lat REAL`); }
+      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec(`ALTER TABLE day_photos ADD COLUMN lng REAL`); }
+      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+    },
+    // [460-fork] Milestone 6 slice 2 — additional EXIF: altitude (metres,
+    // for hiking / mountain context) and camera make+model (for who-took-
+    // -it inference when two phones are on the trip). Both nullable.
+    () => {
+      try { db.exec(`ALTER TABLE day_photos ADD COLUMN altitude REAL`); }
+      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec(`ALTER TABLE day_photos ADD COLUMN camera TEXT`); }
+      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

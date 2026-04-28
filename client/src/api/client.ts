@@ -369,6 +369,44 @@ export const accommodationsApi = {
   delete: (tripId: number | string, id: number) => apiClient.delete(`/trips/${tripId}/accommodations/${id}`).then(r => r.data),
 }
 
+// [460-fork] Milestone 6 slice 2 — per-day photo associations.
+export const dayPhotosApi = {
+  list: (tripId: number | string, dayId: number | string) =>
+    apiClient.get(`/trips/${tripId}/days/${dayId}/photos`).then(r => r.data),
+  upload: (
+    tripId: number | string,
+    dayId: number | string,
+    blob: Blob,
+    opts?: {
+      caption?: string
+      takenAt?: string | null
+      lat?: number | null
+      lng?: number | null
+      altitude?: number | null
+      camera?: string | null
+      filename?: string
+    },
+  ) => {
+    const fd = new FormData()
+    fd.append('file', blob, opts?.filename ?? 'photo.jpg')
+    if (opts?.caption !== undefined) fd.append('caption', opts.caption)
+    if (opts?.takenAt) fd.append('taken_at', opts.takenAt)
+    if (opts?.lat !== undefined && opts.lat !== null) fd.append('lat', String(opts.lat))
+    if (opts?.lng !== undefined && opts.lng !== null) fd.append('lng', String(opts.lng))
+    if (opts?.altitude !== undefined && opts.altitude !== null) fd.append('altitude', String(opts.altitude))
+    if (opts?.camera) fd.append('camera', opts.camera)
+    return apiClient.post(`/trips/${tripId}/days/${dayId}/photos`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
+  update: (tripId: number | string, dayId: number | string, id: number, data: { caption?: string | null; position?: number; taken_at?: string | null }) =>
+    apiClient.put(`/trips/${tripId}/days/${dayId}/photos/${id}`, data).then(r => r.data),
+  delete: (tripId: number | string, dayId: number | string, id: number) =>
+    apiClient.delete(`/trips/${tripId}/days/${dayId}/photos/${id}`).then(r => r.data),
+  reorder: (tripId: number | string, dayId: number | string, orderedIds: number[]) =>
+    apiClient.put(`/trips/${tripId}/days/${dayId}/photos/reorder`, { orderedIds }).then(r => r.data),
+}
+
 // [460-fork] Milestone 6 slice 1 — per-day journal text.
 export const journalApi = {
   get: (tripId: number | string, dayId: number | string) =>

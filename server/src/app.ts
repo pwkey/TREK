@@ -28,6 +28,7 @@ import reservationsRoutes from './routes/reservations';
 import reservationImportRoutes from './routes/reservationImport';
 import dayNotesRoutes from './routes/dayNotes';
 import journalRoutes from './routes/journals'; // [460-fork] Milestone 6 slice 1
+import dayPhotosRoutes from './routes/dayPhotos'; // [460-fork] Milestone 6 slice 2
 import weatherRoutes from './routes/weather';
 import settingsRoutes from './routes/settings';
 import budgetRoutes from './routes/budget';
@@ -194,6 +195,7 @@ export function createApp(): express.Application {
   app.use('/api/trips/:tripId/reservation-imports', reservationImportRoutes);
   app.use('/api/trips/:tripId/days/:dayId/notes', dayNotesRoutes);
   app.use('/api/trips/:tripId/days/:dayId/journal', journalRoutes); // [460-fork] Milestone 6 slice 1
+  app.use('/api/trips/:tripId/days/:dayId/photos', dayPhotosRoutes); // [460-fork] Milestone 6 slice 2
   app.get('/api/health', (_req: Request, res: Response) => res.json({ status: 'ok' }));
   app.use('/api', assignmentsRoutes);
   app.use('/api/segments', segmentsRoutes); // [460-fork] Milestone 4

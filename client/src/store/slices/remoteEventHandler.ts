@@ -127,6 +127,49 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
           dayJournals: { ...state.dayJournals, [String(dayId)]: journal },
         }
       }
+
+      // [460-fork] Milestone 6 slice 2 — per-day photo events.
+      case 'dayPhoto:created': {
+        const dayId = payload.dayId as number
+        const photo = payload.photo as import('./dayPhotosSlice').DayPhoto
+        const dayKey = String(dayId)
+        const list = state.dayPhotos[dayKey] || []
+        if (list.some(p => p.id === photo.id)) return {}
+        return { dayPhotos: { ...state.dayPhotos, [dayKey]: [...list, photo] } }
+      }
+      case 'dayPhoto:updated': {
+        const dayId = payload.dayId as number
+        const photo = payload.photo as import('./dayPhotosSlice').DayPhoto
+        const dayKey = String(dayId)
+        return {
+          dayPhotos: {
+            ...state.dayPhotos,
+            [dayKey]: (state.dayPhotos[dayKey] || []).map(p => p.id === photo.id ? photo : p),
+          },
+        }
+      }
+      case 'dayPhoto:deleted': {
+        const dayId = payload.dayId as number
+        const photoId = payload.photoId as number
+        const dayKey = String(dayId)
+        return {
+          dayPhotos: {
+            ...state.dayPhotos,
+            [dayKey]: (state.dayPhotos[dayKey] || []).filter(p => p.id !== photoId),
+          },
+        }
+      }
+      case 'dayPhoto:reordered': {
+        const dayId = payload.dayId as number
+        const orderedIds = (payload.orderedIds as number[]) || []
+        const dayKey = String(dayId)
+        const byId = new Map((state.dayPhotos[dayKey] || []).map(p => [p.id, p]))
+        const reordered = orderedIds.map((id, idx) => {
+          const p = byId.get(id)
+          return p ? { ...p, position: idx } : null
+        }).filter((p): p is import('./dayPhotosSlice').DayPhoto => p !== null)
+        return { dayPhotos: { ...state.dayPhotos, [dayKey]: reordered } }
+      }
       case 'day:deleted': {
         const removedDayId = String(payload.dayId)
         const newAssignments = { ...state.assignments }

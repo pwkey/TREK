@@ -10,29 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
 import { Camera, Upload, X, Trash2, MapPin } from 'lucide-react'
 import { useTripStore } from '../../store/tripStore'
-import { getAuthUrl } from '../../api/authUrl'
-
-/** TREK blocks direct /uploads/files/<filename> access — every file URL has
- *  to be tokenised via /api/auth/resource-token first. This component
- *  mirrors AuthedImg in FileManager: build the canonical download URL,
- *  swap it for a tokenised one, render. */
-function PhotoImg({ tripId, uploadId, alt, onClick, style }: {
-  tripId: number | string
-  uploadId: number
-  alt: string
-  onClick?: (e: React.MouseEvent) => void
-  style: React.CSSProperties
-}) {
-  const [src, setSrc] = useState('')
-  useEffect(() => {
-    let cancelled = false
-    const url = `/api/trips/${tripId}/files/${uploadId}/download`
-    getAuthUrl(url, 'download').then(s => { if (!cancelled) setSrc(s) })
-    return () => { cancelled = true }
-  }, [tripId, uploadId])
-  if (!src) return <div style={{ ...style, background: 'var(--bg-tertiary)' }} />
-  return <img src={src} alt={alt} onClick={onClick} style={style} />
-}
+import PhotoImg from './PhotoImg'
 
 interface PhotoGridProps {
   tripId: number | string

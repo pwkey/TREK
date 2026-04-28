@@ -20,10 +20,11 @@ import PackingListPanel from '../components/Packing/PackingListPanel'
 import TodoListPanel from '../components/Todo/TodoListPanel'
 import FileManager from '../components/Files/FileManager'
 import BudgetPanel from '../components/Budget/BudgetPanel'
+import MemoirView from '../components/Journal/MemoirView' // [460-fork] Milestone 6 slice 3
 import CollabPanel from '../components/Collab/CollabPanel'
 import Navbar from '../components/Layout/Navbar'
 import { useToast } from '../components/shared/Toast'
-import { Map, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Ticket, PackageCheck, Wallet, FolderOpen, Camera, Users } from 'lucide-react'
+import { Map, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Ticket, PackageCheck, Wallet, FolderOpen, Camera, Users, BookOpen } from 'lucide-react'
 import { useTranslation } from '../i18n'
 import { addonsApi, accommodationsApi, authApi, tripsApi, assignmentsApi, mapsApi } from '../api/client'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
@@ -124,6 +125,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
   const TRIP_TABS = [
     { id: 'plan', label: t('trip.tabs.plan'), icon: Map },
+    { id: 'memoir', label: 'Memoir', icon: BookOpen }, // [460-fork] Milestone 6 slice 3
     { id: 'buchungen', label: t('trip.tabs.reservations'), shortLabel: t('trip.tabs.reservationsShort'), icon: Ticket },
     ...(enabledAddons.packing ? [{ id: 'listen', label: t('trip.tabs.lists'), shortLabel: t('trip.tabs.listsShort'), icon: PackageCheck }] : []),
     ...(enabledAddons.budget ? [{ id: 'finanzplan', label: t('trip.tabs.budget'), icon: Wallet }] : []),
@@ -911,6 +913,13 @@ export default function TripPlannerPage(): React.ReactElement | null {
               onDelete={handleDeleteReservation}
               onNavigateToFiles={() => handleTabChange('dateien')}
             />
+          </div>
+        )}
+
+        {/* [460-fork] Milestone 6 slice 3 — read-only memoir timeline */}
+        {activeTab === 'memoir' && (
+          <div style={{ height: '100%', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+            <MemoirView tripId={tripId} days={days} assignments={assignments} />
           </div>
         )}
 

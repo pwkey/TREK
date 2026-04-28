@@ -30,6 +30,7 @@ import dayNotesRoutes from './routes/dayNotes';
 import journalRoutes from './routes/journals'; // [460-fork] Milestone 6 slice 1
 import dayPhotosRoutes from './routes/dayPhotos'; // [460-fork] Milestone 6 slice 2
 import exportRoutes from './routes/export'; // [460-fork] Milestone 7 slice 1
+import importRoutes from './routes/import'; // [460-fork] Milestone 7 slice 3
 import weatherRoutes from './routes/weather';
 import settingsRoutes from './routes/settings';
 import budgetRoutes from './routes/budget';
@@ -183,6 +184,9 @@ export function createApp(): express.Application {
   // API Routes
   app.use('/api/auth', authRoutes);
   app.use('/api/auth/oidc', oidcRoutes);
+  // [460-fork] Milestone 7 slice 3 — mount BEFORE /api/trips so the
+  // string "import" can't be matched as a trip id by tripsRoutes.
+  app.use('/api/trips/import', importRoutes);
   app.use('/api/trips', tripsRoutes);
   app.use('/api/trips/:tripId/days', daysRoutes);
   app.use('/api/trips/:tripId/accommodations', accommodationsRoutes);

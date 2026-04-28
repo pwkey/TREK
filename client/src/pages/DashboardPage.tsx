@@ -15,9 +15,10 @@ import { useToast } from '../components/shared/Toast'
 import {
   Plus, Calendar, Trash2, Edit2, Map, ChevronDown, ChevronUp,
   Archive, ArchiveRestore, Clock, MapPin, Settings, X, ArrowRightLeft, Users,
-  LayoutGrid, List, Copy,
+  LayoutGrid, List, Copy, Upload,
 } from 'lucide-react'
 import { useCanDo } from '../store/permissionsStore'
+import ImportTripDialog from '../components/ImportTripDialog' // [460-fork] Milestone 7 slice 3
 
 interface DashboardTrip {
   id: number
@@ -551,6 +552,7 @@ export default function DashboardPage(): React.ReactElement {
   const [archivedTrips, setArchivedTrips] = useState<DashboardTrip[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [showForm, setShowForm] = useState<boolean>(false)
+  const [showImport, setShowImport] = useState<boolean>(false) // [460-fork] Milestone 7 slice 3
   const [editingTrip, setEditingTrip] = useState<DashboardTrip | null>(null)
   const [showArchived, setShowArchived] = useState<boolean>(false)
   const [showWidgetSettings, setShowWidgetSettings] = useState<boolean | 'mobile'>(false)
@@ -755,6 +757,21 @@ export default function DashboardPage(): React.ReactElement {
               >
                 <Settings size={15} />
               </button>
+              {/* [460-fork] Milestone 7 slice 3 — import an exported trip */}
+              {can('trip_create') && <button
+                onClick={() => setShowImport(true)}
+                title="Import a trip from a previously-exported .json or .zip file"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px',
+                  background: 'var(--bg-card)', color: 'var(--text-primary)',
+                  border: '1px solid var(--border-primary)', borderRadius: 12,
+                  fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)' }}
+              >
+                <Upload size={14} /> Import
+              </button>}
               {can('trip_create') && <button
                 onClick={() => { setEditingTrip(null); setShowForm(true) }}
                 style={{
@@ -960,6 +977,18 @@ export default function DashboardPage(): React.ReactElement {
         trip={editingTrip}
         onCoverUpdate={handleCoverUpdate}
       />
+
+      {/* [460-fork] Milestone 7 slice 3 — import dialog */}
+      {showImport && (
+        <ImportTripDialog
+          onClose={() => setShowImport(false)}
+          onImported={(newTripId) => {
+            setShowImport(false)
+            toast.success('Trip imported')
+            navigate(`/trips/${newTripId}`)
+          }}
+        />
+      )}
 
       <ConfirmDialog
         isOpen={!!deleteTrip}

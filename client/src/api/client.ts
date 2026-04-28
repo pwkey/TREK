@@ -145,6 +145,28 @@ export const authApi = {
   },
 }
 
+// [460-fork] Milestone 7 slice 3 — shape of the dry-run / apply report.
+export interface ImportReport {
+  schema_version: number
+  format: 'metadata-only' | 'bundle' | 'unknown'
+  source_trip: { title: string; start_date: string | null; end_date: string | null }
+  would_create: {
+    trip: number
+    days: number
+    places: number
+    reservations: number
+    photos_with_binary: number
+    photos_metadata_only: number
+    journals: number
+    budget_items: number
+    packing_items: number
+    todo_items: number
+    accommodations: number
+  }
+  warnings: string[]
+  errors: string[]
+}
+
 export const tripsApi = {
   list: (params?: Record<string, unknown>) => apiClient.get('/trips', { params }).then(r => r.data),
   create: (data: Record<string, unknown>) => apiClient.post('/trips', data).then(r => r.data),
@@ -159,6 +181,24 @@ export const tripsApi = {
   removeMember: (id: number | string, userId: number) => apiClient.delete(`/trips/${id}/members/${userId}`).then(r => r.data),
   copy: (id: number | string, data?: { title?: string; include_partner?: boolean }) => apiClient.post(`/trips/${id}/copy`, data || {}).then(r => r.data),
   offlineBundle: (id: number | string) => apiClient.get(`/trips/${id}/offline-bundle`).then(r => r.data),
+  // [460-fork] Milestone 7 slice 3 — import a previously-exported trip.
+  // Two-phase: first call dryRun (default), inspect the report, then
+  // call apply if the user confirms.
+  importDryRun: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return apiClient.post('/trips/import', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data as { dry_run: true; report: ImportReport })
+  },
+  importApply: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return apiClient.post('/trips/import?dry_run=false', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data as { dry_run: false; report: ImportReport; result: { trip_id: number; created: ImportReport['would_create'] } })
+  },
+
   // [460-fork] Milestone 7 slices 1+2 — JSON-only or zip-bundle export.
   // Returns true when the user actually saved a file, false when they
   // cancelled. Throws on network/server failure so callers can toast.

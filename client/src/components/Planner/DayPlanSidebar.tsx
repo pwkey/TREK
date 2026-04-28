@@ -4,7 +4,7 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download, FileJson } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download, Archive, FileJson } from 'lucide-react'
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { assignmentsApi, reservationsApi, tripsApi } from '../../api/client'
@@ -140,6 +140,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const [offlineHover, setOfflineHover] = useState(false)
   const [offlineBusy, setOfflineBusy] = useState(false)
   const [exportBusy, setExportBusy] = useState(false) // [460-fork] Milestone 7 slice 1
+  const [bundleBusy, setBundleBusy] = useState(false) // [460-fork] Milestone 7 slice 2
   const [dropTargetKey, _setDropTargetKey] = useState(null)
   const dropTargetRef = useRef(null)
   const setDropTargetKey = (key) => { dropTargetRef.current = key; _setDropTargetKey(key) }
@@ -900,15 +901,17 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
               </div>
             )}
           </div>
-          {/* [460-fork] Milestone 7 slice 1 — JSON export */}
+          {/* [460-fork] Milestone 7 slice 1 — JSON-only export. Tooltip
+              and toast both repeat the (no photos) caveat so it can't
+              be missed and nobody accidentally archives metadata-only. */}
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <button
               onClick={async () => {
                 if (exportBusy) return
                 setExportBusy(true)
                 try {
-                  const saved = await tripsApi.exportTripDownload(tripId)
-                  if (saved) toast.success('Trip exported')
+                  const saved = await tripsApi.exportTripDownload(tripId, 'json')
+                  if (saved) toast.success('Trip exported as JSON (no photos — use Bundle for archive)')
                 } catch {
                   toast.error('Could not export trip')
                 } finally {
@@ -916,8 +919,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                 }
               }}
               disabled={exportBusy}
-              title="Export this trip as JSON"
-              aria-label="Export this trip as JSON"
+              title="Export trip as JSON only — METADATA ONLY, photos and attached files are NOT included. Use the Bundle button next to this for full archives."
+              aria-label="Export trip as JSON (no photos)"
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 width: 30, height: 30, borderRadius: 8,
@@ -928,6 +931,38 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
               }}
             >
               <FileJson size={14} strokeWidth={2} />
+            </button>
+          </div>
+
+          {/* [460-fork] Milestone 7 slice 2 — bundle (zip with photos +
+              attached files). The recommended path for archival. */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              onClick={async () => {
+                if (bundleBusy) return
+                setBundleBusy(true)
+                try {
+                  const saved = await tripsApi.exportTripDownload(tripId, 'bundle')
+                  if (saved) toast.success('Trip bundle exported (with photos)')
+                } catch {
+                  toast.error('Could not export bundle')
+                } finally {
+                  setBundleBusy(false)
+                }
+              }}
+              disabled={bundleBusy}
+              title="Export trip as a Bundle (.zip with photos and attached files) — recommended for archive"
+              aria-label="Export trip bundle with photos"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 30, height: 30, borderRadius: 8,
+                border: '1px solid var(--border-primary)', background: 'none',
+                color: 'var(--text-primary)',
+                cursor: bundleBusy ? 'default' : 'pointer', fontFamily: 'inherit',
+                opacity: bundleBusy ? 0.5 : 1,
+              }}
+            >
+              <Archive size={14} strokeWidth={2} />
             </button>
           </div>
 

@@ -177,6 +177,107 @@ describe('Permissions', () => {
   });
 });
 
+describe('Format flag and recovery notes', () => {
+  it('EXPORT-011 — JSON-only export advertises format=metadata-only with recovery_notes', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    const res = await request(app)
+      .get(`/api/trips/${trip.id}/export`)
+      .set('Cookie', authCookie(user.id));
+    const body = JSON.parse(res.text);
+    expect(body.format).toBe('metadata-only');
+    expect(body.recovery_notes).toMatch(/photo binaries/i);
+    expect(body.recovery_notes).toMatch(/Bundle/);
+  });
+
+  it('EXPORT-012 — bundle export envelope has format=bundle and no recovery_notes', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    const { planTripBundle } = await import('../../src/services/exportService');
+    const plan = planTripBundle(trip.id, { id: user.id, username: user.username, email: user.email });
+    expect(plan.envelope.format).toBe('bundle');
+    expect(plan.envelope.recovery_notes).toBeUndefined();
+  });
+});
+
+describe('Bundle (.zip with attachments)', () => {
+  it('EXPORT-008 — GET /export/bundle returns a zip with the right Content-Type', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Bundle Trip' });
+
+    const res = await request(app)
+      .get(`/api/trips/${trip.id}/export/bundle`)
+      .set('Cookie', authCookie(user.id))
+      .buffer(true)
+      .parse((response, callback) => {
+        // supertest's default parser tries to JSON-parse application/zip;
+        // override to accumulate the raw bytes.
+        const chunks: Buffer[] = [];
+        response.on('data', (c: Buffer) => chunks.push(c));
+        response.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/zip/);
+    expect(res.headers['content-disposition']).toMatch(/attachment;\s*filename="bundle-trip-\d+\.zip"/);
+    // PK\x03\x04 — local file header signature for any non-empty zip.
+    const buf = res.body as Buffer;
+    expect(buf.length).toBeGreaterThan(50);
+    expect(buf[0]).toBe(0x50);
+    expect(buf[1]).toBe(0x4b);
+    expect(buf[2]).toBe(0x03);
+    expect(buf[3]).toBe(0x04);
+  });
+
+  it('EXPORT-009 — non-member returns 404 for bundle too', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: stranger } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+
+    const res = await request(app)
+      .get(`/api/trips/${trip.id}/export/bundle`)
+      .set('Cookie', authCookie(stranger.id));
+    expect(res.status).toBe(404);
+  });
+
+  it('EXPORT-010 — planTripBundle annotates each photo with attachment_path when the file is on disk', async () => {
+    // Unit-level rather than HTTP — verifies the envelope shape that
+    // the route would zip without us having to unzip the response.
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+
+    // Stub a trip_files row with a real-but-tiny file on disk.
+    const { filesDir } = await import('../../src/services/fileService');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    if (!fs.existsSync(filesDir)) fs.mkdirSync(filesDir, { recursive: true });
+    const realName = `test-bundle-${Date.now()}.jpg`;
+    fs.writeFileSync(path.join(filesDir, realName), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+
+    const fileRes = testDb.prepare(`
+      INSERT INTO trip_files (trip_id, filename, original_name, file_size, mime_type, uploaded_by)
+      VALUES (?, ?, 'IMG.jpg', 4, 'image/jpeg', ?)
+    `).run(trip.id, realName, user.id);
+    testDb.prepare(`
+      INSERT INTO day_photos (day_id, upload_id, position) VALUES (?, ?, 0)
+    `).run(day.id, fileRes.lastInsertRowid);
+
+    const { planTripBundle } = await import('../../src/services/exportService');
+    const plan = planTripBundle(trip.id, { id: user.id, username: user.username, email: user.email });
+    const photo = plan.envelope.trip.days[0].photos[0];
+    expect(photo.attachment_path).toBe(`attachments/photos/${photo.id}-${realName}`);
+    expect(plan.attachments).toContainEqual({
+      diskPath: path.join(filesDir, realName),
+      archivePath: `attachments/photos/${photo.id}-${realName}`,
+    });
+
+    // Cleanup so we don't leave test files in the dev uploads dir.
+    try { fs.unlinkSync(path.join(filesDir, realName)); } catch { /* ignore */ }
+  });
+});
+
 describe('Filename', () => {
   it('EXPORT-007 — Content-Disposition slugifies the trip title and falls back to "trip"', async () => {
     const { user } = createUser(testDb);

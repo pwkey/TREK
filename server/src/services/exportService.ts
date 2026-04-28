@@ -13,6 +13,8 @@
 // denormalised names alongside IDs, no secrets. The bundle (zip with
 // attachments) is slice 7.2; this slice is JSON-only.
 
+import path from 'node:path';
+import fs from 'node:fs';
 import { db } from '../db/database';
 import { listDays, listAccommodations } from './dayService';
 import { listPlaces } from './placeService';
@@ -23,13 +25,32 @@ import { listItems as listTodoItems } from './todoService';
 import { getJournal } from './journalService';
 import { listPhotos } from './dayPhotoService';
 import { listMembers } from './tripService';
+import { filesDir } from './fileService';
 
 export const EXPORT_SCHEMA_VERSION = 1;
 export const EXPORT_APP_ID = '460-trip-planner';
 
+export type ExportFormat = 'metadata-only' | 'bundle';
+
+const RECOVERY_NOTES_METADATA_ONLY =
+  'This export does not include photo binaries or attached files. ' +
+  'Each photo entry below preserves the original filename (original_name), ' +
+  'capture timestamp (taken_at), and EXIF metadata so you can match entries ' +
+  'against your source photo library if you ever need to re-attach the ' +
+  'binaries. For a fully self-contained archive, re-export with the Bundle ' +
+  'option (.zip with photos + attached files).';
+
 interface ExportEnvelope {
   schema_version: number;
   app: string;
+  /** Distinguishes metadata-only from bundle exports. Future import logic
+   *  branches on this: `bundle` payloads carry an `attachment_path` on
+   *  each photo and the binaries live alongside in the zip; `metadata-
+   *  only` payloads need a re-attach UI. */
+  format: ExportFormat;
+  /** Present only on metadata-only exports — explicit human-readable
+   *  hint about what's missing and how to recover. */
+  recovery_notes?: string;
   exported_at: string;
   exported_by: { id: number; username: string; email: string };
   trip: ExportedTrip;
@@ -82,6 +103,9 @@ interface ExportedPhoto {
   altitude: number | null;
   camera: string | null;
   position: number;
+  /** Bundle-only: relative path inside the zip where the binary lives.
+   *  Absent in JSON-only exports (slice 7.1). */
+  attachment_path?: string;
 }
 
 interface ExportedSegment {
@@ -96,8 +120,16 @@ interface ExportedSegment {
 }
 
 /** Build the export envelope for a trip. Caller must have already
- *  verified that `userId` can access `tripId`. */
-export function exportTrip(tripId: number, exporter: { id: number; username: string; email: string }): ExportEnvelope {
+ *  verified that `userId` can access `tripId`. The `format` parameter
+ *  decides whether to advertise this as metadata-only (default — the
+ *  /export route) or bundle (the /export/bundle route, which adds
+ *  attachment_path on each photo and zips the binaries alongside). */
+export function exportTrip(
+  tripId: number,
+  exporter: { id: number; username: string; email: string },
+  opts: { format?: ExportFormat } = {},
+): ExportEnvelope {
+  const format: ExportFormat = opts.format ?? 'metadata-only';
   const tripRow = db.prepare(`
     SELECT id, title, description, start_date, end_date, currency, cover_image, is_archived, created_at, user_id
     FROM trips WHERE id = ?
@@ -180,6 +212,8 @@ export function exportTrip(tripId: number, exporter: { id: number; username: str
   return {
     schema_version: EXPORT_SCHEMA_VERSION,
     app: EXPORT_APP_ID,
+    format,
+    ...(format === 'metadata-only' ? { recovery_notes: RECOVERY_NOTES_METADATA_ONLY } : {}),
     exported_at: new Date().toISOString(),
     exported_by: { id: exporter.id, username: exporter.username, email: exporter.email },
     trip: {
@@ -203,6 +237,52 @@ export function exportTrip(tripId: number, exporter: { id: number; username: str
       segments,
     },
   };
+}
+
+/** Bundle pairing: an envelope where each photo carries an
+ *  `attachment_path`, plus the list of disk-path → archive-path
+ *  attachments the route should add to the zip. Reservation-linked
+ *  trip_files are included under attachments/files/ so a 2035 reader
+ *  has the booking PDFs alongside the photos. */
+export interface BundlePlan {
+  envelope: ExportEnvelope;
+  attachments: Array<{ diskPath: string; archivePath: string }>;
+}
+
+export function planTripBundle(tripId: number, exporter: { id: number; username: string; email: string }): BundlePlan {
+  const envelope = exportTrip(tripId, exporter, { format: 'bundle' });
+  const attachments: BundlePlan['attachments'] = [];
+
+  // Photos. archive path is photos/<photo_id>-<filename> so every entry
+  // is unique even if multer's UUID renaming were ever to collide.
+  for (const day of envelope.trip.days) {
+    for (const photo of day.photos) {
+      const diskPath = path.join(filesDir, photo.filename);
+      if (!fs.existsSync(diskPath)) continue;
+      const archivePath = `attachments/photos/${photo.id}-${photo.filename}`;
+      photo.attachment_path = archivePath;
+      attachments.push({ diskPath, archivePath });
+    }
+  }
+
+  // Reservation-linked files (booking PDFs etc). trip_files surfaces
+  // these via the reservations sub-objects already; we just walk the
+  // raw rows to find any with a reservation_id matching this trip.
+  type ResFile = { id: number; filename: string; reservation_id: number };
+  const resFiles = db.prepare(`
+    SELECT id, filename, reservation_id FROM trip_files
+    WHERE trip_id = ? AND reservation_id IS NOT NULL AND deleted_at IS NULL
+  `).all(tripId) as ResFile[];
+  for (const f of resFiles) {
+    const diskPath = path.join(filesDir, f.filename);
+    if (!fs.existsSync(diskPath)) continue;
+    attachments.push({
+      diskPath,
+      archivePath: `attachments/files/${f.id}-${f.filename}`,
+    });
+  }
+
+  return { envelope, attachments };
 }
 
 /** Slugify a trip title for the download filename. ASCII-only fallback

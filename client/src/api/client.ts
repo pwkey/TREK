@@ -159,17 +159,19 @@ export const tripsApi = {
   removeMember: (id: number | string, userId: number) => apiClient.delete(`/trips/${id}/members/${userId}`).then(r => r.data),
   copy: (id: number | string, data?: { title?: string; include_partner?: boolean }) => apiClient.post(`/trips/${id}/copy`, data || {}).then(r => r.data),
   offlineBundle: (id: number | string) => apiClient.get(`/trips/${id}/offline-bundle`).then(r => r.data),
-  // [460-fork] Milestone 7 slice 1 — JSON export (downloads to file).
+  // [460-fork] Milestone 7 slices 1+2 — JSON-only or zip-bundle export.
   // Returns true when the user actually saved a file, false when they
   // cancelled. Throws on network/server failure so callers can toast.
-  exportTripDownload: async (id: number | string): Promise<boolean> => {
-    const resp = await apiClient.get(`/trips/${id}/export`, { responseType: 'blob' })
+  exportTripDownload: async (id: number | string, mode: 'json' | 'bundle' = 'json'): Promise<boolean> => {
+    const path = mode === 'bundle' ? `/trips/${id}/export/bundle` : `/trips/${id}/export`
+    const resp = await apiClient.get(path, { responseType: 'blob' })
     const blob = resp.data as Blob
     // Server sets Content-Disposition with the filename; pull it out so
     // the browser save dialog defaults to a sensible name.
     const cd = (resp.headers['content-disposition'] || '') as string
     const m = cd.match(/filename="([^"]+)"/)
-    const filename = m ? m[1] : `trip-${id}.json`
+    const fallbackExt = mode === 'bundle' ? 'zip' : 'json'
+    const filename = m ? m[1] : `trip-${id}.${fallbackExt}`
 
     // Prefer the File System Access API (Chrome/Edge) so the user picks
     // where to save and the file definitely lands there. Falls back to
@@ -185,7 +187,11 @@ export const tripsApi = {
       try {
         const handle = await w.showSaveFilePicker({
           suggestedName: filename,
-          types: [{ description: '460 Trip Planner export', accept: { 'application/json': ['.json'] } }],
+          types: [
+            mode === 'bundle'
+              ? { description: '460 Trip Planner bundle', accept: { 'application/zip': ['.zip'] } }
+              : { description: '460 Trip Planner export', accept: { 'application/json': ['.json'] } },
+          ],
         })
         const writable = await (handle as unknown as { createWritable: () => Promise<{ write: (b: Blob) => Promise<void>; close: () => Promise<void> }> }).createWritable()
         await writable.write(blob)

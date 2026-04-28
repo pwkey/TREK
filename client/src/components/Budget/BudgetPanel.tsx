@@ -428,7 +428,13 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
   const [newCategoryName, setNewCategoryName] = useState('')
   const [editingCat, setEditingCat] = useState(null) // { name, value }
   const [settlement, setSettlement] = useState<{ balances: any[]; flows: any[] } | null>(null)
-  const [settlementOpen, setSettlementOpen] = useState(false)
+  // [460-fork] Milestone 8 polish — surface the settlement by default
+  // when flows exist. Upstream defaulted to collapsed; for our personal-
+  // fork the settlement IS the headline of the budget tab when there's
+  // money owing, so popping it open on first render makes the feature
+  // discoverable without a UI hunt. Subsequent toggles persist for the
+  // session.
+  const [settlementOpen, setSettlementOpen] = useState(true)
   const currency = trip?.currency || 'EUR'
   const canEdit = can('budget_edit', trip)
 
@@ -759,6 +765,12 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                 }}>
                   {settlementOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                   {t('budget.settlement')}
+                  {/* [460-fork] Milestone 8 polish — keep the transaction count
+                      visible on the collapsed label so users can see at a
+                      glance how many settlement transactions are pending. */}
+                  <span style={{ marginLeft: 4, padding: '1px 7px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', fontSize: 10, fontWeight: 700, letterSpacing: 0 }}>
+                    {settlement.flows.length}
+                  </span>
                   <span style={{ position: 'relative', display: 'inline-flex', marginLeft: 2 }}>
                     <span style={{ display: 'flex', cursor: 'help' }}
                       onMouseEnter={e => { const tip = e.currentTarget.nextElementSibling as HTMLElement; if (tip) tip.style.display = 'block' }}

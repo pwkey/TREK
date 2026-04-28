@@ -4,7 +4,7 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download, FileJson } from 'lucide-react'
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { assignmentsApi, reservationsApi, tripsApi } from '../../api/client'
@@ -139,6 +139,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   // [460-fork] Milestone 5 slice 5 — download-for-offline state
   const [offlineHover, setOfflineHover] = useState(false)
   const [offlineBusy, setOfflineBusy] = useState(false)
+  const [exportBusy, setExportBusy] = useState(false) // [460-fork] Milestone 7 slice 1
   const [dropTargetKey, _setDropTargetKey] = useState(null)
   const dropTargetRef = useRef(null)
   const setDropTargetKey = (key) => { dropTargetRef.current = key; _setDropTargetKey(key) }
@@ -899,6 +900,37 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
               </div>
             )}
           </div>
+          {/* [460-fork] Milestone 7 slice 1 — JSON export */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              onClick={async () => {
+                if (exportBusy) return
+                setExportBusy(true)
+                try {
+                  const saved = await tripsApi.exportTripDownload(tripId)
+                  if (saved) toast.success('Trip exported')
+                } catch {
+                  toast.error('Could not export trip')
+                } finally {
+                  setExportBusy(false)
+                }
+              }}
+              disabled={exportBusy}
+              title="Export this trip as JSON"
+              aria-label="Export this trip as JSON"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 30, height: 30, borderRadius: 8,
+                border: '1px solid var(--border-primary)', background: 'none',
+                color: 'var(--text-primary)',
+                cursor: exportBusy ? 'default' : 'pointer', fontFamily: 'inherit',
+                opacity: exportBusy ? 0.5 : 1,
+              }}
+            >
+              <FileJson size={14} strokeWidth={2} />
+            </button>
+          </div>
+
           {/* [460-fork] Milestone 5 slice 5 — download for offline */}
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <button

@@ -159,6 +159,59 @@ export const tripsApi = {
   removeMember: (id: number | string, userId: number) => apiClient.delete(`/trips/${id}/members/${userId}`).then(r => r.data),
   copy: (id: number | string, data?: { title?: string; include_partner?: boolean }) => apiClient.post(`/trips/${id}/copy`, data || {}).then(r => r.data),
   offlineBundle: (id: number | string) => apiClient.get(`/trips/${id}/offline-bundle`).then(r => r.data),
+  // [460-fork] Milestone 7 slice 1 — JSON export (downloads to file).
+  // Returns true when the user actually saved a file, false when they
+  // cancelled. Throws on network/server failure so callers can toast.
+  exportTripDownload: async (id: number | string): Promise<boolean> => {
+    const resp = await apiClient.get(`/trips/${id}/export`, { responseType: 'blob' })
+    const blob = resp.data as Blob
+    // Server sets Content-Disposition with the filename; pull it out so
+    // the browser save dialog defaults to a sensible name.
+    const cd = (resp.headers['content-disposition'] || '') as string
+    const m = cd.match(/filename="([^"]+)"/)
+    const filename = m ? m[1] : `trip-${id}.json`
+
+    // Prefer the File System Access API (Chrome/Edge) so the user picks
+    // where to save and the file definitely lands there. Falls back to
+    // the anchor-click pattern on browsers without showSaveFilePicker
+    // (Firefox, Safari).
+    const w = window as unknown as {
+      showSaveFilePicker?: (opts: {
+        suggestedName?: string
+        types?: { description: string; accept: Record<string, string[]> }[]
+      }) => Promise<FileSystemFileHandle>
+    }
+    if (typeof w.showSaveFilePicker === 'function') {
+      try {
+        const handle = await w.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: '460 Trip Planner export', accept: { 'application/json': ['.json'] } }],
+        })
+        const writable = await (handle as unknown as { createWritable: () => Promise<{ write: (b: Blob) => Promise<void>; close: () => Promise<void> }> }).createWritable()
+        await writable.write(blob)
+        await writable.close()
+        return true
+      } catch (err: unknown) {
+        // AbortError = user cancelled the save dialog. Anything else =
+        // fall through to the anchor-click fallback so we still try.
+        if ((err as { name?: string })?.name === 'AbortError') return false
+      }
+    }
+
+    // Fallback: anchor-click. Don't revoke the object URL synchronously —
+    // Chrome can race the revoke against the actual download commit and
+    // the file silently never lands. 60 s gives the browser plenty of
+    // time to finish writing before we free the memory.
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    return true
+  },
 }
 
 export const daysApi = {

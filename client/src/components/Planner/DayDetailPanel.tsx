@@ -5,6 +5,7 @@ import { X, Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudLightning, Wind
 const RES_TYPE_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 const RES_TYPE_COLORS = { flight: '#3b82f6', hotel: '#8b5cf6', restaurant: '#ef4444', train: '#06b6d4', car: '#6b7280', cruise: '#0ea5e9', event: '#f59e0b', tour: '#10b981', other: '#6b7280' }
 import { weatherApi, accommodationsApi } from '../../api/client'
+import JournalEditor from '../Journal/JournalEditor' // [460-fork] Milestone 6 slice 1
 import { useCanDo } from '../../store/permissionsStore'
 import { useTripStore } from '../../store/tripStore'
 import CustomSelect from '../shared/CustomSelect'
@@ -416,6 +417,9 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                 <Hotel size={12} /> {t('day.addAccommodation')}
               </button> : null
             )}
+
+            {/* [460-fork] Milestone 6 slice 1 — per-day journal */}
+            {canEditDays && <JournalEditor tripId={tripId} dayId={day.id} />}
 
             {/* Hotel Picker Popup — portal to body to escape transform stacking context */}
             {showHotelPicker && ReactDOM.createPortal(

@@ -118,6 +118,15 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
         return {
           days: state.days.map(d => d.id === (payload.day as Day).id ? payload.day as Day : d),
         }
+
+      // [460-fork] Milestone 6 slice 1 — per-day journal upserts.
+      case 'dayJournal:updated': {
+        const dayId = payload.dayId as number
+        const journal = (payload.journal as { day_id: number; content_markdown: string; updated_at: string; updated_by: number | null } | null) ?? null
+        return {
+          dayJournals: { ...state.dayJournals, [String(dayId)]: journal },
+        }
+      }
       case 'day:deleted': {
         const removedDayId = String(payload.dayId)
         const newAssignments = { ...state.assignments }

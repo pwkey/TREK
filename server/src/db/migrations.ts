@@ -1053,6 +1053,20 @@ function runMigrations(db: Database.Database): void {
           ON client_mutation_conflicts(user_id, resolved_at);
       `);
     },
+    // [460-fork] Milestone 6 slice 1 — per-day journal text. Free-form markdown
+    // body with one row per day; PRIMARY KEY on day_id ensures uniqueness and
+    // ON DELETE CASCADE cleans up when a day is removed. updated_at + updated_by
+    // mirror the day-edit conflict precondition pattern (slice 4).
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS day_journals (
+          day_id INTEGER PRIMARY KEY REFERENCES days(id) ON DELETE CASCADE,
+          content_markdown TEXT NOT NULL DEFAULT '',
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+        );
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

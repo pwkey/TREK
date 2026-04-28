@@ -9,6 +9,7 @@ import { createTodoSlice } from './slices/todoSlice'
 import { createBudgetSlice } from './slices/budgetSlice'
 import { createReservationsSlice } from './slices/reservationsSlice'
 import { createFilesSlice } from './slices/filesSlice'
+import { createJournalSlice } from './slices/journalSlice' // [460-fork] Milestone 6 slice 1
 import { handleRemoteEvent } from './slices/remoteEventHandler'
 import { readTripSnapshot, writeTripSnapshot } from '../db/localDb' // [460-fork] Milestone 5
 import type {
@@ -25,6 +26,7 @@ import type { TodoSlice } from './slices/todoSlice'
 import type { BudgetSlice } from './slices/budgetSlice'
 import type { ReservationsSlice } from './slices/reservationsSlice'
 import type { FilesSlice } from './slices/filesSlice'
+import type { JournalSlice } from './slices/journalSlice' // [460-fork] Milestone 6 slice 1
 
 export interface TripStoreState
   extends PlacesSlice,
@@ -34,7 +36,8 @@ export interface TripStoreState
     TodoSlice,
     BudgetSlice,
     ReservationsSlice,
-    FilesSlice {
+    FilesSlice,
+    JournalSlice {
   trip: Trip | null
   days: Day[]
   places: Place[]
@@ -204,6 +207,7 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
   ...createBudgetSlice(set, get),
   ...createReservationsSlice(set, get),
   ...createFilesSlice(set, get),
+  ...createJournalSlice(set, get),
 }))
 
 // [460-fork] Milestone 5 — local-mirror adapters --------------------------

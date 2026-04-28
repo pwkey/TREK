@@ -369,6 +369,26 @@ export const accommodationsApi = {
   delete: (tripId: number | string, id: number) => apiClient.delete(`/trips/${tripId}/accommodations/${id}`).then(r => r.data),
 }
 
+// [460-fork] Milestone 6 slice 1 — per-day journal text.
+export const journalApi = {
+  get: (tripId: number | string, dayId: number | string) =>
+    apiClient.get(`/trips/${tripId}/days/${dayId}/journal`).then(r => r.data),
+  update: (
+    tripId: number | string,
+    dayId: number | string,
+    contentMarkdown: string,
+    observedUpdatedAt?: string | null,
+  ) => {
+    const headers: Record<string, string> = {}
+    if (observedUpdatedAt) headers['If-Unmodified-Since'] = observedUpdatedAt
+    return apiClient.put(
+      `/trips/${tripId}/days/${dayId}/journal`,
+      { content_markdown: contentMarkdown },
+      { headers },
+    ).then(r => r.data)
+  },
+}
+
 export const dayNotesApi = {
   list: (tripId: number | string, dayId: number | string) => apiClient.get(`/trips/${tripId}/days/${dayId}/notes`).then(r => r.data),
   create: (tripId: number | string, dayId: number | string, data: Record<string, unknown>) => apiClient.post(`/trips/${tripId}/days/${dayId}/notes`, data).then(r => r.data),

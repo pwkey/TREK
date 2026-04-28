@@ -9,6 +9,9 @@ import Section from './Section'
 
 const TEXT_FIELDS_BY_RECORD: Record<string, string[]> = {
   day: ['notes', 'title'],
+  // [460-fork] Milestone 6 slice 1 — journal is one big markdown blob; the
+  // combine UI shows it in the same textarea pattern as day fields.
+  journal: ['content_markdown'],
 }
 
 export default function ConflictsSection() {

@@ -31,6 +31,13 @@ apiClient.interceptors.request.use(
           : `mid-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
         config.headers['X-Client-Mutation-Id'] = id
       }
+      // [460-fork] Milestone 5 — stash the raw payload BEFORE axios's
+      // dispatchRequest mutates config.data into a JSON string. The
+      // response interceptor needs the original object so the queued
+      // mutation can be replayed faithfully; without this stash, replays
+      // re-send the JSON string body under the default form-urlencoded
+      // Content-Type and the server can't parse the fields.
+      ;(config as { _460OriginalData?: unknown })._460OriginalData = config.data
     }
     return config
   },
@@ -72,12 +79,15 @@ apiClient.interceptors.response.use(
         const headers = config.headers || {}
         const mutationId = (headers['X-Client-Mutation-Id'] || headers['x-client-mutation-id']) as string | undefined
         if (mutationId) {
+          const stashed = (config as { _460OriginalData?: unknown })._460OriginalData
+          const ifUnmodified = (headers['If-Unmodified-Since'] || headers['if-unmodified-since']) as string | undefined
           const { enqueue } = await import('../db/mutationQueue')
           await enqueue({
             id: mutationId,
             endpoint: config.url,
             method: method.toUpperCase() as 'POST' | 'PUT' | 'DELETE',
-            payload: config.data,
+            payload: stashed !== undefined ? stashed : config.data,
+            observed_updated_at: ifUnmodified ?? null,
           })
         }
       }

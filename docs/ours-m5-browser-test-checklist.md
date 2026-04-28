@@ -35,10 +35,12 @@ You'll spend most of the test in Chrome DevTools (F12) → Network tab → the *
 - On Alice's planner, pick a day and edit its title. Save. Verify it saved (online — green dot, no badge).
 - Set Alice to **Offline**. The dot goes red.
 - Edit the same day's title to something different. Save.
-- **Expected:** an error toast appears ("Error updating day name") because the network call fails — that's the existing behavior. **But:** within 2s a small "1" badge appears next to the navbar dot, and the tooltip now reads "Offline — 1 change queued".
+- **Expected:** the day row shows the new title immediately (optimistic apply) and within 2s a small "1" badge appears next to the navbar dot. Tooltip reads "Offline — 1 change queued". No error toast (the mutation is not lost — it's queued).
 - Switch back to **No throttling**.
-- Within 30s (or instantly on the 'online' event) the badge clears and the tooltip returns to green.
-- Refresh Alice's tab. The new title is on the day row — confirming the mutation replayed against the server.
+- Within 30s (or instantly on the 'online' event) the badge clears and the tooltip returns to green. The day's title remains the new value with no manual refresh — the server's WebSocket broadcast of the replayed mutation refreshes the local store.
+- (Optional sanity:) refresh Alice's tab. The new title is still on the day row — the mutation reached the server and the IndexedDB mirror has been updated.
+
+**Known nuance:** if you refresh Alice's tab WHILE STILL OFFLINE before reconnecting, the cold-start re-hydrates from IndexedDB (which only stores server-confirmed state), so the row reverts to the OLD title. The pending mutation in the queue still replays correctly on reconnect — no work is lost. Persisting optimistic-state to IndexedDB is a future polish.
 
 ## 3. Cold-start hydration (slice 1)
 
@@ -50,16 +52,17 @@ You'll spend most of the test in Chrome DevTools (F12) → Network tab → the *
 
 ## 4. Stale-write conflict (slice 4)
 
-This is the showpiece. Two windows, deliberate stale-write, conflict appears in Settings.
+This is the showpiece. **CRITICAL setup detail:** the two tabs must be in genuinely independent browser sessions so they don't share IndexedDB — otherwise the online tab's sync-worker drains the offline tab's queued mutation before there's a chance for the conflict precondition to fire. Two tabs of the same Chrome window share storage and will NOT reproduce the conflict.
 
-- On Alice (regular Chrome), open the same day in two different tabs of the same window. Both display the day's current title.
-- In tab A, set DevTools to **Offline**. Edit the day title to "Alice's offline edit". Save → error toast + badge appears (queued).
-- In tab B (still online), edit the same day's title to "Server moved on". Save → succeeds.
+The right setup is **regular Chrome + Chrome incognito**, both signed in as the same user (e.g. both as Alice). Regular Chrome and an incognito window have separate IndexedDB origins, so each maintains its own mutation queue. (Two unrelated browsers — Chrome + Firefox — also work.)
+
+- Sign Alice in on **regular Chrome (= "tab A")** and on **Chrome incognito (= "tab B")**. Open the same day in both. Verify both display the day's current title.
+- In tab A, set DevTools to **Offline**. Edit the day title to "Alice's offline edit". Save → the new title appears optimistically in tab A; badge increments to "1" (queued). No error toast.
+- In tab B (still online), edit the same day's title to "Server moved on". Save → succeeds; the day row in tab B shows "Server moved on".
 - Switch tab A back to **No throttling**.
-- Within ~30s the queue tries to replay tab A's mutation. Server detects the precondition mismatch and parks it as a conflict (returns 409, no overwrite).
-- Within ~15s the navbar dot turns **yellow** with a "1" badge. Tooltip: "1 pending conflict — click to review".
-- Click the dot. It navigates to Settings.
-- Open the **Account** tab. A new section called "Pending sync conflicts" appears at the bottom showing one conflict row:
+- Within ~30s tab A's sync-worker replays its queued mutation. Server detects the precondition mismatch (tab A's observed `updated_at` is older than the one tab B's edit just produced) and parks it as a conflict (returns 409, no overwrite).
+- Within ~15s tab A's navbar dot turns **yellow** with a "1" badge. Tooltip: "1 pending conflict — click to review".
+- Click the dot. It navigates to Settings → Account tab and scrolls to the "Pending sync conflicts" section showing one conflict row:
   - record type "day", record id, timestamps for "yours" and "theirs".
   - side-by-side diff showing your title ("Alice's offline edit") vs the server's ("Server moved on").
   - three buttons: **Take theirs**, **Combine**, **Keep mine**.
@@ -104,7 +107,9 @@ When something doesn't work: copy the relevant browser console error + the serve
 
 These are deliberate scope cuts; they'll feel like missing features, not failures:
 
-- **Most mutations still throw + show an error toast on offline.** Only the queue-and-replay mechanism survives the offline window — per-callsite optimistic UX (suppress toast, apply locally, indicate "queued") is per-component work and was deferred. Day-edit, place-edit, etc. still surface the network error to the user. Their queued mutation does sync correctly on reconnect, so no work is lost; the UX is just rough.
+- **Day-title and day-notes edits now apply locally and suppress the toast when queued (fixed during M5 verification).** Other mutations (place-edit, reservation-edit, packing toggles, etc.) still surface the network error to the user. Their queued mutation does sync correctly on reconnect, so no work is lost; the UX is just rough until each callsite gets the same optimistic treatment.
 - **Stale-write conflict precondition only fires on day-update right now.** Every other mutation route is still last-write-wins silently. The `parkAsConflict` helper is reusable and future slices will adopt it for places, reservations, etc.
 - **Safari PWA only syncs while a tab is open.** Workbox-level Background Sync (queue inside the service worker) was deferred; we have an in-page 30s tick + window 'online' listener + Capacitor App.resume hook. Chromium and Capacitor cover well; Safari with the tab closed does not.
 - **No proactive map-tile precache.** Workbox's existing runtime cache covers tiles you actually pan to. The "download map area for the trip's bounding box" feature is deferred.
+- **Cross-tab queue sharing is intentional, not a bug.** Two tabs in the same browser profile share IndexedDB and therefore share the mutation queue: if tab A queues a mutation while offline and tab B is online, tab B's sync-worker tick drains the queue through its connection and the work syncs faster than waiting for tab A. Good for users (any online tab finishes the work) but it means the slice-4 conflict scenario can only be reproduced with browser sessions that have isolated storage (see step 4).
+- **Successful PUT/POST/DELETE responses are not visible in the dev server log at the default `info` level** — only 4xx/5xx are logged at info; 2xx/3xx go to `debug`. To trace a queue replay reaching the server, query the SQLite database directly (e.g. `SELECT title, updated_at FROM days WHERE id = X`) or temporarily raise the log level.

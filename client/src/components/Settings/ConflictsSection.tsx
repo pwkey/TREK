@@ -1,5 +1,6 @@
 // [460-fork] Milestone 5 slice 4 — list and resolve queued-mutation conflicts.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Check, GitMerge, X, GitPullRequest } from 'lucide-react'
 import { conflictsApi, type ConflictView, type ResolveChoice } from '../../api/conflicts'
 import { useToast } from '../shared/Toast'
@@ -12,10 +13,12 @@ const TEXT_FIELDS_BY_RECORD: Record<string, string[]> = {
 
 export default function ConflictsSection() {
   const toast = useToast()
+  const [searchParams] = useSearchParams()
   const [conflicts, setConflicts] = useState<ConflictView[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [combineState, setCombineState] = useState<Record<string, Record<string, string>>>({})
+  const sectionRef = useRef<HTMLDivElement | null>(null)
 
   const refresh = async () => {
     try {
@@ -29,6 +32,16 @@ export default function ConflictsSection() {
   }
 
   useEffect(() => { void refresh() }, [])
+
+  // When the SyncIndicator deep-links here (?tab=conflicts) scroll the section
+  // into view so the user lands on it instead of the top of Settings.
+  useEffect(() => {
+    if (loading) return
+    if (conflicts.length === 0) return
+    if (searchParams.get('tab') !== 'conflicts') return
+    const el = sectionRef.current
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [loading, conflicts.length, searchParams])
 
   const resolve = async (c: ConflictView, choice: ResolveChoice) => {
     setBusy(c.id)
@@ -60,6 +73,7 @@ export default function ConflictsSection() {
   }
 
   return (
+    <div ref={sectionRef}>
     <Section title="Pending sync conflicts" icon={GitPullRequest}>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
         {conflicts.length} change{conflicts.length === 1 ? '' : 's'} need your call — they were queued offline and the server has since moved on.
@@ -155,6 +169,7 @@ export default function ConflictsSection() {
         })}
       </div>
     </Section>
+    </div>
   )
 }
 

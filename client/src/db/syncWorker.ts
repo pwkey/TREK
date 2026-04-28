@@ -11,16 +11,23 @@
 // consistent across the two paths.
 import axios, { type AxiosError, type Method } from 'axios'
 import { process as processQueue, type MutationTransport, type TransportResult } from './mutationQueue'
-import { getSocketId } from '../api/websocket'
 
 const TICK_INTERVAL_MS = 30_000
 
 const transport: MutationTransport = {
   send: async (m): Promise<TransportResult> => {
     try {
-      const sid = getSocketId()
+      // [460-fork] Milestone 5 — deliberately omit X-Socket-Id on replays.
+      // The server uses that header to skip echoing the broadcast back to
+      // the originating socket. For a fresh online edit that's correct (the
+      // caller already has the response). On REPLAY the local store still
+      // holds the optimistic value from when the user saved offline; we
+      // need the server's WebSocket broadcast to come back so the
+      // remoteEventHandler refreshes any tabs to the canonical record (and
+      // updates the day's updated_at, which the conflict-precondition uses
+      // on the next edit). Without this, users would have to manually
+      // refresh after the queue drains.
       const headers: Record<string, string> = { 'X-Client-Mutation-Id': m.id }
-      if (sid) headers['X-Socket-Id'] = sid
       if (m.observed_updated_at) headers['If-Unmodified-Since'] = m.observed_updated_at
       const resp = await axios.request({
         method: m.method as Method,

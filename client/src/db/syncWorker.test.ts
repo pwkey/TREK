@@ -8,7 +8,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('axios', () => ({
   default: { request: vi.fn() },
 }))
-vi.mock('../api/websocket', () => ({ getSocketId: () => null }))
 
 import axios from 'axios'
 import { _transport } from './syncWorker'
@@ -72,5 +71,17 @@ describe('syncWorker.transport.send', () => {
     const call = mockedRequest.mock.calls[0][0]
     expect(call.headers['X-Client-Mutation-Id']).toBe('m-1')
     expect(call.headers['If-Unmodified-Since']).toBe('2027-06-10T12:00:00Z')
+  })
+
+  it('omits X-Socket-Id so the server broadcasts the change back to this client', async () => {
+    // Without this, the WebSocket "X:updated" event is suppressed on the
+    // originating socket and the local store stays on its optimistic value
+    // until manual refresh, which masks any divergence between optimistic
+    // and canonical state.
+    mockedRequest.mockResolvedValue({ status: 200, data: {} })
+    await _transport.send(baseMutation)
+    const call = mockedRequest.mock.calls[0][0]
+    expect(call.headers['X-Socket-Id']).toBeUndefined()
+    expect(call.headers['x-socket-id']).toBeUndefined()
   })
 })

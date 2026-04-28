@@ -29,9 +29,13 @@ export default function SettingsPage(): React.ReactElement {
     authApi.getAppConfig?.().then(c => setAppVersion(c?.version)).catch(() => {})
   }, [])
 
-  // Auto-switch to account tab when MFA is required
+  // Auto-switch to account tab when MFA is required, or when the SyncIndicator
+  // deep-links here to review queued-mutation conflicts (which live inside the
+  // Account tab as a section at the bottom). [460-fork] Milestone 5 slice 4.
   useEffect(() => {
     if (searchParams.get('mfa') === 'required') {
+      setActiveTab('account')
+    } else if (searchParams.get('tab') === 'conflicts') {
       setActiveTab('account')
     }
   }, [searchParams])

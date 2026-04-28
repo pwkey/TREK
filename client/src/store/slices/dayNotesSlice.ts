@@ -7,6 +7,16 @@ import { getApiErrorMessage } from '../../types'
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
 
+// [460-fork] Milestone 5 — mirrors the api/client response interceptor's
+// classifier. A "queueable" failure is one the offline queue will replay
+// (no response, 5xx, 408, 429); we keep optimistic local state for those
+// because the change WILL land. Anything else (including 409 conflict-
+// parked) means the server rejected — roll back.
+function isQueueableError(err: unknown): boolean {
+  const status = (err as { response?: { status?: number } })?.response?.status
+  return status === undefined || status >= 500 || status === 408 || status === 429
+}
+
 export interface DayNotesSlice {
   updateDayNotes: (tripId: number | string, dayId: number | string, notes: string) => Promise<void>
   updateDayTitle: (tripId: number | string, dayId: number | string, title: string) => Promise<void>
@@ -18,28 +28,46 @@ export interface DayNotesSlice {
 
 export const createDayNotesSlice = (set: SetState, get: GetState): DayNotesSlice => ({
   updateDayNotes: async (tripId, dayId, notes) => {
-    // [460-fork] Milestone 5 slice 4 — pass the day's last-known updated_at as
-    // the precondition; if the server has moved on, the mutation gets parked
-    // as a conflict for the user to review instead of silently overwriting.
-    const observed = get().days.find(d => d.id === parseInt(String(dayId)))?.updated_at ?? null
+    // [460-fork] Milestone 5 — optimistic local apply with smart rollback.
+    // The previous shape (write-through, set state only on success) meant
+    // offline edits never appeared in the UI even though the queue captured
+    // them. We now apply locally first; queueable failures (network/5xx/
+    // 408/429) keep the optimistic state because the queue will replay; any
+    // other 4xx (including 409 conflict-parked) rolls back so local truth
+    // matches server truth until the user resolves.
+    const dayIdNum = parseInt(String(dayId))
+    const prev = get().days.find(d => d.id === dayIdNum)
+    const observed = prev?.updated_at ?? null
+    const prevNotes = prev?.notes ?? ''
+    set(state => ({
+      days: state.days.map(d => d.id === dayIdNum ? { ...d, notes } : d)
+    }))
     try {
       await daysApi.update(tripId, dayId, { notes }, observed)
-      set(state => ({
-        days: state.days.map(d => d.id === parseInt(String(dayId)) ? { ...d, notes } : d)
-      }))
     } catch (err: unknown) {
+      if (isQueueableError(err)) return
+      set(state => ({
+        days: state.days.map(d => d.id === dayIdNum ? { ...d, notes: prevNotes } : d)
+      }))
       throw new Error(getApiErrorMessage(err, 'Error updating notes'))
     }
   },
 
   updateDayTitle: async (tripId, dayId, title) => {
-    const observed = get().days.find(d => d.id === parseInt(String(dayId)))?.updated_at ?? null
+    const dayIdNum = parseInt(String(dayId))
+    const prev = get().days.find(d => d.id === dayIdNum)
+    const observed = prev?.updated_at ?? null
+    const prevTitle = prev?.title ?? ''
+    set(state => ({
+      days: state.days.map(d => d.id === dayIdNum ? { ...d, title } : d)
+    }))
     try {
       await daysApi.update(tripId, dayId, { title }, observed)
-      set(state => ({
-        days: state.days.map(d => d.id === parseInt(String(dayId)) ? { ...d, title } : d)
-      }))
     } catch (err: unknown) {
+      if (isQueueableError(err)) return
+      set(state => ({
+        days: state.days.map(d => d.id === dayIdNum ? { ...d, title: prevTitle } : d)
+      }))
       throw new Error(getApiErrorMessage(err, 'Error updating day name'))
     }
   },

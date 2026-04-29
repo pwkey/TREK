@@ -15,6 +15,7 @@
 // deterministically without touching axios.
 
 import { getDb, type QueuedMutationRecord } from './localDb'
+import { scheduleSnapshot } from './offlineSnapshot'
 
 function genId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -64,6 +65,10 @@ export async function enqueue(input: EnqueueInput): Promise<QueuedMutationRecord
     status: 'pending',
   }
   await db.put('mutations', record)
+  // [460-fork] Defensive auto-backup: mirror the queue to OPFS so a
+  // catastrophic IndexedDB eviction (iOS storage pressure, manual
+  // site-data clear) doesn't take pending writes with it.
+  scheduleSnapshot()
   return record
 }
 
@@ -132,6 +137,11 @@ export async function process(
     await db.put('mutations', updated)
     deferred++
   }
+
+  // Refresh OPFS snapshot whenever the queue shape changes — that way
+  // a successful drain shrinks the snapshot (ultimately deleting it)
+  // and a backoff retry preserves the row.
+  if (succeeded > 0 || deferred > 0 || failed > 0) scheduleSnapshot()
 
   return { processed: due.length, succeeded, deferred, failed }
 }

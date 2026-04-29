@@ -16,6 +16,8 @@ import SharedTripPage from './pages/SharedTripPage'
 import SegmentAcceptPage from './pages/SegmentAcceptPage' // [460-fork] Milestone 4
 import { startSyncWorker, stopSyncWorker } from './db/syncWorker' // [460-fork] Milestone 5
 import { startCapacitorLifecycle, stopCapacitorLifecycle } from './capacitor' // [460-fork] Milestone 5 slice 5
+import { requestPersistentStorage } from './db/persistentStorage' // [460-fork] M1 follow-up
+import { restoreFromSnapshot } from './db/offlineSnapshot' // [460-fork] M1 follow-up
 import InAppNotificationsPage from './pages/InAppNotificationsPage.tsx'
 import { ToastContainer } from './components/shared/Toast'
 import SplashScreen from './components/shared/SplashScreen'
@@ -135,7 +137,24 @@ export default function App() {
   // [460-fork] Milestone 5 — drain queued mutations while the tab is open.
   // Runs once at app boot and periodically after that; lifecycle covers
   // both the initial mount and HMR.
+  //
+  // [460-fork] M1 follow-up — also at boot:
+  //   1. Ask for persistent storage (may or may not be granted, but
+  //      it's free upside on browsers that honour it).
+  //   2. Try to restore the mutation queue from the OPFS snapshot.
+  //      No-ops unless the live queue is empty AND OPFS has data —
+  //      the catastrophic iOS-purged-our-storage scenario.
   useEffect(() => {
+    void requestPersistentStorage()
+    void restoreFromSnapshot()
+      .then(({ restored, reason }) => {
+        if (restored > 0) {
+          console.info(`[460] Restored ${restored} queued mutation(s) from OPFS snapshot`)
+        } else if (reason && reason !== 'no-snapshot' && reason !== 'opfs-unsupported' && reason !== 'live-queue-not-empty') {
+          console.info(`[460] OPFS snapshot restore skipped: ${reason}`)
+        }
+      })
+      .catch(() => {/* silent — restore is best-effort */})
     startSyncWorker()
     void startCapacitorLifecycle()
     return () => {

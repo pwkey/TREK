@@ -6,7 +6,27 @@ Last updated: 2026-04-29
 
 ---
 
-## M1 — PWA install polish: viewport-fit, A2HS hint, standalone polish (uncommitted)
+## M1 follow-up — Persistent storage + OPFS auto-snapshot (uncommitted)
+
+**Why:** if iOS purges PWA storage under storage pressure (rare once installed but possible), the only client-only data not recoverable from the server is the mutation queue — pending writes the user made offline. This adds two defensive layers:
+
+1. `navigator.storage.persist()` request at app boot — asks the browser not to evict our data. May be granted or denied silently; pure upside.
+2. **OPFS-backed auto-snapshot** of the mutation queue. Every queue change debounces a 5-second writer that mirrors the queue to OPFS (a separate browser storage area, less prone to eviction). On cold start, if IndexedDB's queue is empty AND OPFS has a snapshot, the rows replay back into IndexedDB. Drained queues delete the snapshot so we don't carry stale data around.
+
+**Steps:**
+1. Open the app on iOS Safari (any device — same code path on desktop). DevTools / Console: type `navigator.storage.persisted()` and confirm it returns `true` (granted) on a frequently-used origin, or `false` (denied) elsewhere — both are valid outcomes.
+2. Disconnect from network. Make a few edits (rename a day, add a journal entry, tick a packing item). Confirm they queue up — DevTools → Application → IndexedDB → `460tp-local` → `mutations` should show rows.
+3. After 5 seconds, DevTools → Application → Storage → Origin Private File System should contain `460tp-queue-snapshot.json`. Click it → should show the queued mutations as JSON.
+4. Simulate iOS-purged-our-storage: in DevTools, delete the `460tp-local` IndexedDB. Reload the page (still offline).
+5. Confirm console logs `[460] Restored N queued mutation(s) from OPFS snapshot` and the IndexedDB queue is repopulated.
+6. Reconnect to network. The sync worker drains the queue. After successful drain, OPFS file should be deleted automatically.
+7. Edge case: with no OPFS support (very old Safari), the module silently no-ops — verify by stubbing `navigator.storage.getDirectory = undefined` in console; the app should still work, just without the defensive layer.
+
+**Unit tests:** SNAP-001 to SNAP-010 in `src/db/offlineSnapshot.test.ts`.
+
+---
+
+## M1 — PWA install polish: viewport-fit, A2HS hint, standalone polish (committed `18cd408`)
 
 **Goal:** put 460 Trip Planner on Peter's iPhone home screen as an app icon, with a clean standalone-mode launch experience and no notch/home-indicator clipping.
 

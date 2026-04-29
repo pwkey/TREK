@@ -30,63 +30,66 @@ export interface PhotoMetadata {
   camera: string | null
 }
 
-/** Single EXIF read covering everything we want. Each field is nullable
+/** EXIF read covering everything we want. Each field is nullable
  *  independently — a screenshot may have nothing; a phone photo with
- *  location off has date + camera but no GPS; etc. */
+ *  location off has date + camera but no GPS; etc.
+ *
+ *  Two parallel exifr calls because the `pick` option filters by RAW
+ *  tag name (e.g. GPSLatitude) but `latitude` / `longitude` are
+ *  computed virtuals — including them in `pick` causes exifr to
+ *  return undefined for the whole result. The dedicated `exifr.gps()`
+ *  helper does the right thing. */
 export async function extractMetadata(file: Blob): Promise<PhotoMetadata> {
   try {
-    const meta = await exifr.parse(file, {
-      pick: [
-        'DateTimeOriginal', 'CreateDate', 'ModifyDate',
-        'Make', 'Model',
-        'GPSAltitude', 'GPSAltitudeRef',
-        'latitude', 'longitude',
-      ],
-      gps: true,
-    }) as {
-      DateTimeOriginal?: Date | string
-      CreateDate?: Date | string
-      ModifyDate?: Date | string
-      Make?: string
-      Model?: string
-      GPSAltitude?: number
-      GPSAltitudeRef?: number
-      latitude?: number
-      longitude?: number
-    } | undefined
-
-    if (!meta) return { takenAt: null, lat: null, lng: null, altitude: null, camera: null }
+    const [meta, gps] = await Promise.all([
+      exifr.parse(file, {
+        pick: [
+          'DateTimeOriginal', 'CreateDate', 'ModifyDate',
+          'Make', 'Model',
+          'GPSAltitude', 'GPSAltitudeRef',
+        ],
+      }) as Promise<{
+        DateTimeOriginal?: Date | string
+        CreateDate?: Date | string
+        ModifyDate?: Date | string
+        Make?: string
+        Model?: string
+        GPSAltitude?: number
+        GPSAltitudeRef?: number
+      } | undefined>,
+      exifr.gps(file).catch(() => undefined) as Promise<{ latitude?: number; longitude?: number } | undefined>,
+    ])
 
     // Capture date.
-    const d = meta.DateTimeOriginal ?? meta.CreateDate ?? meta.ModifyDate
     let takenAt: string | null = null
+    const d = meta?.DateTimeOriginal ?? meta?.CreateDate ?? meta?.ModifyDate
     if (d) {
       const date = d instanceof Date ? d : new Date(d)
       if (!isNaN(date.getTime())) takenAt = date.toISOString()
     }
 
-    // GPS.
+    // GPS — from the dedicated helper, with bounds check.
     let lat: number | null = null
     let lng: number | null = null
-    if (typeof meta.latitude === 'number' && typeof meta.longitude === 'number'
-        && isFinite(meta.latitude) && isFinite(meta.longitude)
-        && meta.latitude >= -90 && meta.latitude <= 90
-        && meta.longitude >= -180 && meta.longitude <= 180) {
-      lat = meta.latitude
-      lng = meta.longitude
+    if (gps && typeof gps.latitude === 'number' && typeof gps.longitude === 'number'
+        && isFinite(gps.latitude) && isFinite(gps.longitude)
+        && gps.latitude >= -90 && gps.latitude <= 90
+        && gps.longitude >= -180 && gps.longitude <= 180) {
+      lat = gps.latitude
+      lng = gps.longitude
     }
 
     // Altitude. GPSAltitudeRef = 1 means "below sea level" (negate the value).
     let altitude: number | null = null
-    if (typeof meta.GPSAltitude === 'number' && isFinite(meta.GPSAltitude)) {
+    if (meta && typeof meta.GPSAltitude === 'number' && isFinite(meta.GPSAltitude)) {
       altitude = meta.GPSAltitudeRef === 1 ? -meta.GPSAltitude : meta.GPSAltitude
     }
 
     // Camera. Concat Make + Model, but if Model already starts with Make
     // (e.g. Make="NIKON CORPORATION", Model="NIKON D850") avoid duplication.
     let camera: string | null = null
-    const make = (meta.Make ?? '').trim()
-    const model = (meta.Model ?? '').trim()
+    const make = (meta?.Make ?? '').trim()
+    const model = (meta?.Model ?? '').trim()
     if (model.length > 0) {
       if (make.length > 0 && !model.toLowerCase().startsWith(make.toLowerCase())) {
         camera = `${make} ${model}`

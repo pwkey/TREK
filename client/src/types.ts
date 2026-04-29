@@ -31,6 +31,7 @@ export interface Trip {
 export interface Day {
   id: number
   trip_id: number
+  day_number: number // [460-fork] M6 follow-up: existed at runtime, missing from upstream type
   date: string
   title: string | null
   notes: string | null

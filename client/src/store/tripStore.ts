@@ -11,6 +11,7 @@ import { createReservationsSlice } from './slices/reservationsSlice'
 import { createFilesSlice } from './slices/filesSlice'
 import { createJournalSlice } from './slices/journalSlice' // [460-fork] Milestone 6 slice 1
 import { createDayPhotosSlice } from './slices/dayPhotosSlice' // [460-fork] Milestone 6 slice 2
+import { createPhotoRouteOverridesSlice } from './slices/photoRouteOverridesSlice' // [460-fork] M6 follow-up
 import { handleRemoteEvent } from './slices/remoteEventHandler'
 import { readTripSnapshot, writeTripSnapshot } from '../db/localDb' // [460-fork] Milestone 5
 import type {
@@ -29,6 +30,7 @@ import type { ReservationsSlice } from './slices/reservationsSlice'
 import type { FilesSlice } from './slices/filesSlice'
 import type { JournalSlice } from './slices/journalSlice' // [460-fork] Milestone 6 slice 1
 import type { DayPhotosSlice } from './slices/dayPhotosSlice' // [460-fork] Milestone 6 slice 2
+import type { PhotoRouteOverridesSlice } from './slices/photoRouteOverridesSlice' // [460-fork] M6 follow-up
 
 export interface TripStoreState
   extends PlacesSlice,
@@ -40,7 +42,8 @@ export interface TripStoreState
     ReservationsSlice,
     FilesSlice,
     JournalSlice,
-    DayPhotosSlice {
+    DayPhotosSlice,
+    PhotoRouteOverridesSlice {
   trip: Trip | null
   days: Day[]
   places: Place[]
@@ -135,7 +138,15 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
         // batch-import duplicate check or surface stale memoir data.
         dayPhotos: {},
         dayJournals: {},
+        // [460-fork] M6 follow-up — also reset waypoint overrides; they
+        // are keyed by photo IDs (also not tripId), and a stale entry
+        // would corrupt the new trip's route.
+        photoRouteOverrides: {},
       })
+
+      // [460-fork] M6 follow-up — load overrides for the new trip so
+      // the photo-route layer has them by the time it renders.
+      void (get() as TripStoreState).loadPhotoRouteOverrides(tripId).catch(() => {/* silent */})
 
       // [460-fork] Milestone 5 — write-through to the local mirror so the
       // next cold start (or an offline reload) can hydrate from it.
@@ -219,6 +230,7 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
   ...createFilesSlice(set, get),
   ...createJournalSlice(set, get),
   ...createDayPhotosSlice(set, get),
+  ...createPhotoRouteOverridesSlice(set, get),
 }))
 
 // [460-fork] Milestone 5 — local-mirror adapters --------------------------

@@ -561,6 +561,18 @@ export const dayPhotosApi = {
     apiClient.put(`/trips/${tripId}/days/${dayId}/photos/reorder`, { orderedIds }).then(r => r.data),
 }
 
+// [460-fork] M6 follow-up — per-segment photo-route waypoint overrides.
+// All mutations get auto-queued for offline replay via the response
+// interceptor at the top of this file.
+export const photoRouteOverridesApi = {
+  list: (tripId: number | string) =>
+    apiClient.get(`/trips/${tripId}/photo-route-overrides`).then(r => r.data),
+  upsert: (tripId: number | string, fromPhotoId: number, toPhotoId: number, waypoints: [number, number][]) =>
+    apiClient.put(`/trips/${tripId}/photo-route-overrides/${fromPhotoId}/${toPhotoId}`, { waypoints }).then(r => r.data),
+  remove: (tripId: number | string, fromPhotoId: number, toPhotoId: number) =>
+    apiClient.delete(`/trips/${tripId}/photo-route-overrides/${fromPhotoId}/${toPhotoId}`).then(r => r.data),
+}
+
 // [460-fork] Milestone 6 slice 1 — per-day journal text.
 export const journalApi = {
   get: (tripId: number | string, dayId: number | string) =>

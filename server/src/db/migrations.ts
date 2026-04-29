@@ -1159,6 +1159,29 @@ function runMigrations(db: Database.Database): void {
       try { db.exec(`ALTER TABLE availability_poll_votes ADD COLUMN voter_email TEXT`); }
       catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
     },
+    // [460-fork] M6 follow-up — per-segment waypoint overrides for the
+    // chronological photo route. When the user drags a route leg to add
+    // a waypoint, the override is keyed by (trip, from_photo, to_photo)
+    // and stores an ordered JSON list of intermediate lat/lng pairs.
+    // No row = use OSRM default for that segment. Cascades on day_photos
+    // delete so dropping a photo nukes any overrides referencing it
+    // (matches the agreed product call: drop, don't migrate).
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS photo_route_overrides (
+          trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+          from_photo_id INTEGER NOT NULL REFERENCES day_photos(id) ON DELETE CASCADE,
+          to_photo_id INTEGER NOT NULL REFERENCES day_photos(id) ON DELETE CASCADE,
+          waypoints_json TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          PRIMARY KEY (trip_id, from_photo_id, to_photo_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_photo_route_overrides_trip
+          ON photo_route_overrides(trip_id);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

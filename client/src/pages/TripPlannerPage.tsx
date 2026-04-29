@@ -90,6 +90,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
   const isLoading = useTripStore(s => s.isLoading)
   // [460-fork] M6 follow-up — geotagged photos for the trip-level map.
   const dayPhotosMap = useTripStore(s => s.dayPhotos)
+  // [460-fork] M6 follow-up — per-segment waypoint overrides.
+  const photoRouteOverridesMap = useTripStore(s => s.photoRouteOverrides)
   // Actions — stable references, don't cause re-renders
   const tripActions = useRef(useTripStore.getState()).current
   const can = useCanDo()
@@ -546,6 +548,17 @@ export default function TripPlannerPage(): React.ReactElement | null {
       }))
   }, [dayPhotosMap])
 
+  // [460-fork] M6 follow-up — derive a {key: waypoints[]} shape from the
+  // store map (which holds full override rows) so PhotoRouteLayer can
+  // splice waypoints into OSRM calls without re-deriving each render.
+  const photoRouteOverridesForLayer = useMemo(() => {
+    const out: Record<string, [number, number][]> = {}
+    for (const [key, ov] of Object.entries(photoRouteOverridesMap)) {
+      out[key] = ov.waypoints
+    }
+    return out
+  }, [photoRouteOverridesMap])
+
   const mapTileUrl = settings.map_tile_url || DEFAULT_TILE_URL
   // [460-fork] Default centre was Paris upstream — Sydney is the
   // sensible fallback for this household. Settings → Map still wins.
@@ -692,6 +705,13 @@ export default function TripPlannerPage(): React.ReactElement | null {
               photos={mapPhotos}
               photoRouteMode={photoRouteMode}
               onPhotoRouteSnapStatus={setPhotoRouteSnapStatus}
+              photoRouteOverrides={photoRouteOverridesForLayer}
+              onPhotoRouteSetOverride={(fromId: number, toId: number, waypoints: [number, number][]) => {
+                void tripActions.setPhotoRouteOverride(tripId, fromId, toId, waypoints)
+              }}
+              onPhotoRouteClearOverride={(fromId: number, toId: number) => {
+                void tripActions.deletePhotoRouteOverride(tripId, fromId, toId)
+              }}
               onPhotoClick={openPhotoDay}
               onPhotoRouteSegmentClick={(from: { day_id?: number }) => {
                 // Clicking a route leg navigates to the day of the

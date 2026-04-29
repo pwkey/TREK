@@ -6,7 +6,27 @@ Last updated: 2026-04-29
 
 ---
 
-## M6 follow-up — Per-segment road-snap with non-road fallback (uncommitted)
+## M6 follow-up — Editable photo-route waypoints (uncommitted)
+
+**Backfit story:** override a road-snapped leg by inserting waypoints to force the route through the actual road taken (or to manually trace a hike/boat path that OSRM doesn't know about). Per-segment, persists per-account, syncs across devices via WebSocket, queues for offline replay via the existing M5 mutation queue.
+
+**Steps:**
+1. Open a trip with geotagged photos. Plan tab → toolbar → **Road**. Wait for legs to snap.
+2. Pick a leg whose OSRM route doesn't match the road you actually took. **Right-click on the polyline** at the location you want the route to pass through → leg re-snaps via OSRM through that waypoint. Solid green, ✏️ icon appears at the photo-to-photo midpoint.
+3. The new waypoint is a small green dot. **Drag it** to refine — on drop, the leg re-snaps.
+4. Add a second waypoint with right-click — the insertion picks the leg sub-segment whose nearest endpoint is closest, so the order matches what you'd expect from a human reading the path.
+5. **Right-click a waypoint** → it's removed; leg re-snaps. If you remove the last waypoint, the override is cleared (back to OSRM default — no ✏️).
+6. Reload the page → overrides persist (server round-trip).
+7. Open the same trip in a second tab → drag a waypoint in tab A → tab B updates within ~1s (WebSocket).
+8. Block the network (DevTools → Network → Offline) → drag a waypoint → leg still updates locally; the request queues. Re-enable network → the queued PUT replays and the row appears server-side.
+9. Delete a photo via day-detail → its overrides cascade-delete server-side (verify via SQL: `SELECT * FROM photo_route_overrides`).
+10. Editing is gated to **Road mode only** — verify Straight mode shows no ✏️/waypoint dots even on legs that have overrides, and right-click on a Straight-mode polyline doesn't add waypoints (falls through to the map's "add place here" handler).
+
+**Server tests:** PRO-001 to PRO-010 in `tests/integration/photoRouteOverrides.test.ts` cover the CRUD + cascade + idempotency + permissions paths.
+
+---
+
+## M6 follow-up — Per-segment road-snap with non-road fallback (committed `9aa9ae4`)
 
 **Why:** Road mode previously snapped all photo waypoints in one OSRM call, which fails entirely if any single leg is non-routable (e.g. a flight to an island, a ferry crossing). Now each consecutive pair is snapped independently — snapped legs render solid green, non-routable legs render dashed amber straight (matching the Straight-mode style). Results are cached per-segment at module scope so toggling modes back and forth doesn't re-hit OSRM.
 

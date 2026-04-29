@@ -170,6 +170,22 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
         }).filter((p): p is import('./dayPhotosSlice').DayPhoto => p !== null)
         return { dayPhotos: { ...state.dayPhotos, [dayKey]: reordered } }
       }
+
+      // [460-fork] M6 follow-up — per-segment waypoint overrides for the
+      // chronological photo route.
+      case 'photoRouteOverride:updated': {
+        const override = payload.override as import('./photoRouteOverridesSlice').PhotoRouteOverride
+        const key = `${override.from_photo_id}-${override.to_photo_id}`
+        return { photoRouteOverrides: { ...state.photoRouteOverrides, [key]: override } }
+      }
+      case 'photoRouteOverride:deleted': {
+        const fromId = payload.from_photo_id as number
+        const toId = payload.to_photo_id as number
+        const key = `${fromId}-${toId}`
+        const next = { ...state.photoRouteOverrides }
+        delete next[key]
+        return { photoRouteOverrides: next }
+      }
       case 'day:deleted': {
         const removedDayId = String(payload.dayId)
         const newAssignments = { ...state.assignments }

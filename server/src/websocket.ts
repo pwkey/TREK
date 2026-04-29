@@ -33,14 +33,19 @@ function setupWebSocket(server: http.Server): void {
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : null;
+  // [460-fork] Match the CORS relaxation in app.ts: dev mode skips the
+  // origin check so tunnels work for phone-install testing without
+  // having to keep ALLOWED_ORIGINS in sync.
+  const isProduction = process.env.NODE_ENV === 'production';
+  const enforceOrigin = isProduction && allowedOrigins;
 
   wss = new WebSocketServer({
     server,
     path: '/ws',
     maxPayload: 64 * 1024, // 64 KB max message size
-    verifyClient: allowedOrigins
+    verifyClient: enforceOrigin
       ? ({ origin }, cb) => {
-          if (!origin || allowedOrigins.includes(origin)) cb(true);
+          if (!origin || allowedOrigins!.includes(origin)) cb(true);
           else cb(false, 403, 'Origin not allowed');
         }
       : undefined,

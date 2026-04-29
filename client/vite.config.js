@@ -93,6 +93,11 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // [460-fork] Allow any host so dev tunnels (ngrok / Cloudflare /
+    // Tailscale) can serve the app for phone testing without having to
+    // patch this list each time. This only affects the dev server;
+    // production builds are static files served by the backend.
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

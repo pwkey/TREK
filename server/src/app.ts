@@ -64,15 +64,20 @@ export function createApp(): express.Application {
     : null;
 
   let corsOrigin: cors.CorsOptions['origin'];
-  if (allowedOrigins) {
+  // [460-fork] In dev mode allow ANY origin regardless of ALLOWED_ORIGINS so
+  // tunnels (ngrok / Cloudflare / Tailscale) work for phone-install testing
+  // without having to keep .env in sync with the rotating tunnel hostname.
+  // Production stays strict.
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!isProduction) {
+    corsOrigin = true;
+  } else if (allowedOrigins) {
     corsOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       if (!origin || allowedOrigins.includes(origin)) callback(null, true);
       else callback(new Error('Not allowed by CORS'));
     };
-  } else if (process.env.NODE_ENV === 'production') {
-    corsOrigin = false;
   } else {
-    corsOrigin = true;
+    corsOrigin = false;
   }
 
   const shouldForceHttps = process.env.FORCE_HTTPS === 'true';

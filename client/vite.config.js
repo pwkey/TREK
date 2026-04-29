@@ -7,6 +7,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // [460-fork] Inject the service-worker registration script into the
+      // HTML head — without this, dev mode serves the SW file but never
+      // registers it, so Chrome's installability check silently fails.
+      injectRegister: 'script',
       // [460-fork] Enable the manifest + service worker in `npm run dev` so
       // Chrome / Edge offer the install prompt during phone testing through
       // a tunnel. Without this, vite-plugin-pwa only wires up for production

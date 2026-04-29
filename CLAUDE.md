@@ -15,7 +15,7 @@ Guidance for Claude Code working in this repository. Read this fully before your
 - **Shared segments** — when two households' trips overlap for some days, both planners should stay in sync for just those days.
 - **Trip recording, not just planning** — per-day journals with photos, so completed trips read back as a memoir years later.
 - **Works offline, anywhere** — we visit places with no connectivity. We must be able to *review* and *record* while offline, and sync cleanly when we're back on a network.
-- **Dedicated apps on all our devices** — iOS, Android, and desktop. Installable, distributable, not "open the browser and type the URL."
+- **Installable on all our devices** — iOS, Android, and desktop. Add-to-Home-Screen as a PWA so it feels like an app and runs in its own window, without the App Store review tax (see §3 for why we're not doing native wrappers).
 - **Data ownership and portability** — full JSON export/import for archiving and moving between instances.
 - **Reconciliation, not just tracking** — a "who owes whom" settle-up view on top of the existing budget.
 - **Pre-trip date polling** — picking dates with the other couple before a trip record even exists.
@@ -61,74 +61,57 @@ The full feature-comparison analysis against Wanderlog, TripIt, Pilot, Adventure
 
 ---
 
-## 3. Distribution and the "dedicated app" requirement
+## 3. Distribution: PWA-only (no native wrappers)
 
-460 Trip Planner must be available as a **dedicated installable app on iOS, Android, and desktop**. Three-layer strategy:
+460 Trip Planner ships as a **Progressive Web App on every platform**. Add-to-Home-Screen on iOS / Android, "Install as app" on desktop browsers — all served by the same self-hosted Node + SQLite backend.
 
 | Platform | Delivery | Distribution |
 |---|---|---|
-| iOS (iPhone, iPad) | Capacitor-wrapped native iOS app | TestFlight internal testing — up to 100 invitees, no full App Store review |
-| Android | Capacitor-wrapped native Android app | Direct APK to trusted devices, or Google Play Internal Testing track |
-| Desktop (macOS, Windows, Linux) | PWA via the existing Workbox service worker | Browser "Install as app" — creates a dock/taskbar icon, runs in its own window |
+| iOS (iPhone, iPad) | PWA via Safari | Add-to-Home-Screen → runs standalone, no Safari chrome |
+| Android | PWA via Chrome | Install icon → runs standalone |
+| Desktop (macOS, Windows, Linux) | PWA via Chrome / Edge / Firefox | Browser "Install as app" — dock/taskbar icon, own window |
 
-### 3.1 Why Capacitor and not React Native or native-per-platform
+### 3.1 Why PWA-only and not Capacitor
 
-- Capacitor wraps our existing React/Vite web app in a native shell, so **one codebase** drives web, iOS, and Android. Reuses all of TREK's client code.
-- React Native would mean rewriting the entire client. Not justified.
-- Native Swift/Kotlin apps would mean maintaining three codebases. Not justified for a personal app.
+The earlier plan used Capacitor wrappers for iOS + Android. We dropped that:
 
-### 3.2 Cost and account prerequisites
+- **No App Store review tax** — updates ship the moment we deploy, no week-long approval cycle.
+- **No US$99/year Apple Developer Program fee** — irrelevant for a personal app at our scale.
+- **No Xcode / signing certs / provisioning profiles** — Mac-only build chain disappears.
+- **One codebase, one runtime** — all changes are in the React + Node app; no native shell to keep aligned.
+- **iOS PWA support is good enough** — iOS 16.4+ supports PWA installation, push notifications, and most APIs we need.
 
-Before starting native-app work:
+The trade-offs we accept:
+- **iOS Safari may evict PWA storage after ~7 days of non-use.** Mitigation: the M5 "Download for offline" button writes to IndexedDB (longer-lived), and the M7 offline bundle (`.zip` + standalone HTML viewer) is the no-server-required fallback.
+- **No Background Sync API on iOS Safari.** Queued offline writes flush when the PWA is foregrounded, not after the tab closes. In practice "open it when you're back online and it syncs" is fine.
+- **No iOS Share Extension.** Can't appear in the iOS Photos share-sheet ("Share to 460"). Workaround: in-PWA "+ Photo" button uses `<input type="file" accept="image/*" capture="environment">` which opens the native iOS camera UI directly. Combined with batch-import-from-Camera-Roll for end-of-day uploads, this covers the photo-capture story without a Share Extension.
 
-- **Apple Developer Program** — US$99/year. Required for TestFlight and App Store. Sign up with the Apple ID we want to own the app.
-- **Google Play Console** — US$25 one-time, only if we want Play Store distribution (APK sideload to trusted devices is free and sufficient for a small group).
-- **Mac for iOS builds** — Xcode only runs on macOS. Alternatives: GitHub Actions macOS runners, or a cloud build service like Expo EAS Build (it supports Capacitor despite the name). Decide on first iOS build.
+If at some future point a Share Extension is genuinely worth $99/year + Xcode setup, we can add a Capacitor wrapper just for that purpose without re-architecting anything else. The PWA stays primary.
 
-### 3.3 Repo layout for native
+### 3.2 What that means for the codebase
 
-The Capacitor wrapper adds two top-level directories:
+- **No `ios/` or `android/` directories.** No `capacitor.config.ts`. No Capacitor plugins to install or update.
+- **All platform-specific behaviour goes through web APIs.** Camera via `<input capture>` and `getUserMedia`. Filesystem via `OPFS` / IndexedDB. Online detection via `navigator.onLine` + service worker. Lifecycle via `visibilitychange` + `pagehide`.
+- **The existing `vite-plugin-pwa` + Workbox setup is the install vehicle.** We extend its config rather than replacing it.
 
-```
-/ios/          — Xcode project, Podfile, signing config (generated by Capacitor)
-/android/      — Gradle project, build config (generated by Capacitor)
-/capacitor.config.ts   — Capacitor configuration
-```
+### 3.3 PWA install UX polish (Milestone 1 scope)
 
-These are generated by `npx cap add` but then committed. Native platform-specific config (Info.plist permission strings, AndroidManifest.xml entries, app icons, splash screens) lives inside them. Treat these as part of our fork — they're not upstream concerns.
+Things that need to be good-enough on first install for the PWA to feel app-like:
+- **App icon + splash** — designed once, rendered correctly on iOS / Android / desktop install.
+- **Web App Manifest** — name, short_name, display: standalone, theme_color, start_url. Already mostly there from upstream; verify it's branded as 460.
+- **Add-to-Home-Screen hints** — iOS Safari has no automatic install prompt. Show a one-time banner the first time the PWA is opened in mobile Safari with the "tap Share → Add to Home Screen" instruction.
+- **Safe-area handling** — `viewport-fit=cover` + `env(safe-area-inset-*)` so notches and home indicators don't clip UI.
+- **Offline shell** — the service worker should serve a usable shell even if the network is dead on first paint after install.
 
-### 3.4 What the native wrapper is NOT
-
-It is not a place for business logic, UI, or data handling. The native shell should do as little as possible:
-
-- Host the web view running our React app.
-- Expose Capacitor plugins for capabilities the web view can't do (camera, filesystem for large files, background sync, native share sheet, native notifications, biometric unlock).
-- Handle deep links (e.g. `460tripplanner://trip/abc123`).
-
-Anything we can do in the web layer, we do in the web layer. The wrapper is a thin shell, not a second codebase.
-
-### 3.5 Plugin choices (conservative defaults)
-
-Start with only these Capacitor plugins; add more only when a feature needs one:
-
-- `@capacitor/preferences` — small key-value storage (tokens, settings)
-- `@capacitor/filesystem` — larger file storage (photo originals, offline bundles)
-- `@capacitor/network` — online/offline detection
-- `@capacitor/camera` — journal photo capture
-- `@capacitor/app` — lifecycle hooks, deep links
-- `@capacitor/share` — native share sheet for export bundles
-
-Defer until actually needed: push notifications, biometrics, background tasks, geolocation.
-
-### 3.6 Testing matrix
+### 3.4 Testing matrix
 
 Any UI change must be visually checked on:
 
-- Desktop Chrome or Firefox (the PWA path)
-- iOS Safari *or* the Capacitor iOS app (one is sufficient — the web view is Safari-based either way)
-- Android Chrome *or* the Capacitor Android app
+- Desktop Chrome or Firefox
+- iOS Safari (real device, not just responsive mode — installed-as-PWA mode behaves differently from Safari tabs)
+- Android Chrome (real device)
 
-Safe areas, notch handling, and bottom-bar clearance need testing on an actual phone, not just a desktop browser's responsive mode.
+Safe areas, notch handling, and bottom-bar clearance need testing on an actual phone.
 
 ---
 
@@ -157,7 +140,7 @@ Some features we build may be general-purpose. When a feature lands cleanly and 
 
 **Features likely to be upstream-worthy:** shared segments, JSON export/import, settle-up view, offline-first write queue, availability poll.
 
-**Features probably not worth upstreaming:** the Capacitor native wrapper (upstream's call, not ours), our branding and default settings, our specific UI tweaks.
+**Features probably not worth upstreaming:** our branding and default settings, our specific UI tweaks, our PWA install-UX polish (already largely upstream's territory).
 
 ---
 
@@ -175,14 +158,13 @@ Some features we build may be general-purpose. When a feature lands cleanly and 
 
 **Our additions on top of this stack:**
 
-- **Capacitor** for iOS and Android native wrappers (see §3)
 - **Dexie or idb** for the offline write queue (see §7)
+- **PWA install-UX polish** — manifest, icons, Add-to-Home-Screen hints, safe-area handling (see §3.3)
 
 ### 5.2 Repo layout
 
 - `server/` — Express app, SQLite access, WebSocket handler, auth, migrations
 - `client/` — React app, components, stores, service worker config
-- `ios/`, `android/` — Capacitor native projects (our additions)
 - `docs/` — upstream docs; our docs live here too but prefixed `ours-*` to avoid clashes
 - `Dockerfile`, `docker-compose.yml` — production server deployment
 
@@ -217,28 +199,29 @@ Build order is deliberate. Each item should be shippable on its own and usable o
 
 Deploy upstream TREK unmodified via Docker Compose. Install as PWA on all our devices. Use it for one real trip. Capture pain points in `docs/ours-trial-notes.md`. Only then proceed.
 
-### Milestone 1 — Brand as 460 Trip Planner, add Capacitor wrappers
+### Milestone 1 — Brand as 460 Trip Planner + PWA install polish
 
-Why this is first after baseline: the native wrapper affects how we think about offline storage, native APIs, and the build pipeline. Doing it before feature work means every feature is built mobile-native from day one.
+Why this is first after baseline: branding affects every screen; install UX affects every device. Both are touched by everything that follows, and both are cheap to nail before feature work piles on top.
 
 **Scope:**
 
-- Rename app to "460 Trip Planner" throughout — `package.json` names, PWA manifest, page title, splash, in-app logo placements. Keep the technical package name / Docker image as `trek-460` or similar (short, filesystem-safe).
-- Add Capacitor (`@capacitor/core`, `@capacitor/cli`, `@capacitor/ios`, `@capacitor/android`), initialise, generate `ios/` and `android/` projects.
-- App icon and splash screen (design once, Capacitor generates all sizes).
-- Ensure the web app works inside the native WebView — most things "just work" but WebSocket URLs, CORS, and deep-link handling may need adjustment.
-- Wire up `@capacitor/app` for lifecycle events (pause/resume → trigger sync flush).
-- Build iOS via Xcode and get onto TestFlight internal testing.
-- Build Android APK; sideload to test devices.
-- Document the build process in `docs/ours-build-native.md`.
+- Rename app to "460 Trip Planner" throughout — `package.json` names, PWA manifest (`name`, `short_name`), page title, splash, in-app logo placements. Keep the technical package name / Docker image as `trek-460` or similar (short, filesystem-safe).
+- App icon set — design once, generate all sizes (192, 512, maskable, Apple touch icons). Wire into `vite-plugin-pwa` config.
+- Splash screen — `apple-mobile-web-app-status-bar-style`, theme_color, background_color. iOS Safari needs explicit splash images per device size.
+- **Add-to-Home-Screen hint banner** — first-visit one-time banner on iOS Safari mobile with the "tap Share → Add to Home Screen" instruction. Suppress on already-installed (`display-mode: standalone`).
+- **Safe-area handling** — `viewport-fit=cover`, `env(safe-area-inset-*)` padding on the navbar / tab bars / day-detail panel. Test on a real iPhone with a notch.
+- **Standalone-mode polish** — when launched from home screen (display-mode: standalone), suppress browser-only UI hints and ensure back-gestures work correctly.
+- Verify the manifest serves with the correct `start_url` and `scope` so the PWA opens to the dashboard, not to wherever the install was triggered from.
 
 **Distribution setup:**
 
-- Register Apple Developer Program account.
-- Create App Store Connect record for 460 Trip Planner (internal TestFlight only — no public App Store listing).
-- Android: decide on Play Store Internal Testing vs direct APK; default to direct APK for simplicity.
+- Nothing. No app store accounts, no signing, no Apple fees. Users open the app URL on their phone and tap Share → Add to Home Screen (iOS) or the install prompt (Android Chrome).
+- For trusted-couple distribution: send the URL by message; no invite tokens or TestFlight links needed.
 
-**Don't do yet:** push notifications, biometric unlock, any non-essential plugin. That's scope for a later milestone once we need them.
+**Don't do yet:**
+
+- Push notifications (defer until M9 or later — iOS PWA push is supported but adds VAPID + service worker complexity; not needed for daily planner use).
+- Native iOS Share Extension (would require Capacitor + Apple Developer fee — only revisit if "share to 460 from Photos.app" becomes a real bottleneck).
 
 ### Milestone 2 — Smart import from reservation documents and emails
 
@@ -329,10 +312,10 @@ Why this is first after baseline: the native wrapper affects how we think about 
 **Design sketch:**
 
 - New table `day_journals (day_id, content_markdown, updated_at, updated_by)`.
-- New table `day_photos (day_id, upload_id, caption, taken_at, position)` using TREK's existing uploads plus Capacitor's camera plugin on native.
+- New table `day_photos (day_id, upload_id, caption, taken_at, position)` using TREK's existing uploads. Camera capture on mobile via `<input type="file" accept="image/*" capture="environment">` (opens the native iOS / Android camera UI from inside the PWA — no plugin needed).
 - Rich-text editor on the day view (keep markdown as source of truth — portable, diffable, exports cleanly).
 - Timeline view: per trip, a scrollable "memoir mode" that renders days in sequence with photos and journal text, hiding the planning scaffolding.
-- Photos: drag-and-drop multiple on web, native camera picker on iOS/Android, client-side resize before upload, EXIF-preserved capture date.
+- Photos: drag-and-drop multiple on web, in-PWA camera capture on mobile, client-side resize before upload, EXIF-preserved capture date.
 - Photos must work offline — queued locally, uploaded when online (see §7).
 
 ### Milestone 7 — JSON export and import
@@ -393,16 +376,15 @@ If you think one of these has become relevant, raise it as a question, don't bui
 
 TREK's Workbox service worker caches map tiles, API GET responses, uploads, and static assets. **This is read-only caching.** It does nothing for writes. Mutations fail when offline. That's the gap we're filling.
 
-### 7.2 What Capacitor adds
+### 7.2 PWA-only constraints we accept
 
-On native iOS and Android, we get:
+We're not using Capacitor. The platform-specific things to know:
 
-- More generous persistent storage (no Safari-style PWA eviction).
-- `@capacitor/filesystem` for large file storage (full-size photos, offline bundles) — more reliable than IndexedDB blobs.
-- `@capacitor/network` for quicker online/offline signal.
-- Lifecycle hooks via `@capacitor/app` — trigger sync flush on app resume.
-
-On desktop PWA we rely on IndexedDB and the Background Sync API where available.
+- **Storage**: IndexedDB on every platform. iOS Safari may evict after ~7 days of non-use; Android Chrome and desktop browsers are more generous. Mitigation: surface a "Download for offline" action per trip that primes the cache, and offer the M7 offline-bundle export (`.zip` + standalone HTML viewer) as the no-server-required fallback.
+- **Network signal**: `navigator.onLine` plus a periodic ping to the API. Cheap, good enough.
+- **Lifecycle hooks for sync flush**: `visibilitychange` and `pagehide` events fire when the user backgrounds or closes the PWA. Use those to flush the queue best-effort.
+- **Background Sync API**: works in Android Chrome + desktop Chrome, NOT in iOS Safari. On iOS, the queue only drains while the PWA is in the foreground. "Open it when you're back online and it syncs" is the user-facing contract.
+- **Filesystem**: no native filesystem access. Large blobs (photo originals) go in IndexedDB. If a single trip's offline cache balloons past ~50MB on iOS, surface a "manage offline storage" UI before we hit eviction limits.
 
 ### 7.3 Architectural principles
 
@@ -414,17 +396,19 @@ On desktop PWA we rely on IndexedDB and the Background Sync API where available.
 
 ### 7.4 Implementation outline
 
-**Client (shared web + Capacitor):**
+**Client:**
 
 - IndexedDB via `idb` or `Dexie` mirrors the subset of server state we care about: trips the user is a member of, their days, places, reservations, journals, photos (thumbnails + refs), expenses.
-- On native, large files (photo originals, offline bundles) go to `@capacitor/filesystem` rather than IndexedDB.
+- Large blobs (photo originals, offline bundles) go in IndexedDB too — there's no separate filesystem to fall back to in PWA-only mode. Surface a storage-usage hint when a trip's cache passes ~50MB.
 - A **mutation queue** in IndexedDB: `{ id, endpoint, method, payload, created_at, attempts, last_error }`.
 - On every write, the app:
   1. Generates a mutation UUID.
   2. Applies the mutation optimistically to the local store.
   3. Enqueues it.
   4. If online, the queue processor POSTs it; on success, removes from queue and reconciles any server-returned canonical state.
-- A **sync worker** (in-page + Background Sync API on web; `@capacitor/app` resume hook on native) retries queued mutations with exponential backoff and a max attempt count.
+- A **sync worker** retries queued mutations with exponential backoff and a max attempt count. Drains via:
+  - **Background Sync API** where available (Android Chrome, desktop Chrome).
+  - **`visibilitychange` + foreground polling** on iOS Safari, where Background Sync isn't supported.
 - WebSocket messages drive real-time sync when online; when a WS message arrives for a record we have an unsent mutation on, flag potential conflict.
 
 **Server:**
@@ -433,10 +417,10 @@ On desktop PWA we rely on IndexedDB and the Background Sync API where available.
 - Add `updated_at` per record (most tables have this already) and `updated_by`.
 - Conflict endpoint: `GET /api/conflicts` returns records where the user has an unsynced local change and the server has moved on. Client shows a resolve-UI.
 
-**Service worker (web) and Capacitor runtime (native):**
+**Service worker:**
 
-- Extend current Workbox config to background-sync POST/PUT/DELETE to our mutation endpoints.
-- On native, use Capacitor's App lifecycle to trigger sync on resume.
+- Extend current Workbox config to background-sync POST/PUT/DELETE to our mutation endpoints (Background Sync API where the platform supports it; in-page foreground polling on iOS Safari).
+- Use `visibilitychange` and `pagehide` events to flush the queue best-effort when the user backgrounds or closes the PWA.
 - Ensure all data the user might want offline is pre-cached when they open a trip ("download for offline" button per trip to give explicit control over storage).
 
 ### 7.5 What each feature must respect
@@ -450,7 +434,7 @@ Every Milestone from 2 onwards must:
 
 ### 7.6 Features with offline-aware design notes
 
-- **Photo uploads in journals.** Native: store in filesystem, queue upload. Web: store blob in IndexedDB, warn on quota.
+- **Photo uploads in journals.** Store blob in IndexedDB, queue upload, warn on quota. In-PWA capture via `<input type="file" accept="image/*" capture="environment">` opens the native iOS / Android camera UI directly — no Capacitor plugin needed.
 - **Place search.** Requires network. Cache recent searches; show cached results offline with a "stale" badge.
 - **Map tiles.** Workbox already caches viewed tiles. When creating a trip, prompt "download map area for offline?" for the trip's bounding box.
 - **Weather.** Cache the last-fetched forecast per location; show staleness.
@@ -536,7 +520,7 @@ Document a checklist in `docs/ours-offline-prep.md`:
 - Components read from Zustand, not directly from fetch.
 - No direct `fetch()` or axios calls from components — go through the data layer that handles the mutation queue.
 - Tailwind for styling. No ad-hoc CSS files unless upstream already has one for that component.
-- Platform-specific code (e.g. Capacitor plugin calls) lives behind a thin abstraction so tests can mock it and web builds still work.
+- Platform-specific code (web APIs that vary across browsers, e.g. Background Sync vs visibilitychange polling) lives behind a thin abstraction so tests can mock it and behaviour stays consistent across iOS Safari / Android Chrome / desktop.
 
 ### 9.4 Naming
 
@@ -548,7 +532,7 @@ Document a checklist in `docs/ours-offline-prep.md`:
 
 - Every new interactive element needs keyboard focus handling and an accessible name.
 - Test any new UI at mobile width (375px minimum) on an actual phone before declaring done.
-- Respect safe areas (notches, home indicators) — Capacitor provides these as CSS env vars.
+- Respect safe areas (notches, home indicators) — use the standard `env(safe-area-inset-*)` CSS env vars with `viewport-fit=cover` in the HTML head.
 - Touch targets minimum 44×44 px.
 
 ### 9.6 Internationalisation
@@ -558,7 +542,6 @@ Upstream supports English and German. Keep our new strings in the i18n system ev
 ### 9.7 Secrets and config
 
 - Never hardcode API keys. They live in the admin panel settings (encrypted at rest via `ENCRYPTION_KEY`).
-- Signing certs, provisioning profiles, and keystores must NEVER be committed. Keep them in a password manager / secrets vault and reference by path in build scripts.
 - `.env.example` stays in sync with any new env vars.
 
 ---
@@ -582,28 +565,6 @@ cd client && npm run dev
 npm run lint
 npm run typecheck
 npm test
-```
-
-### Capacitor
-
-```bash
-# First-time setup (after installing @capacitor/core, cli, ios, android)
-npx cap init "460 Trip Planner" com.fourhundredsixty.tripplanner
-npx cap add ios
-npx cap add android
-
-# After a web build, copy to native
-npm run build --workspace=client
-npx cap copy
-npx cap sync   # copy + update plugins
-
-# Open in native IDE
-npx cap open ios       # Xcode
-npx cap open android   # Android Studio
-
-# Live reload on device (dev only)
-npx cap run ios --livereload --external
-npx cap run android --livereload --external
 ```
 
 ### Database
@@ -656,9 +617,9 @@ Useful first-messages when beginning a new Claude Code session. Paste one, adjus
 
 > We're starting Milestone N from CLAUDE.md §6. Read the relevant existing code, then produce a short plan: files to touch, schema changes, API endpoints, UI components, tests. Include open questions. Don't write code until I approve the plan.
 
-### Capacitor setup session (Milestone 1)
+### Branding + PWA polish session (Milestone 1)
 
-> We're doing Milestone 1 from CLAUDE.md §6. Walk me through the steps to brand as 460 Trip Planner and add Capacitor wrappers, one small commit at a time. Pause between each so I can verify it builds.
+> We're doing Milestone 1 from CLAUDE.md §6. Walk me through the steps to brand as 460 Trip Planner and polish the PWA install experience, one small commit at a time. Pause between each so I can verify it builds and the home-screen icon updates.
 
 ### Resuming mid-feature
 
@@ -678,7 +639,7 @@ Useful first-messages when beginning a new Claude Code session. Paste one, adjus
 
 - **AGPL-3.0 licence:** if we ever let non-household people use our instance over a network, we must publish our source modifications. Keep the fork public on GitHub from day one to avoid accidentally tripping this later.
 - **Upstream is alive.** The author accepts contributions and ships regular releases. Good PRs back upstream reduce our maintenance tax.
-- **Apple Developer account renewal is annual** — set a calendar reminder. If it lapses, TestFlight builds stop working.
+- **PWA-only is the call.** No Capacitor, no Apple Developer fee, no Xcode (see §3 for the full reasoning). If a future feature genuinely needs a native iOS Share Extension or richer background sync, revisit then — but don't quietly add Capacitor back without a real-world need.
 - **Offline-first is the hardest engineering in this project.** Budget 2–3x whatever the initial estimate is. Ship a minimal version and expand.
-- **Capacitor native wrappers need re-signing on cert renewal.** Document the signing process in `docs/ours-build-native.md` so future-me isn't debugging it under pressure the week before a trip.
-- **Don't let scope creep.** The Tier 3 / out-of-scope list in §6 is there for a reason. Revisit after every milestone, but don't quietly expand it.
+- **iOS PWA storage eviction is real.** Surface offline-cache priming + the M7 export bundle prominently — they're our insurance against "opened the app mid-trip after a week of inactivity and the data was gone".
+- **Don't let scope creep.** The out-of-scope list in §6 is there for a reason. Revisit after every milestone, but don't quietly expand it.

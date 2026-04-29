@@ -366,6 +366,26 @@ function LocationTracker() {
   )
 }
 
+// [460-fork] M6 follow-up — marker layer for geotagged photos.
+// Each photo plotted on the trip map with a small camera icon; click
+// the marker to bubble back to the parent (TripPlannerPage navigates
+// to the photo's day so the user can see it in the photo grid).
+const photoIcon = L.divIcon({
+  className: '',
+  html: '<div style="width:22px;height:22px;border-radius:50%;background:#8b3a1a;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;color:white;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+})
+
+export interface MapPhotoMarker {
+  id: number
+  day_id: number
+  lat: number
+  lng: number
+  caption: string | null
+  original_name: string
+}
+
 export const MapView = memo(function MapView({
   places = [],
   dayPlaces = [],
@@ -384,6 +404,9 @@ export const MapView = memo(function MapView({
   rightWidth = 0,
   hasInspector = false,
   hasDayDetail = false,
+  // [460-fork] M6 follow-up — geotagged-photo marker layer
+  photos = [],
+  onPhotoClick = undefined,
 }) {
   // Dynamic padding: account for sidebars + bottom inspector + day detail panel
   const paddingOpts = useMemo(() => {
@@ -569,6 +592,21 @@ export const MapView = memo(function MapView({
           )
         } catch { return null }
       })}
+      {/* [460-fork] M6 follow-up — geotagged-photo marker layer.
+          Click bubbles up to TripPlannerPage (typically: navigate to
+          the photo's day so the user can see it in the photo grid). */}
+      {photos.map((p) => (
+        <Marker
+          key={`photo-${p.id}`}
+          position={[p.lat, p.lng]}
+          icon={photoIcon}
+          eventHandlers={onPhotoClick ? { click: () => onPhotoClick(p) } : undefined}
+        >
+          <Tooltip direction="top" offset={[0, -10]} opacity={0.95}>
+            {p.caption || p.original_name}
+          </Tooltip>
+        </Marker>
+      ))}
     </MapContainer>
   )
 })

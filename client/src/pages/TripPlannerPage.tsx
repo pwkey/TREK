@@ -86,6 +86,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
   const files = useTripStore(s => s.files)
   const selectedDayId = useTripStore(s => s.selectedDayId)
   const isLoading = useTripStore(s => s.isLoading)
+  // [460-fork] M6 follow-up — geotagged photos for the trip-level map.
+  const dayPhotosMap = useTripStore(s => s.dayPhotos)
   // Actions — stable references, don't cause re-renders
   const tripActions = useRef(useTripStore.getState()).current
   const can = useCanDo()
@@ -494,6 +496,31 @@ export default function TripPlannerPage(): React.ReactElement | null {
     return da.map(a => a.place).filter(p => p?.lat && p?.lng)
   }, [selectedDayId, assignments])
 
+  // [460-fork] M6 follow-up — make sure every day's photos are loaded
+  // so the trip-level map can show all geotagged photos at once. Per-
+  // day fetch deduplicates inside the slice, so re-firing here is
+  // cheap on subsequent renders.
+  useEffect(() => {
+    days.forEach(d => { void tripActions.loadDayPhotos?.(tripId, d.id) })
+  }, [tripId, days, tripActions])
+
+  // [460-fork] M6 follow-up — flat list of all geotagged photos on the
+  // trip, fed to MapView's photo-marker layer. We pull from the entire
+  // dayPhotos map (not just the selected day) so the trip-level Plan
+  // tab shows every pin at once, like a photographic walking trail.
+  const mapPhotos = useMemo(() => {
+    return Object.values(dayPhotosMap).flat()
+      .filter(p => p.lat !== null && p.lng !== null)
+      .map(p => ({
+        id: p.id,
+        day_id: p.day_id,
+        lat: p.lat as number,
+        lng: p.lng as number,
+        caption: p.caption,
+        original_name: p.original_name,
+      }))
+  }, [dayPhotosMap])
+
   const mapTileUrl = settings.map_tile_url || 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
   const defaultCenter = [settings.default_lat || 48.8566, settings.default_lng || 2.3522]
   const defaultZoom = settings.default_zoom || 10
@@ -618,6 +645,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
               rightWidth={rightCollapsed ? 0 : rightWidth}
               hasInspector={!!selectedPlace}
               hasDayDetail={!!showDayDetail && !selectedPlace}
+              photos={mapPhotos}
+              onPhotoClick={(p: { day_id: number }) => tripActions.setSelectedDay(p.day_id)}
             />
 
 

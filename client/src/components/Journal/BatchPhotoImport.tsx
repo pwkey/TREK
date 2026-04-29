@@ -23,8 +23,15 @@ import { Upload, X, AlertTriangle, CheckCircle, Image as ImageIcon } from 'lucid
 import { useTripStore } from '../../store/tripStore'
 import { useToast } from '../shared/Toast'
 import { extractMetadata, isHeic } from '../../lib/imageProcessing'
+import { mapsApi } from '../../api/client'
 import type { Day } from '../../types'
 import type { DayPhoto } from '../../store/slices/dayPhotosSlice'
+
+/** Run reverse-geocode against /api/maps/reverse for each prepared
+ *  file with GPS, with a small concurrency cap so we don't hammer
+ *  Nominatim. The server already proxies + UA-stamps the requests;
+ *  the client just needs to be polite. */
+const GEOCODE_CONCURRENCY = 3
 
 interface BatchPhotoImportProps {
   tripId: number | string
@@ -49,6 +56,17 @@ interface PreparedFile {
   status: 'pending' | 'uploading' | 'done' | 'error' | 'skipped'
   errorMessage?: string
   thumbnailUrl?: string
+  /** GPS lat/lng cached so we can fire reverse-geocode after the
+   *  preview opens (keeps the analysing phase quick — geocoding
+   *  happens in the background while the user is reviewing). */
+  lat: number | null
+  lng: number | null
+  /** Auto-filled from reverse geocode when available; user can edit
+   *  inline before confirming. */
+  caption: string
+  /** Tracks the geocode lookup state so we can show "Looking up
+   *  location…" while in flight. */
+  geocodeStatus: 'pending' | 'looking-up' | 'done' | 'no-gps' | 'failed'
 }
 
 export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoImportProps) {
@@ -119,16 +137,51 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
           unsupported: null,
           status: isDup ? 'skipped' : 'pending',
           thumbnailUrl: URL.createObjectURL(file),
+          lat: meta.lat,
+          lng: meta.lng,
+          caption: '',
+          geocodeStatus: meta.lat !== null && meta.lng !== null ? 'pending' : 'no-gps',
         })
       }
       setItems(prepared)
       setPhase('preview')
+      // Fire reverse-geocode in the background so the preview is
+      // interactive immediately and captions populate as they
+      // resolve. Skipped + duplicate rows are still geocoded — the
+      // user can use the caption text as a hint when deciding
+      // whether to override the skip.
+      void runGeocodeQueue(prepared)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not read files'
       toast.error(msg)
     } finally {
       setAnalysing(false)
     }
+  }
+
+  /** Concurrency-capped reverse-geocode runner. Keeps up to
+   *  GEOCODE_CONCURRENCY requests in flight at once and updates each
+   *  row as the result lands. Rows without GPS are marked 'no-gps'
+   *  immediately so the UI doesn't spin on them forever. */
+  const runGeocodeQueue = async (prepared: PreparedFile[]) => {
+    const queue = prepared
+      .map((row, idx) => ({ row, idx }))
+      .filter(({ row }) => row.lat !== null && row.lng !== null)
+    let next = 0
+    const worker = async () => {
+      while (next < queue.length) {
+        const cur = queue[next++]
+        updateRow(cur.idx, { geocodeStatus: 'looking-up' })
+        try {
+          const result = await mapsApi.reverse(cur.row.lat as number, cur.row.lng as number)
+          const cap = (result?.name || result?.address || '').toString().trim()
+          updateRow(cur.idx, { caption: cap, geocodeStatus: 'done' })
+        } catch {
+          updateRow(cur.idx, { geocodeStatus: 'failed' })
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: GEOCODE_CONCURRENCY }, worker))
   }
 
   const updateRow = (idx: number, patch: Partial<PreparedFile>) => {
@@ -145,7 +198,7 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
       if (item.selectedDayId == null) { updateRow(i, { status: 'skipped', errorMessage: 'no day assigned' }); i++; continue }
       updateRow(i, { status: 'uploading' })
       try {
-        await uploadDayPhoto(tripId, item.selectedDayId, item.file)
+        await uploadDayPhoto(tripId, item.selectedDayId, item.file, { caption: item.caption.trim() || undefined })
         updateRow(i, { status: 'done' })
       } catch (err: unknown) {
         updateRow(i, { status: 'error', errorMessage: err instanceof Error ? err.message : 'upload failed' })
@@ -195,21 +248,38 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
 
             <div style={{ overflowY: 'auto', flex: 1, marginBottom: 12, paddingRight: 4 }}>
               {items.map((it, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-secondary)', marginBottom: 6 }}>
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '44px 1fr auto', gap: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-secondary)', marginBottom: 6, alignItems: 'center' }}>
                   {it.thumbnailUrl ? (
-                    <img src={it.thumbnailUrl} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                    <img src={it.thumbnailUrl} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6 }} />
                   ) : (
-                    <div style={{ width: 44, height: 44, borderRadius: 6, background: 'var(--bg-tertiary)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 6, background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <ImageIcon size={16} style={{ color: 'var(--text-faint)' }} />
                     </div>
                   )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.file.name}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                       {it.takenAt ? new Date(it.takenAt).toLocaleString() : 'no capture date'}
                       {' · '}
                       {(it.file.size / (1024 * 1024)).toFixed(1)} MB
                     </div>
+                    {/* Caption row — only meaningful when the upload will
+                        actually run, so hidden for unsupported / duplicate. */}
+                    {!it.unsupported && !it.isDuplicate && (
+                      <input
+                        type="text"
+                        value={it.caption}
+                        onChange={e => updateRow(idx, { caption: e.target.value })}
+                        placeholder={
+                          it.geocodeStatus === 'looking-up' ? 'Looking up location…' :
+                          it.geocodeStatus === 'no-gps' ? 'Caption (no GPS — manual only)' :
+                          it.geocodeStatus === 'failed' ? 'Caption (location lookup failed — type your own)' :
+                          'Caption'
+                        }
+                        disabled={phase !== 'preview'}
+                        style={{ marginTop: 4, width: '100%', padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border-primary)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 11, fontFamily: 'inherit', boxSizing: 'border-box' }}
+                      />
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
                     {it.unsupported ? (
@@ -300,6 +370,10 @@ function makeRow(file: File, takenAt: string | null, dayId: number | null, isDup
     isDuplicate: isDup,
     unsupported,
     status: unsupported || isDup ? 'skipped' : 'pending',
+    lat: null,
+    lng: null,
+    caption: '',
+    geocodeStatus: 'no-gps',
   }
 }
 

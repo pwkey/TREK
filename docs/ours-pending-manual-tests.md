@@ -6,7 +6,30 @@ Last updated: 2026-04-29
 
 ---
 
-## M6 follow-up — Editable photo-route waypoints (uncommitted)
+## M6 follow-up — GPX track upload + render (uncommitted)
+
+**Why:** the highest-fidelity backfit option — upload the recorded GPS track from a phone / watch / Strava, render it as the actual path. Multiple tracks per trip; each renders as a purple polyline alongside the photo route.
+
+**Steps:**
+1. Open a trip on the Plan tab. Bottom-right of the map: a **Route** icon button (above the layers button). Click → popover opens.
+2. Click **Upload .gpx file** → pick any `.gpx` file. The track parses, stores, and a purple polyline appears on the map. Hover the line → tooltip shows the track's name + point count + km.
+3. Upload a second file. The popover lists both with eye-toggle, rename (✏️), delete (🗑) controls. The bottom-right button shows a small purple badge with the count.
+4. Click the eye icon to hide a track → polyline disappears immediately. The hidden state persists in localStorage for this device only (verify by reloading).
+5. Click the ✏️ icon → inline rename input appears. Type a new name + Enter → updates server-side.
+6. Open the trip in a second tab → upload a track in tab A → tab B receives via WebSocket and renders within ~1s.
+7. Delete a track in tab A → confirm dialog → polyline removed in both tabs.
+8. Delete the trip → all its tracks cascade-delete server-side (verify via SQL: `SELECT * FROM gpx_tracks WHERE trip_id = X;`).
+9. Edge cases:
+   - Upload a non-GPX file → 400 with sensible error in the popover.
+   - Upload an empty GPX (no `<trkpt>` and no `<rtept>`) → 400.
+   - Upload a >5MB file → multer rejects.
+10. Auto-fit: open a trip with NO photos and NO places, but ONE GPX track — the map should auto-frame the track's bounds (not stay at Sydney default).
+
+**Server tests:** GPX-001 to GPX-010 in `tests/integration/gpxTracks.test.ts` cover trk + rte parsing, naming precedence, CRUD, permissions, and trip-cascade.
+
+---
+
+## M6 follow-up — Editable photo-route waypoints (committed `e77168c`)
 
 **Backfit story:** override a road-snapped leg by inserting waypoints to force the route through the actual road taken (or to manually trace a hike/boat path that OSRM doesn't know about). Per-segment, persists per-account, syncs across devices via WebSocket, queues for offline replay via the existing M5 mutation queue.
 

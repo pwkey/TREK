@@ -30,6 +30,7 @@ import dayNotesRoutes from './routes/dayNotes';
 import journalRoutes from './routes/journals'; // [460-fork] Milestone 6 slice 1
 import dayPhotosRoutes from './routes/dayPhotos'; // [460-fork] Milestone 6 slice 2
 import photoRouteOverridesRoutes from './routes/photoRouteOverrides'; // [460-fork] M6 follow-up
+import gpxTracksRoutes from './routes/gpxTracks'; // [460-fork] M6 follow-up
 import exportRoutes from './routes/export'; // [460-fork] Milestone 7 slice 1
 import importRoutes from './routes/import'; // [460-fork] Milestone 7 slice 3
 import pollsRoutes from './routes/polls'; // [460-fork] Milestone 9
@@ -204,6 +205,7 @@ export function createApp(): express.Application {
   app.use('/api/trips/:tripId/days/:dayId/journal', journalRoutes); // [460-fork] Milestone 6 slice 1
   app.use('/api/trips/:tripId/days/:dayId/photos', dayPhotosRoutes); // [460-fork] Milestone 6 slice 2
   app.use('/api/trips/:tripId/photo-route-overrides', photoRouteOverridesRoutes); // [460-fork] M6 follow-up
+  app.use('/api/trips/:tripId/gpx-tracks', gpxTracksRoutes); // [460-fork] M6 follow-up
   app.use('/api/trips', exportRoutes); // [460-fork] Milestone 7 slice 1 — exposes /:tripId/export
   app.use('/api/polls', pollsRoutes); // [460-fork] Milestone 9
   app.get('/api/health', (_req: Request, res: Response) => res.json({ status: 'ok' }));

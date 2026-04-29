@@ -9,6 +9,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { mapsApi } from '../../api/client'
 import { getCategoryIcon, CATEGORY_ICON_MAP } from '../shared/categoryIcons'
 import { PhotoRouteLayer } from './PhotoRouteLayer'
+import { GpxTracksLayer } from './GpxTracksLayer'
 import { DEFAULT_TILE_URL } from './tilePresets'
 
 function categoryIconSvg(iconName: string | null | undefined, size: number): string {
@@ -169,11 +170,14 @@ interface BoundsControllerProps {
   // trip with photos but no places still frames the map sensibly
   // instead of sitting at the upstream Paris default.
   photos?: { lat: number; lng: number }[]
+  // [460-fork] M6 follow-up — GPS-track points also count for bounds
+  // so a trip with only an uploaded GPX track still frames sensibly.
+  gpxTrackPoints?: [number, number][]
   fitKey: number
   paddingOpts: Record<string, number>
 }
 
-function BoundsController({ places, photos = [], fitKey, paddingOpts, hasDayDetail }: BoundsControllerProps) {
+function BoundsController({ places, photos = [], gpxTrackPoints = [], fitKey, paddingOpts, hasDayDetail }: BoundsControllerProps) {
   const map = useMap()
   const prevFitKey = useRef(-1)
 
@@ -183,6 +187,7 @@ function BoundsController({ places, photos = [], fitKey, paddingOpts, hasDayDeta
     const points: [number, number][] = [
       ...places.map(p => [p.lat, p.lng] as [number, number]),
       ...photos.map(p => [p.lat, p.lng] as [number, number]),
+      ...gpxTrackPoints,
     ]
     if (points.length === 0) return
     try {
@@ -194,7 +199,7 @@ function BoundsController({ places, photos = [], fitKey, paddingOpts, hasDayDeta
         }
       }
     } catch {}
-  }, [fitKey, places, photos, paddingOpts, map, hasDayDetail])
+  }, [fitKey, places, photos, gpxTrackPoints, paddingOpts, map, hasDayDetail])
 
   return null
 }
@@ -431,6 +436,9 @@ export const MapView = memo(function MapView({
   photoRouteOverrides = {},
   onPhotoRouteSetOverride = undefined,
   onPhotoRouteClearOverride = undefined,
+  // [460-fork] M6 follow-up — visible GPS tracks (subset of all
+  // tracks; visibility is managed by the parent's GpxTracksControl).
+  gpxTracks = [],
 }) {
   // Dynamic padding: account for sidebars + bottom inspector + day detail panel
   const paddingOpts = useMemo(() => {
@@ -563,7 +571,14 @@ export const MapView = memo(function MapView({
       />
 
       <MapController center={center} zoom={zoom} />
-      <BoundsController places={dayPlaces.length > 0 ? dayPlaces : places} photos={photos} fitKey={fitKey} paddingOpts={paddingOpts} hasDayDetail={hasDayDetail} />
+      <BoundsController
+        places={dayPlaces.length > 0 ? dayPlaces : places}
+        photos={photos}
+        gpxTrackPoints={gpxTracks.flatMap((t: { points: [number, number][] }) => t.points)}
+        fitKey={fitKey}
+        paddingOpts={paddingOpts}
+        hasDayDetail={hasDayDetail}
+      />
       <SelectionController places={places} selectedPlaceId={selectedPlaceId} dayPlaces={dayPlaces} paddingOpts={paddingOpts} />
       <MapClickHandler onClick={onMapClick} />
       <MapContextMenuHandler onContextMenu={onMapContextMenu} />
@@ -616,6 +631,9 @@ export const MapView = memo(function MapView({
           )
         } catch { return null }
       })}
+      {/* [460-fork] M6 follow-up — uploaded GPS tracks. Drawn FIRST
+          (so they sit underneath the photo route + markers). */}
+      <GpxTracksLayer tracks={gpxTracks} />
       {/* [460-fork] M6 follow-up — chronological photo-route overlay.
           Drawn UNDER the photo markers so the markers stay clickable. */}
       <PhotoRouteLayer

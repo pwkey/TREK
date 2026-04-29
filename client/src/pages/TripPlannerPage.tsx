@@ -7,6 +7,7 @@ import { useSettingsStore } from '../store/settingsStore'
 import { MapView } from '../components/Map/MapView'
 import { DEFAULT_TILE_URL } from '../components/Map/tilePresets'
 import { MapLayersControl } from '../components/Map/MapLayersControl'
+import { GpxTracksControl } from '../components/Map/GpxTracksControl'
 import { getCached, fetchPhoto } from '../services/photoService'
 import DayPlanSidebar from '../components/Planner/DayPlanSidebar'
 import PlacesSidebar from '../components/Planner/PlacesSidebar'
@@ -92,6 +93,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
   const dayPhotosMap = useTripStore(s => s.dayPhotos)
   // [460-fork] M6 follow-up — per-segment waypoint overrides.
   const photoRouteOverridesMap = useTripStore(s => s.photoRouteOverrides)
+  // [460-fork] M6 follow-up — uploaded GPS tracks for the trip.
+  const gpxTracks = useTripStore(s => s.gpxTracks)
   // Actions — stable references, don't cause re-renders
   const tripActions = useRef(useTripStore.getState()).current
   const can = useCanDo()
@@ -183,6 +186,28 @@ export default function TripPlannerPage(): React.ReactElement | null {
     snapped: number
     nonRoad: number
   }>({ state: 'idle', total: 0, snapped: 0, nonRoad: 0 })
+
+  // [460-fork] M6 follow-up — per-device hidden-track set, persisted in
+  // localStorage. Stored as a list of HIDDEN ids so freshly-uploaded
+  // tracks default to visible without needing a migration entry.
+  const gpxHiddenStorageKey = `460-gpx-hidden-${tripId}`
+  const [gpxHiddenIds, setGpxHiddenIds] = useState<Set<number>>(() => {
+    try {
+      const raw = localStorage.getItem(gpxHiddenStorageKey)
+      return raw ? new Set(JSON.parse(raw) as number[]) : new Set<number>()
+    } catch { return new Set<number>() }
+  })
+  useEffect(() => {
+    try { localStorage.setItem(gpxHiddenStorageKey, JSON.stringify(Array.from(gpxHiddenIds))) } catch { /* quota — silent */ }
+  }, [gpxHiddenStorageKey, gpxHiddenIds])
+  const visibleGpxTracks = useMemo(
+    () => gpxTracks.filter(t => !gpxHiddenIds.has(t.id)),
+    [gpxTracks, gpxHiddenIds],
+  )
+  const visibleGpxIds = useMemo(
+    () => new Set(visibleGpxTracks.map(t => t.id)),
+    [visibleGpxTracks],
+  )
 
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
   useEffect(() => {
@@ -567,10 +592,10 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
   // [460-fork] M6 follow-up — auto-fit the map the first time there's
   // anything geocoded to show. Without this the map stays at the
-  // configured default centre even after photos / places load,
-  // because BoundsController only re-fits when fitKey ticks (and
-  // upstream only ticks fitKey on day-select).
-  const totalPoints = mapPlaces.length + mapPhotos.length
+  // configured default centre even after photos / places / tracks
+  // load, because BoundsController only re-fits when fitKey ticks
+  // (and upstream only ticks fitKey on day-select).
+  const totalPoints = mapPlaces.length + mapPhotos.length + visibleGpxTracks.reduce((n, t) => n + t.points.length, 0)
   const didAutoFit = useRef(false)
   useEffect(() => {
     if (didAutoFit.current) return
@@ -705,6 +730,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
               photos={mapPhotos}
               photoRouteMode={photoRouteMode}
               onPhotoRouteSnapStatus={setPhotoRouteSnapStatus}
+              gpxTracks={visibleGpxTracks}
               photoRouteOverrides={photoRouteOverridesForLayer}
               onPhotoRouteSetOverride={(fromId: number, toId: number, waypoints: [number, number][]) => {
                 void tripActions.setPhotoRouteOverride(tripId, fromId, toId, waypoints)
@@ -778,6 +804,25 @@ export default function TripPlannerPage(): React.ReactElement | null {
             <MapLayersControl
               currentTileUrl={mapTileUrl}
               onPick={(url) => { void useSettingsStore.getState().updateSetting('map_tile_url', url) }}
+            />
+
+            {/* [460-fork] M6 follow-up — uploaded GPS tracks. Same
+                bottom-right corner, stacked above the layers button. */}
+            <GpxTracksControl
+              tripId={tripId}
+              tracks={gpxTracks}
+              visibleIds={visibleGpxIds}
+              onToggleVisible={(id) => {
+                setGpxHiddenIds(prev => {
+                  const next = new Set(prev)
+                  if (next.has(id)) next.delete(id)
+                  else next.add(id)
+                  return next
+                })
+              }}
+              onUpload={async (file) => { await tripActions.uploadGpxTrack(tripId, file) }}
+              onRename={async (id, name) => { await tripActions.renameGpxTrack(tripId, id, name) }}
+              onDelete={async (id) => { await tripActions.deleteGpxTrack(tripId, id) }}
             />
 
             <div className="hidden md:block" style={{ position: 'absolute', left: 10, top: 10, bottom: 10, zIndex: 20 }}>

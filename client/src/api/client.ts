@@ -561,6 +561,26 @@ export const dayPhotosApi = {
     apiClient.put(`/trips/${tripId}/days/${dayId}/photos/reorder`, { orderedIds }).then(r => r.data),
 }
 
+// [460-fork] M6 follow-up — uploaded GPS tracks (.gpx) attached to a trip.
+// One track is one polyline; multiple tracks can render simultaneously
+// alongside the auto-derived photo route.
+export const gpxTracksApi = {
+  list: (tripId: number | string) =>
+    apiClient.get(`/trips/${tripId}/gpx-tracks`).then(r => r.data),
+  upload: (tripId: number | string, file: File, name?: string) => {
+    const fd = new FormData()
+    fd.append('file', file, file.name)
+    if (name) fd.append('name', name)
+    return apiClient.post(`/trips/${tripId}/gpx-tracks`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
+  rename: (tripId: number | string, id: number, name: string) =>
+    apiClient.patch(`/trips/${tripId}/gpx-tracks/${id}`, { name }).then(r => r.data),
+  remove: (tripId: number | string, id: number) =>
+    apiClient.delete(`/trips/${tripId}/gpx-tracks/${id}`).then(r => r.data),
+}
+
 // [460-fork] M6 follow-up — per-segment photo-route waypoint overrides.
 // All mutations get auto-queued for offline replay via the response
 // interceptor at the top of this file.

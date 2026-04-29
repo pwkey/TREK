@@ -186,6 +186,22 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
         delete next[key]
         return { photoRouteOverrides: next }
       }
+
+      // [460-fork] M6 follow-up — uploaded GPS tracks (.gpx).
+      case 'gpxTrack:created':
+      case 'gpxTrack:updated': {
+        const track = payload.track as import('./gpxTracksSlice').GpxTrack
+        const exists = state.gpxTracks.some(t => t.id === track.id)
+        return {
+          gpxTracks: exists
+            ? state.gpxTracks.map(t => t.id === track.id ? track : t)
+            : [...state.gpxTracks, track],
+        }
+      }
+      case 'gpxTrack:deleted': {
+        const id = payload.id as number
+        return { gpxTracks: state.gpxTracks.filter(t => t.id !== id) }
+      }
       case 'day:deleted': {
         const removedDayId = String(payload.dayId)
         const newAssignments = { ...state.assignments }

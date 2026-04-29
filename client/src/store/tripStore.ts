@@ -12,6 +12,7 @@ import { createFilesSlice } from './slices/filesSlice'
 import { createJournalSlice } from './slices/journalSlice' // [460-fork] Milestone 6 slice 1
 import { createDayPhotosSlice } from './slices/dayPhotosSlice' // [460-fork] Milestone 6 slice 2
 import { createPhotoRouteOverridesSlice } from './slices/photoRouteOverridesSlice' // [460-fork] M6 follow-up
+import { createGpxTracksSlice } from './slices/gpxTracksSlice' // [460-fork] M6 follow-up
 import { handleRemoteEvent } from './slices/remoteEventHandler'
 import { readTripSnapshot, writeTripSnapshot } from '../db/localDb' // [460-fork] Milestone 5
 import type {
@@ -31,6 +32,7 @@ import type { FilesSlice } from './slices/filesSlice'
 import type { JournalSlice } from './slices/journalSlice' // [460-fork] Milestone 6 slice 1
 import type { DayPhotosSlice } from './slices/dayPhotosSlice' // [460-fork] Milestone 6 slice 2
 import type { PhotoRouteOverridesSlice } from './slices/photoRouteOverridesSlice' // [460-fork] M6 follow-up
+import type { GpxTracksSlice } from './slices/gpxTracksSlice' // [460-fork] M6 follow-up
 
 export interface TripStoreState
   extends PlacesSlice,
@@ -43,7 +45,8 @@ export interface TripStoreState
     FilesSlice,
     JournalSlice,
     DayPhotosSlice,
-    PhotoRouteOverridesSlice {
+    PhotoRouteOverridesSlice,
+    GpxTracksSlice {
   trip: Trip | null
   days: Day[]
   places: Place[]
@@ -142,11 +145,16 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
         // are keyed by photo IDs (also not tripId), and a stale entry
         // would corrupt the new trip's route.
         photoRouteOverrides: {},
+        // [460-fork] M6 follow-up — and reset uploaded GPX tracks so the
+        // previous trip's recorded tracks don't leak onto the new map.
+        gpxTracks: [],
       })
 
-      // [460-fork] M6 follow-up — load overrides for the new trip so
-      // the photo-route layer has them by the time it renders.
+      // [460-fork] M6 follow-up — load overrides + GPX tracks for the
+      // new trip so the photo-route layer and GpxTracksLayer both have
+      // their data by the time they render.
       void (get() as TripStoreState).loadPhotoRouteOverrides(tripId).catch(() => {/* silent */})
+      void (get() as TripStoreState).loadGpxTracks(tripId).catch(() => {/* silent */})
 
       // [460-fork] Milestone 5 — write-through to the local mirror so the
       // next cold start (or an offline reload) can hydrate from it.
@@ -231,6 +239,7 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
   ...createJournalSlice(set, get),
   ...createDayPhotosSlice(set, get),
   ...createPhotoRouteOverridesSlice(set, get),
+  ...createGpxTracksSlice(set),
 }))
 
 // [460-fork] Milestone 5 — local-mirror adapters --------------------------

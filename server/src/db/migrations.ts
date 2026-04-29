@@ -1182,6 +1182,27 @@ function runMigrations(db: Database.Database): void {
           ON photo_route_overrides(trip_id);
       `);
     },
+    // [460-fork] M6 follow-up — uploaded GPS tracks (GPX files) attached
+    // to a trip. Each track is the recorded path from a phone / watch /
+    // Strava etc., stored as a JSON list of [lat, lng] pairs (timestamps
+    // dropped at parse time for now — pure polyline rendering). Multiple
+    // tracks per trip; trip cascade on delete; the user can rename and
+    // toggle visibility client-side.
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS gpx_tracks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          points_json TEXT NOT NULL,
+          point_count INTEGER NOT NULL DEFAULT 0,
+          distance_m REAL NOT NULL DEFAULT 0,
+          uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_gpx_tracks_trip ON gpx_tracks(trip_id);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

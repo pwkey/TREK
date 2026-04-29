@@ -20,6 +20,32 @@ Last updated: 2026-04-29
 
 ---
 
+## M6 follow-up — GPS extraction fix + batch photo import (committed `cc73b42`)
+
+**Setup:** the `Testing/trip photos/` folder has 9 Samsung-shot JPEGs + 1 MP4. The trip you import them into needs days that cover at least some of the July-August 2022 capture dates so auto-assignment has something to match.
+
+**GPS extraction:**
+1. Upload a single photo via the per-day Photo grid Upload button (existing flow).
+2. After upload, the 📍 chip should appear on the thumbnail. Hover → tooltip shows `Geotagged: -33.78xxx, 151.28xxx · Altitude: ~70m · Camera: samsung SM-G973F`.
+3. Cross-check via DB:
+   ```
+   cd server
+   node -e "const db=require('better-sqlite3')('data/travel.db'); console.log(db.prepare('SELECT id, lat, lng, altitude, camera FROM day_photos ORDER BY id DESC LIMIT 3').all());"
+   ```
+   `lat` and `lng` should be non-null.
+
+**Batch import:**
+4. In the day-plan sidebar header, click the new **Images** icon (sits between the existing icons and Export buttons).
+5. Drop the whole `Testing/trip photos/` folder OR multi-select all files.
+6. Preview should show:
+   - 9 JPEGs with thumbnails, capture timestamps, and auto-assigned days.
+   - The MP4 with status "video files not yet supported · skip".
+   - Photos already in the trip from the GPS-extraction test above with status "already imported · skip".
+7. Override a day-assignment via the dropdown on one row — confirm it sticks.
+8. Click **Import N photos** → progress indicator advances per-file → photos appear in their assigned days' grids when done.
+
+---
+
 ## M7 round-trip end-to-end (export + import)
 
 You verified slice 7.5 (the standalone viewer) but the full `export → import` round-trip and the `/polls` deep-link weren't manually walked through.

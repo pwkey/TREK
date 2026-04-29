@@ -128,6 +128,13 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
         tags: tagsData.tags,
         categories: categoriesData.categories,
         isLoading: false,
+        // [460-fork] M6 follow-up — reset day-keyed maps so a previous
+        // trip's photos / journals don't leak into the new one. Both
+        // are keyed by dayId (not tripId), so without this they
+        // accumulate across navigations and can falsely trigger the
+        // batch-import duplicate check or surface stale memoir data.
+        dayPhotos: {},
+        dayJournals: {},
       })
 
       // [460-fork] Milestone 5 — write-through to the local mirror so the

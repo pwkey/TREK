@@ -12,8 +12,9 @@
 //      photo on the trip.
 //   5. Show preview matrix; user confirms or adjusts per-row day
 //      assignment.
-//   6. Sequential upload (re-uses uploadDayPhoto on the slice) with
-//      progress indicator.
+//   6. Concurrent upload (re-uses uploadDayPhoto on the slice) with
+//      a bounded worker pool + visual progress bar. Uploads complete
+//      out-of-order so the bar tracks completed-count, not index.
 //
 // Out of scope here: videos (the user has one in their batch — we
 // surface it as "skipped: video files not yet supported"; M6 §6 marks
@@ -32,6 +33,11 @@ import type { DayPhoto } from '../../store/slices/dayPhotosSlice'
  *  Nominatim. The server already proxies + UA-stamps the requests;
  *  the client just needs to be polite. */
 const GEOCODE_CONCURRENCY = 3
+/** Photo uploads run with bounded concurrency too — three concurrent
+ *  multipart POSTs is enough to saturate a typical home connection
+ *  without thrashing the dev server. Sequential was painfully slow
+ *  for batches of 8 MB phone photos. */
+const UPLOAD_CONCURRENCY = 3
 
 interface BatchPhotoImportProps {
   tripId: number | string
@@ -78,7 +84,11 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
   const [phase, setPhase] = useState<'pick' | 'preview' | 'uploading' | 'done'>('pick')
   const [items, setItems] = useState<PreparedFile[]>([])
   const [analysing, setAnalysing] = useState(false)
-  const [progressIdx, setProgressIdx] = useState(0)
+  // Progress is tracked as completed/total of the *uploadable* set
+  // (skipped + duplicate + unsupported rows are excluded). Workers
+  // complete out of order so we can't use a running index.
+  const [uploadableTotal, setUploadableTotal] = useState(0)
+  const [completedCount, setCompletedCount] = useState(0)
 
   // Make sure we have photos loaded for every day so duplicate
   // detection works even when the user hasn't visited each day.
@@ -87,8 +97,16 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
   }, [tripId, days, loadDayPhotos])
 
   const existingPhotos: DayPhoto[] = useMemo(() => {
-    return Object.values(dayPhotosMap).flat()
-  }, [dayPhotosMap])
+    // Scope dedupe to THIS trip's days. The store's dayPhotos map is
+    // keyed by dayId (not tripId), so leftover entries from a
+    // previously-loaded trip can otherwise pollute the duplicate check.
+    // Even though the server-side photos cascade-deleted with the trip,
+    // the in-memory cache survives the navigation.
+    const currentDayIds = new Set(days.map(d => String(d.id)))
+    return Object.entries(dayPhotosMap)
+      .filter(([dayKey]) => currentDayIds.has(dayKey))
+      .flatMap(([, photos]) => photos)
+  }, [dayPhotosMap, days])
 
   const sortedDays = useMemo(() => {
     return [...days].sort((a, b) => {
@@ -190,21 +208,42 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
 
   const startUpload = async () => {
     setPhase('uploading')
-    let i = 0
-    for (const item of items) {
-      setProgressIdx(i)
-      if (item.unsupported) { updateRow(i, { status: 'skipped' }); i++; continue }
-      if (item.isDuplicate) { updateRow(i, { status: 'skipped' }); i++; continue }
-      if (item.selectedDayId == null) { updateRow(i, { status: 'skipped', errorMessage: 'no day assigned' }); i++; continue }
-      updateRow(i, { status: 'uploading' })
-      try {
-        await uploadDayPhoto(tripId, item.selectedDayId, item.file, { caption: item.caption.trim() || undefined })
-        updateRow(i, { status: 'done' })
-      } catch (err: unknown) {
-        updateRow(i, { status: 'error', errorMessage: err instanceof Error ? err.message : 'upload failed' })
+
+    // First sweep: mark every non-uploadable row as skipped up front
+    // so the UI doesn't lie about what's pending. Collect the indices
+    // of rows we actually need to upload.
+    const uploadableIdx: number[] = []
+    items.forEach((item, idx) => {
+      if (item.unsupported) { updateRow(idx, { status: 'skipped' }); return }
+      if (item.isDuplicate) { updateRow(idx, { status: 'skipped' }); return }
+      if (item.selectedDayId == null) {
+        updateRow(idx, { status: 'skipped', errorMessage: 'no day assigned' })
+        return
       }
-      i++
+      uploadableIdx.push(idx)
+    })
+    setUploadableTotal(uploadableIdx.length)
+    setCompletedCount(0)
+
+    // Bounded worker pool — mirrors runGeocodeQueue. Three concurrent
+    // uploads is enough to cut the wall-clock for a typical 10-photo
+    // batch by ~2.5x without saturating the dev server.
+    let next = 0
+    const worker = async () => {
+      while (next < uploadableIdx.length) {
+        const idx = uploadableIdx[next++]
+        const item = items[idx]
+        updateRow(idx, { status: 'uploading' })
+        try {
+          await uploadDayPhoto(tripId, item.selectedDayId as number, item.file, { caption: item.caption.trim() || undefined })
+          updateRow(idx, { status: 'done' })
+        } catch (err: unknown) {
+          updateRow(idx, { status: 'error', errorMessage: err instanceof Error ? err.message : 'upload failed' })
+        }
+        setCompletedCount(c => c + 1)
+      }
     }
+    await Promise.all(Array.from({ length: UPLOAD_CONCURRENCY }, worker))
     setPhase('done')
   }
 
@@ -315,7 +354,20 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
                 </>
               )}
               {phase === 'uploading' && (
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Uploading {progressIdx + 1} of {items.length}…</span>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
+                    <span>Uploading {completedCount} of {uploadableTotal}…</span>
+                    <span>{uploadableTotal === 0 ? 0 : Math.round((completedCount / uploadableTotal) * 100)}%</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 4, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${uploadableTotal === 0 ? 0 : (completedCount / uploadableTotal) * 100}%`,
+                      background: 'var(--accent)',
+                      transition: 'width 0.2s ease',
+                    }} />
+                  </div>
+                </div>
               )}
               {phase === 'done' && (
                 <button type="button" onClick={closeAndCleanup} style={btnPrimary}>Done</button>

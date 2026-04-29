@@ -6,6 +6,29 @@ Last updated: 2026-04-29
 
 ---
 
+## M6 follow-up — Cross-trip duplicate-flag bug + concurrent upload + progress bar (uncommitted)
+
+**Scenario that broke before:** delete a trip → create a new trip with new dates → batch-import the same photo set → every row was flagged "already imported · skip" even though the new trip had no photos. Cause: `dayPhotos` in the Zustand store is keyed by `dayId` (not `tripId`) and was never cleared when navigating to a different trip.
+
+**Two-part fix:**
+- `tripStore.loadTrip` now resets `dayPhotos: {}` and `dayJournals: {}` whenever a trip loads.
+- `BatchPhotoImport` filters `existingPhotos` to only days belonging to the current trip — defence in depth.
+
+**Steps:**
+1. Open trip A → batch-import a few photos → confirm they import normally.
+2. Delete trip A.
+3. Create trip B with dates that match the photos' capture dates.
+4. Open the batch import dialog on trip B → drop the same photos.
+5. Preview rows should NOT show "already imported · skip" — they should show as importable with auto-assigned days.
+
+**Concurrent upload + progress bar:**
+6. With the same set selected for import, click **Import N photos**.
+7. Footer should show a real progress bar (count of completed + percentage + filled bar) instead of a single line of small text.
+8. Watch the per-row spinners — up to **three** rows should be in the "uploading" state at any time (was one before). For a 9-photo batch the wall-clock should drop noticeably.
+9. The progress bar should advance as workers finish, not strictly in row order.
+
+---
+
 ## M6 polish — Per-day photo map (committed `d9ad25e`)
 
 **Blocker:** needs photos with EXIF GPS preserved. Refer to `docs/ours-photo-transfer.md` for transfer methods that don't strip the metadata.

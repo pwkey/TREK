@@ -522,8 +522,27 @@ export default function TripPlannerPage(): React.ReactElement | null {
   }, [dayPhotosMap])
 
   const mapTileUrl = settings.map_tile_url || 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-  const defaultCenter = [settings.default_lat || 48.8566, settings.default_lng || 2.3522]
+  // [460-fork] Default centre was Paris upstream — Sydney is the
+  // sensible fallback for this household. Settings → Map still wins.
+  const defaultCenter = [settings.default_lat || -33.8688, settings.default_lng || 151.2093]
   const defaultZoom = settings.default_zoom || 10
+
+  // [460-fork] M6 follow-up — auto-fit the map the first time there's
+  // anything geocoded to show. Without this the map stays at the
+  // configured default centre even after photos / places load,
+  // because BoundsController only re-fits when fitKey ticks (and
+  // upstream only ticks fitKey on day-select).
+  const totalPoints = mapPlaces.length + mapPhotos.length
+  const didAutoFit = useRef(false)
+  useEffect(() => {
+    if (didAutoFit.current) return
+    if (totalPoints === 0) return
+    didAutoFit.current = true
+    setFitKey(k => k + 1)
+  }, [totalPoints])
+  // Reset the auto-fit guard when navigating to a different trip so
+  // the next trip's first load fits to its own data.
+  useEffect(() => { didAutoFit.current = false }, [tripId])
 
   const fontStyle = { fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif" }
 

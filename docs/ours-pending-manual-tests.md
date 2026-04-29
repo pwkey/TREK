@@ -6,7 +6,24 @@ Last updated: 2026-04-29
 
 ---
 
-## M6 follow-up — Cross-trip duplicate-flag bug + concurrent upload + progress bar (uncommitted)
+## M6 follow-up — Map auto-fits to photos + Sydney default centre (uncommitted)
+
+**Bug observed:** opened a fresh trip after batch-importing photos with GPS, but the trip map stayed at the upstream Paris default — even though the red camera markers were rendering at the photo locations, the viewport never zoomed to them. Cause: `BoundsController` only considered `places` for the auto-fit, and `fitKey` only ticked on day-select (never on initial trip load).
+
+**Fix:**
+- `BoundsController` now folds photo coords into the bounds calculation alongside places.
+- `TripPlannerPage` bumps `fitKey` once when the trip first has any geocoded data to show (places ∪ photos).
+- The Paris fallback (48.8566, 2.3522) used in three places — `MapView` default prop, `TripPlannerPage` settings fallback, `MapSettingsTab` initial state — is now Sydney (-33.8688, 151.2093). Settings → Map still wins for users who set their own.
+
+**Steps:**
+1. New trip with no places yet → batch-import a few geotagged photos.
+2. Trip map should auto-zoom to fit the photo locations on first load (was: stayed at Paris).
+3. Add a place at a different location (or just observe an existing trip with both) → bounds should include both place pins and photo markers.
+4. New install / unset settings → Settings → Map preview should default to Sydney instead of Paris.
+
+---
+
+## M6 follow-up — Cross-trip duplicate-flag bug + concurrent upload + progress bar (committed `ec50233`)
 
 **Scenario that broke before:** delete a trip → create a new trip with new dates → batch-import the same photo set → every row was flagged "already imported · skip" even though the new trip had no photos. Cause: `dayPhotos` in the Zustand store is keyed by `dayId` (not `tripId`) and was never cleared when navigating to a different trip.
 

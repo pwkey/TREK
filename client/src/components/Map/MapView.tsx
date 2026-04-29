@@ -163,20 +163,28 @@ function MapController({ center, zoom }: MapControllerProps) {
 interface BoundsControllerProps {
   hasDayDetail?: boolean
   places: Place[]
+  // [460-fork] M6 follow-up — photos counted as bounds points too, so a
+  // trip with photos but no places still frames the map sensibly
+  // instead of sitting at the upstream Paris default.
+  photos?: { lat: number; lng: number }[]
   fitKey: number
   paddingOpts: Record<string, number>
 }
 
-function BoundsController({ places, fitKey, paddingOpts, hasDayDetail }: BoundsControllerProps) {
+function BoundsController({ places, photos = [], fitKey, paddingOpts, hasDayDetail }: BoundsControllerProps) {
   const map = useMap()
   const prevFitKey = useRef(-1)
 
   useEffect(() => {
     if (fitKey === prevFitKey.current) return
     prevFitKey.current = fitKey
-    if (places.length === 0) return
+    const points: [number, number][] = [
+      ...places.map(p => [p.lat, p.lng] as [number, number]),
+      ...photos.map(p => [p.lat, p.lng] as [number, number]),
+    ]
+    if (points.length === 0) return
     try {
-      const bounds = L.latLngBounds(places.map(p => [p.lat, p.lng]))
+      const bounds = L.latLngBounds(points)
       if (bounds.isValid()) {
         map.fitBounds(bounds, { ...paddingOpts, maxZoom: 16, animate: true })
         if (hasDayDetail) {
@@ -184,7 +192,7 @@ function BoundsController({ places, fitKey, paddingOpts, hasDayDetail }: BoundsC
         }
       }
     } catch {}
-  }, [fitKey, places, paddingOpts, map, hasDayDetail])
+  }, [fitKey, places, photos, paddingOpts, map, hasDayDetail])
 
   return null
 }
@@ -395,7 +403,10 @@ export const MapView = memo(function MapView({
   onMarkerClick,
   onMapClick,
   onMapContextMenu = null,
-  center = [48.8566, 2.3522],
+  // [460-fork] Default fallback was Paris in upstream — Sydney is a
+  // saner default for an Australia-based household. Settings → Map
+  // still lets the user override per-account.
+  center = [-33.8688, 151.2093],
   zoom = 10,
   tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
   fitKey = 0,
@@ -539,7 +550,7 @@ export const MapView = memo(function MapView({
       />
 
       <MapController center={center} zoom={zoom} />
-      <BoundsController places={dayPlaces.length > 0 ? dayPlaces : places} fitKey={fitKey} paddingOpts={paddingOpts} hasDayDetail={hasDayDetail} />
+      <BoundsController places={dayPlaces.length > 0 ? dayPlaces : places} photos={photos} fitKey={fitKey} paddingOpts={paddingOpts} hasDayDetail={hasDayDetail} />
       <SelectionController places={places} selectedPlaceId={selectedPlaceId} dayPlaces={dayPlaces} paddingOpts={paddingOpts} />
       <MapClickHandler onClick={onMapClick} />
       <MapContextMenuHandler onContextMenu={onMapContextMenu} />

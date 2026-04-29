@@ -27,14 +27,16 @@ export default function MapSettingsTab(): React.ReactElement {
   const toast = useToast()
   const [saving, setSaving] = useState(false)
   const [mapTileUrl, setMapTileUrl] = useState<string>(settings.map_tile_url || '')
-  const [defaultLat, setDefaultLat] = useState<number | string>(settings.default_lat || 48.8566)
-  const [defaultLng, setDefaultLng] = useState<number | string>(settings.default_lng || 2.3522)
+  // [460-fork] Default fallback was Paris upstream — Sydney is the
+  // sensible default for this household.
+  const [defaultLat, setDefaultLat] = useState<number | string>(settings.default_lat || -33.8688)
+  const [defaultLng, setDefaultLng] = useState<number | string>(settings.default_lng || 151.2093)
   const [defaultZoom, setDefaultZoom] = useState<number | string>(settings.default_zoom || 10)
 
   useEffect(() => {
     setMapTileUrl(settings.map_tile_url || '')
-    setDefaultLat(settings.default_lat || 48.8566)
-    setDefaultLng(settings.default_lng || 2.3522)
+    setDefaultLat(settings.default_lat || -33.8688)
+    setDefaultLng(settings.default_lng || 151.2093)
     setDefaultZoom(settings.default_zoom || 10)
   }, [settings])
 

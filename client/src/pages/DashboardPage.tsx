@@ -7,6 +7,7 @@ import { useTranslation } from '../i18n'
 import { getApiErrorMessage } from '../types'
 import Navbar from '../components/Layout/Navbar'
 import DemoBanner from '../components/Layout/DemoBanner'
+import InstallPwaHint from '../components/Layout/InstallPwaHint'
 import CurrencyWidget from '../components/Dashboard/CurrencyWidget'
 import TimezoneWidget from '../components/Dashboard/TimezoneWidget'
 import TripFormModal from '../components/Trips/TripFormModal'
@@ -712,6 +713,7 @@ export default function DashboardPage(): React.ReactElement {
     <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-secondary)', ...font }}>
       <Navbar />
       {demoMode && <DemoBanner />}
+      <InstallPwaHint />
       <div style={{ flex: 1, overflow: 'auto', overscrollBehavior: 'contain', marginTop: 'var(--nav-h)' }}>
         <div style={{ maxWidth: 1300, margin: '0 auto', padding: '32px 20px 60px' }}>
 

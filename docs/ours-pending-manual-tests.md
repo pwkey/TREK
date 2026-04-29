@@ -6,7 +6,37 @@ Last updated: 2026-04-29
 
 ---
 
-## M6 follow-up — GPX track upload + render (uncommitted)
+## M1 — PWA install polish: viewport-fit, A2HS hint, standalone polish (uncommitted)
+
+**Goal:** put 460 Trip Planner on Peter's iPhone home screen as an app icon, with a clean standalone-mode launch experience and no notch/home-indicator clipping.
+
+**Setup notes:**
+- The dev server runs on `localhost:5173` by default. To install as a PWA on a phone you need the full HTTPS production-style build OR access via a real LAN hostname. For dev iteration a Vite preview build (`npm run build && npm run preview --host 0.0.0.0`) on the laptop's LAN IP is enough on Android Chrome; iOS Safari is fussier — install only works on a properly-served HTTPS origin (use `ngrok http 5173` or run the production server build with HTTPS for the actual install test).
+
+**Steps (iOS — primary verification):**
+1. Install Add-to-Home-Screen on an actual iPhone running iOS 16.4+. Open the trip planner URL in Safari. After ~1.5 seconds, a dark toast banner should appear at the bottom: "Install 460 Trip Planner — tap Share, then Add to Home Screen". Confirm it has the 460 white logo and an X to dismiss.
+2. Tap the X → banner disappears, never returns (verify by reloading — should stay gone).
+3. Clear localStorage (`localStorage.clear()` in dev tools) and reload — banner should come back.
+4. Tap Safari's Share → Add to Home Screen → use default name, confirm. Open the new home-screen icon → should launch in standalone mode (no Safari URL bar).
+5. Once launched standalone, the install hint should NOT appear.
+6. Pull down at the top of the dashboard → no pull-to-refresh gesture (suppressed via `overscroll-behavior` in standalone mode). Browser tab version still has it.
+7. Open a trip → confirm the navbar sits below the notch (no overlap), and the day-plan sidebar / mobile place-inspector don't get clipped by the home-indicator strip at the bottom.
+
+**Steps (Android — secondary):**
+8. Open the URL in Android Chrome. The install banner shouldn't appear (iOS only). Chrome's own URL-bar install prompt should still work.
+9. Install via Chrome → home-screen icon → launch → standalone mode + no clipping.
+
+**Steps (desktop):**
+10. Open in desktop Chrome / Edge / Firefox → URL bar should show an install icon. Click it → installs as a windowed PWA. Same icon + name as configured in the manifest.
+
+**Edge cases:**
+- Open in iOS Safari with the previous build (before the viewport-fit change). Compare side-by-side: notch should clip the navbar in the old build, not the new one.
+- Open in Chrome on iOS (CriOS UA). The install hint should NOT appear (Chrome on iOS can't install PWAs).
+- Open in Facebook / Instagram in-app browser. Hint should NOT appear (UA filter excludes those webviews).
+
+---
+
+## M6 follow-up — GPX track upload + render (committed `d46da7e`)
 
 **Why:** the highest-fidelity backfit option — upload the recorded GPS track from a phone / watch / Strava, render it as the actual path. Multiple tracks per trip; each renders as a purple polyline alongside the photo route.
 

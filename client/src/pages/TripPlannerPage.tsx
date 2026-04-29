@@ -751,7 +751,11 @@ export default function TripPlannerPage(): React.ReactElement | null {
                 Sits top-centre, below the trip-tab bar. */}
             {mapPhotos.filter(p => p.taken_at).length >= 2 && (
               <div style={{
-                position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+                // [460-fork] On mobile, the floating "Plan" / "Places"
+                // buttons sit at the top corners and would overlap a
+                // top-centre toolbar in portrait. Drop the toolbar
+                // below them when narrow.
+                position: 'absolute', top: isMobile ? 64 : 10, left: '50%', transform: 'translateX(-50%)',
                 zIndex: 30,
                 display: 'flex', alignItems: 'center', gap: 8,
                 background: 'var(--bg-card)',

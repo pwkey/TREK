@@ -46,6 +46,25 @@ Last updated: 2026-04-29
 
 ---
 
+## M6 follow-up — Auto-caption + photo map markers (committed `059ee49`)
+
+**Setup:** same `Testing/trip photos/` folder as above, but on a fresh trip OR after deleting the previously-imported photos so the dedupe doesn't skip them.
+
+**Auto-caption from reverse geocode:**
+1. Open the batch-import dialog and drop the photos.
+2. As the preview rows render, each one's caption input shows **"Looking up location…"** as placeholder.
+3. Within a few seconds (3 concurrent geocodes), captions fill in with the place name from Nominatim — e.g. *"Sydney Opera House"*, *"George Street"*, etc.
+4. Edit any caption inline before clicking Import. Confirmed captions are stored on `day_photos.caption`.
+5. After import, hover a photo's `figcaption` in the day grid → confirm the auto-caption is showing.
+
+**Photo markers on the trip Map:**
+6. After import, switch to the trip's **Plan** tab.
+7. Geotagged photos render as small **red camera icons** on the map alongside the place markers.
+8. Hover a marker → tooltip shows the caption (or original filename).
+9. Click a marker → the day-plan sidebar should expand the photo's day. Scroll the sidebar to find the day if it's not visible — the photo grid should show the relevant photo.
+
+---
+
 ## M7 round-trip end-to-end (export + import)
 
 You verified slice 7.5 (the standalone viewer) but the full `export → import` round-trip and the `/polls` deep-link weren't manually walked through.

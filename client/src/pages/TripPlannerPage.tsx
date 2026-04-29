@@ -175,7 +175,12 @@ export default function TripPlannerPage(): React.ReactElement | null {
   // 'straight' so a fresh trip with imported geotagged photos shows
   // the route immediately; user can flip to 'road' (OSRM) or 'off'.
   const [photoRouteMode, setPhotoRouteMode] = useState<'off' | 'straight' | 'road'>('straight')
-  const [photoRouteSnapStatus, setPhotoRouteSnapStatus] = useState<'idle' | 'loading' | 'ok' | 'failed'>('idle')
+  const [photoRouteSnapStatus, setPhotoRouteSnapStatus] = useState<{
+    state: 'idle' | 'loading' | 'ok' | 'failed'
+    total: number
+    snapped: number
+    nonRoad: number
+  }>({ state: 'idle', total: 0, snapped: 0, nonRoad: 0 })
 
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
   useEffect(() => {
@@ -724,11 +729,17 @@ export default function TripPlannerPage(): React.ReactElement | null {
                     </button>
                   )
                 })}
-                {photoRouteMode === 'road' && photoRouteSnapStatus === 'loading' && (
+                {photoRouteMode === 'road' && photoRouteSnapStatus.state === 'loading' && (
                   <span style={{ paddingRight: 8, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>snapping…</span>
                 )}
-                {photoRouteMode === 'road' && photoRouteSnapStatus === 'failed' && (
-                  <span title="OSRM had no route through these waypoints — falling back to straight lines"
+                {photoRouteMode === 'road' && photoRouteSnapStatus.state === 'ok' && photoRouteSnapStatus.nonRoad > 0 && (
+                  <span title={`${photoRouteSnapStatus.nonRoad} leg${photoRouteSnapStatus.nonRoad === 1 ? '' : 's'} couldn't snap to a road — shown as dashed straight lines (e.g. flights, ferries)`}
+                    style={{ paddingRight: 8, color: '#f59e0b', whiteSpace: 'nowrap' }}>
+                    {photoRouteSnapStatus.nonRoad} non-road
+                  </span>
+                )}
+                {photoRouteMode === 'road' && photoRouteSnapStatus.state === 'failed' && (
+                  <span title="OSRM couldn't snap any leg to a road — everything fell back to straight lines"
                     style={{ paddingRight: 8, color: '#dc2626', whiteSpace: 'nowrap' }}>no road match</span>
                 )}
               </div>

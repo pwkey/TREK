@@ -6,7 +6,20 @@ Last updated: 2026-04-29
 
 ---
 
-## M6 follow-up — Map layers switcher + OSM as default tile (uncommitted)
+## M6 follow-up — Per-segment road-snap with non-road fallback (uncommitted)
+
+**Why:** Road mode previously snapped all photo waypoints in one OSRM call, which fails entirely if any single leg is non-routable (e.g. a flight to an island, a ferry crossing). Now each consecutive pair is snapped independently — snapped legs render solid green, non-routable legs render dashed amber straight (matching the Straight-mode style). Results are cached per-segment at module scope so toggling modes back and forth doesn't re-hit OSRM.
+
+**Steps:**
+1. Pick a trip whose photos span both road-connected places AND a non-road hop (flying to an island, ferry crossing, etc.). Or fake one by creating a poll/trip with a deliberately-spread Sydney + Tasmania set.
+2. Plan tab → toolbar → click **Road**. Initially all segments render dashed amber as a placeholder, then progressively swap to solid green as OSRM responds.
+3. The non-road leg should remain dashed amber even after snapping completes — with the same arrow at its midpoint as the road legs.
+4. Toolbar shows "X non-road" in amber when there's at least one non-routable leg (hover for tooltip).
+5. Toggle to **Straight** and back to **Road** — should be near-instant the second time (cache hit).
+
+---
+
+## M6 follow-up — Map layers switcher + OSM as default tile (committed `f8a7f19`)
 
 **Why:** the upstream default `CartoDB Light` renders roads as very faint grey-on-white — at zoom 10 in Sydney the road system is almost invisible. Switched the default to standard OpenStreetMap (bold yellow/orange roads) and added a quick layer-switcher on the map so swapping styles doesn't require a trip to Settings.
 

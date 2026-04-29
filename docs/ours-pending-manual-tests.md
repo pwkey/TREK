@@ -6,7 +6,20 @@ Last updated: 2026-04-29
 
 ---
 
-## M6 follow-up — Chronological photo route on the trip map (uncommitted)
+## M6 follow-up — Map layers switcher + OSM as default tile (uncommitted)
+
+**Why:** the upstream default `CartoDB Light` renders roads as very faint grey-on-white — at zoom 10 in Sydney the road system is almost invisible. Switched the default to standard OpenStreetMap (bold yellow/orange roads) and added a quick layer-switcher on the map so swapping styles doesn't require a trip to Settings.
+
+**Steps:**
+1. Open a trip on the Plan tab. Roads should be clearly visible by default (standard OSM look).
+2. Bottom-right of the map: a small circular **layers** button. Click → popover lists OpenStreetMap, OpenStreetMap DE, CartoDB Light, CartoDB Dark, Stadia Smooth, with the active one highlighted + checkmark.
+3. Click any preset → tiles swap immediately. Reload the page → the choice persists (it's saved via `settings.map_tile_url`).
+4. Click outside the popover or press Escape → closes.
+5. Open Settings → Map → the dropdown there reflects the same value as the map switcher.
+
+---
+
+## M6 follow-up — Chronological photo route on the trip map (committed `7eba3f7`)
 
 **Idea:** with geotagged photos imported, the Plan tab now draws a route through them in `taken_at` order with directional arrows — useful as an at-a-glance reconstruction of the day's travel, even before places are added. Two modes:
 

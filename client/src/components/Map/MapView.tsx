@@ -9,6 +9,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { mapsApi } from '../../api/client'
 import { getCategoryIcon, CATEGORY_ICON_MAP } from '../shared/categoryIcons'
 import { PhotoRouteLayer } from './PhotoRouteLayer'
+import { DEFAULT_TILE_URL } from './tilePresets'
 
 function categoryIconSvg(iconName: string | null | undefined, size: number): string {
   const IconComponent = (iconName && CATEGORY_ICON_MAP[iconName]) || CATEGORY_ICON_MAP['MapPin']
@@ -412,7 +413,7 @@ export const MapView = memo(function MapView({
   // still lets the user override per-account.
   center = [-33.8688, 151.2093],
   zoom = 10,
-  tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  tileUrl = DEFAULT_TILE_URL,
   fitKey = 0,
   dayOrderMap = {},
   leftWidth = 0,

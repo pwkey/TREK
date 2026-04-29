@@ -5,21 +5,9 @@ import { useSettingsStore } from '../../store/settingsStore'
 import { useToast } from '../shared/Toast'
 import CustomSelect from '../shared/CustomSelect'
 import { MapView } from '../Map/MapView'
+import { MAP_PRESETS } from '../Map/tilePresets'
 import Section from './Section'
 import type { Place } from '../../types'
-
-interface MapPreset {
-  name: string
-  url: string
-}
-
-const MAP_PRESETS: MapPreset[] = [
-  { name: 'OpenStreetMap', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png' },
-  { name: 'OpenStreetMap DE', url: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png' },
-  { name: 'CartoDB Light', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' },
-  { name: 'CartoDB Dark', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' },
-  { name: 'Stadia Smooth', url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png' },
-]
 
 export default function MapSettingsTab(): React.ReactElement {
   const { settings, updateSettings } = useSettingsStore()

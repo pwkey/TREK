@@ -5,6 +5,8 @@ import { useTripStore } from '../store/tripStore'
 import { useCanDo } from '../store/permissionsStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { MapView } from '../components/Map/MapView'
+import { DEFAULT_TILE_URL } from '../components/Map/tilePresets'
+import { MapLayersControl } from '../components/Map/MapLayersControl'
 import { getCached, fetchPhoto } from '../services/photoService'
 import DayPlanSidebar from '../components/Planner/DayPlanSidebar'
 import PlacesSidebar from '../components/Planner/PlacesSidebar'
@@ -527,7 +529,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
       }))
   }, [dayPhotosMap])
 
-  const mapTileUrl = settings.map_tile_url || 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+  const mapTileUrl = settings.map_tile_url || DEFAULT_TILE_URL
   // [460-fork] Default centre was Paris upstream — Sydney is the
   // sensible fallback for this household. Settings → Map still wins.
   const defaultCenter = [settings.default_lat || -33.8688, settings.default_lng || 151.2093]
@@ -731,6 +733,15 @@ export default function TripPlannerPage(): React.ReactElement | null {
                 )}
               </div>
             )}
+
+            {/* [460-fork] M6 follow-up — base-layer switcher. Bottom-right
+                corner of the map area. The chosen URL is persisted via
+                settings.map_tile_url so it sticks across reloads and the
+                Settings → Map tab reflects the same value. */}
+            <MapLayersControl
+              currentTileUrl={mapTileUrl}
+              onPick={(url) => { void useSettingsStore.getState().updateSetting('map_tile_url', url) }}
+            />
 
             <div className="hidden md:block" style={{ position: 'absolute', left: 10, top: 10, bottom: 10, zIndex: 20 }}>
               <button onClick={() => setLeftCollapsed(c => !c)}

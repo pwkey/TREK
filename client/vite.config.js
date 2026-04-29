@@ -21,6 +21,12 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2,ttf}'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/mcp/],
+        // [460-fork] Activate new SW immediately on next page load instead
+        // of waiting for every tab to close. Without these the PWA on
+        // Android can get stuck on a stale build for an indefinite time
+        // because Chrome keeps the SW alive in the background.
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             // Carto map tiles (default provider)

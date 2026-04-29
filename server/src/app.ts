@@ -63,26 +63,37 @@ export function createApp(): express.Application {
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
     : null;
 
-  let corsOrigin: cors.CorsOptions['origin'];
   // [460-fork] In dev mode allow ANY origin regardless of ALLOWED_ORIGINS so
   // tunnels (ngrok / Cloudflare / Tailscale) work for phone-install testing
   // without having to keep .env in sync with the rotating tunnel hostname.
-  // Production stays strict.
+  // In production, ALLOWED_ORIGINS is the cross-origin allowlist; same-origin
+  // requests always pass (browsers send Origin even for same-origin module
+  // fetches, and rejecting those breaks the PWA serving its own JS bundle).
   const isProduction = process.env.NODE_ENV === 'production';
-  if (!isProduction) {
-    corsOrigin = true;
-  } else if (allowedOrigins) {
-    corsOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-      else callback(new Error('Not allowed by CORS'));
-    };
-  } else {
-    corsOrigin = false;
-  }
+  // Delegate form so we can inspect the request to detect same-origin.
+  const corsDelegate: (req: Request, cb: (err: Error | null, opts?: cors.CorsOptions) => void) => void = (req, cb) => {
+    const origin = req.headers.origin as string | undefined;
+    if (!isProduction || !origin) {
+      cb(null, { origin: true, credentials: true });
+      return;
+    }
+    // Same-origin: Origin header matches the request's own scheme + host.
+    const proto = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
+    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host;
+    if (host && origin === `${proto}://${host}`) {
+      cb(null, { origin: true, credentials: true });
+      return;
+    }
+    if (allowedOrigins && allowedOrigins.includes(origin)) {
+      cb(null, { origin: true, credentials: true });
+      return;
+    }
+    cb(new Error('Not allowed by CORS'));
+  };
 
   const shouldForceHttps = process.env.FORCE_HTTPS === 'true';
 
-  app.use(cors({ origin: corsOrigin, credentials: true }));
+  app.use(cors(corsDelegate));
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {

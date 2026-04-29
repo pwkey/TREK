@@ -36,6 +36,10 @@ export interface PhotoRoutePoint {
   lat: number
   lng: number
   taken_at: string | null
+  /** Used by the segment-click handler to open the day-detail panel
+   *  for whichever photo a route leg starts from. Optional so
+   *  consumers without a click handler don't need to thread it. */
+  day_id?: number
 }
 
 export interface PhotoRouteSnapStatus {
@@ -54,6 +58,11 @@ interface PhotoRouteLayerProps {
   photos: PhotoRoutePoint[]
   mode: PhotoRouteMode
   onRoadSnapStatus?: (status: PhotoRouteSnapStatus) => void
+  /** Fires when the user clicks any leg's polyline. Receives the
+   *  segment's from/to photos. Without this prop the lines render
+   *  with `interactive={false}` so the cursor stays as the default
+   *  (avoids the misleading hand-cursor-on-non-clickable issue). */
+  onSegmentClick?: (from: PhotoRoutePoint, to: PhotoRoutePoint) => void
 }
 
 const STRAIGHT_COLOR = '#f59e0b'  // amber — connotes "estimated / non-road"
@@ -70,7 +79,7 @@ type CacheEntry =
 const segmentCache = new Map<string, CacheEntry>()
 const segmentKey = (a: PhotoRoutePoint, b: PhotoRoutePoint) => `${a.id}-${b.id}`
 
-export function PhotoRouteLayer({ photos, mode, onRoadSnapStatus }: PhotoRouteLayerProps) {
+export function PhotoRouteLayer({ photos, mode, onRoadSnapStatus, onSegmentClick }: PhotoRouteLayerProps) {
   const ordered = useMemo<PhotoRoutePoint[]>(() => {
     return photos
       .filter(p => p.taken_at && !Number.isNaN(Date.parse(p.taken_at)))
@@ -164,6 +173,8 @@ export function PhotoRouteLayer({ photos, mode, onRoadSnapStatus }: PhotoRouteLa
         weight={3}
         opacity={0.78}
         dashArray={dashArray}
+        interactive={!!onSegmentClick}
+        eventHandlers={onSegmentClick ? { click: () => onSegmentClick(from, to) } : undefined}
       />
     )
   })

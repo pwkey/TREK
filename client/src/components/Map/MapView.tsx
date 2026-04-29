@@ -426,6 +426,7 @@ export const MapView = memo(function MapView({
   // [460-fork] M6 follow-up — chronological photo route overlay
   photoRouteMode = 'off',
   onPhotoRouteSnapStatus = undefined,
+  onPhotoRouteSegmentClick = undefined,
 }) {
   // Dynamic padding: account for sidebars + bottom inspector + day detail panel
   const paddingOpts = useMemo(() => {
@@ -613,7 +614,7 @@ export const MapView = memo(function MapView({
       })}
       {/* [460-fork] M6 follow-up — chronological photo-route overlay.
           Drawn UNDER the photo markers so the markers stay clickable. */}
-      <PhotoRouteLayer photos={photos} mode={photoRouteMode} onRoadSnapStatus={onPhotoRouteSnapStatus} />
+      <PhotoRouteLayer photos={photos} mode={photoRouteMode} onRoadSnapStatus={onPhotoRouteSnapStatus} onSegmentClick={onPhotoRouteSegmentClick} />
       {/* [460-fork] M6 follow-up — geotagged-photo marker layer.
           Click bubbles up to TripPlannerPage (typically: navigate to
           the photo's day so the user can see it in the photo grid). */}

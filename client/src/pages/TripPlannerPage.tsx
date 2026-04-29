@@ -294,6 +294,18 @@ export default function TripPlannerPage(): React.ReactElement | null {
     setSelectedPlaceId(null)
   }, [])
 
+  // [460-fork] M6 follow-up — opens the day-detail panel for a photo
+  // (or for a route segment, via its from-photo). Shared between the
+  // photo-marker click handler and the route-segment click handler.
+  const openPhotoDay = useCallback((p: { day_id: number }) => {
+    const day = days.find(d => d.id === p.day_id)
+    if (!day) return
+    tripActions.setSelectedDay(p.day_id)
+    setShowDayDetail(day)
+    setSelectedPlaceId(null)
+    selectAssignment(null)
+  }, [days, tripActions, setSelectedPlaceId, selectAssignment])
+
   const handleMapContextMenu = useCallback(async (e) => {
     if (!can('place_edit', trip)) return
     e.originalEvent?.preventDefault()
@@ -680,17 +692,11 @@ export default function TripPlannerPage(): React.ReactElement | null {
               photos={mapPhotos}
               photoRouteMode={photoRouteMode}
               onPhotoRouteSnapStatus={setPhotoRouteSnapStatus}
-              onPhotoClick={(p: { day_id: number }) => {
-                // Mirror what onDayDetail does from the sidebar — without
-                // setShowDayDetail the photo grid never opens, so the
-                // click looked like a no-op even though selectedDayId
-                // was updating in the store.
-                const day = days.find(d => d.id === p.day_id)
-                if (!day) return
-                tripActions.setSelectedDay(p.day_id)
-                setShowDayDetail(day)
-                setSelectedPlaceId(null)
-                selectAssignment(null)
+              onPhotoClick={openPhotoDay}
+              onPhotoRouteSegmentClick={(from: { day_id?: number }) => {
+                // Clicking a route leg navigates to the day of the
+                // photo it starts FROM — same UX as clicking a marker.
+                if (from.day_id != null) openPhotoDay({ day_id: from.day_id })
               }}
             />
 

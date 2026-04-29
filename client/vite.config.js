@@ -7,6 +7,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // [460-fork] Enable the manifest + service worker in `npm run dev` so
+      // Chrome / Edge offer the install prompt during phone testing through
+      // a tunnel. Without this, vite-plugin-pwa only wires up for production
+      // builds and Chrome's PWA-detection silently passes on the install UI.
+      devOptions: { enabled: true, type: 'module' },
       workbox: {
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2,ttf}'],

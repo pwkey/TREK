@@ -169,6 +169,11 @@ export default function TripPlannerPage(): React.ReactElement | null {
   const [fitKey, setFitKey] = useState<number>(0)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<'left' | 'right' | null>(null)
   const [deletePlaceId, setDeletePlaceId] = useState<number | null>(null)
+  // [460-fork] M6 follow-up — chronological photo route. Default
+  // 'straight' so a fresh trip with imported geotagged photos shows
+  // the route immediately; user can flip to 'road' (OSRM) or 'off'.
+  const [photoRouteMode, setPhotoRouteMode] = useState<'off' | 'straight' | 'road'>('straight')
+  const [photoRouteSnapStatus, setPhotoRouteSnapStatus] = useState<'idle' | 'loading' | 'ok' | 'failed'>('idle')
 
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
   useEffect(() => {
@@ -518,6 +523,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
         lng: p.lng as number,
         caption: p.caption,
         original_name: p.original_name,
+        taken_at: p.taken_at,
       }))
   }, [dayPhotosMap])
 
@@ -665,6 +671,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
               hasInspector={!!selectedPlace}
               hasDayDetail={!!showDayDetail && !selectedPlace}
               photos={mapPhotos}
+              photoRouteMode={photoRouteMode}
+              onPhotoRouteSnapStatus={setPhotoRouteSnapStatus}
               onPhotoClick={(p: { day_id: number }) => {
                 // Mirror what onDayDetail does from the sidebar — without
                 // setShowDayDetail the photo grid never opens, so the
@@ -679,6 +687,50 @@ export default function TripPlannerPage(): React.ReactElement | null {
               }}
             />
 
+            {/* [460-fork] M6 follow-up — photo-route toolbar.
+                Only meaningful when there are 2+ geotagged photos.
+                Sits top-centre, below the trip-tab bar. */}
+            {mapPhotos.filter(p => p.taken_at).length >= 2 && (
+              <div style={{
+                position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+                zIndex: 30,
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: 'var(--bg-card)',
+                backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: 999, padding: '4px 6px',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+                fontFamily: 'inherit', fontSize: 12,
+              }}>
+                <span style={{ paddingLeft: 8, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Photo route</span>
+                {(['off', 'straight', 'road'] as const).map(m => {
+                  const active = photoRouteMode === m
+                  const label = m === 'off' ? 'Off' : m === 'straight' ? 'Straight' : 'Road'
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setPhotoRouteMode(m)}
+                      style={{
+                        padding: '4px 12px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                        background: active ? 'var(--accent)' : 'transparent',
+                        color: active ? 'var(--accent-text)' : 'var(--text-secondary)',
+                        fontSize: 12, fontWeight: active ? 600 : 500, fontFamily: 'inherit',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+                {photoRouteMode === 'road' && photoRouteSnapStatus === 'loading' && (
+                  <span style={{ paddingRight: 8, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>snapping…</span>
+                )}
+                {photoRouteMode === 'road' && photoRouteSnapStatus === 'failed' && (
+                  <span title="OSRM had no route through these waypoints — falling back to straight lines"
+                    style={{ paddingRight: 8, color: '#dc2626', whiteSpace: 'nowrap' }}>no road match</span>
+                )}
+              </div>
+            )}
 
             <div className="hidden md:block" style={{ position: 'absolute', left: 10, top: 10, bottom: 10, zIndex: 20 }}>
               <button onClick={() => setLeftCollapsed(c => !c)}

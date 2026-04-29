@@ -8,6 +8,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { mapsApi } from '../../api/client'
 import { getCategoryIcon, CATEGORY_ICON_MAP } from '../shared/categoryIcons'
+import { PhotoRouteLayer } from './PhotoRouteLayer'
 
 function categoryIconSvg(iconName: string | null | undefined, size: number): string {
   const IconComponent = (iconName && CATEGORY_ICON_MAP[iconName]) || CATEGORY_ICON_MAP['MapPin']
@@ -392,6 +393,9 @@ export interface MapPhotoMarker {
   lng: number
   caption: string | null
   original_name: string
+  // [460-fork] M6 follow-up — photo-route layer needs taken_at to
+  // sort chronologically. May be null for photos missing EXIF.
+  taken_at: string | null
 }
 
 export const MapView = memo(function MapView({
@@ -418,6 +422,9 @@ export const MapView = memo(function MapView({
   // [460-fork] M6 follow-up — geotagged-photo marker layer
   photos = [],
   onPhotoClick = undefined,
+  // [460-fork] M6 follow-up — chronological photo route overlay
+  photoRouteMode = 'off',
+  onPhotoRouteSnapStatus = undefined,
 }) {
   // Dynamic padding: account for sidebars + bottom inspector + day detail panel
   const paddingOpts = useMemo(() => {
@@ -603,6 +610,9 @@ export const MapView = memo(function MapView({
           )
         } catch { return null }
       })}
+      {/* [460-fork] M6 follow-up — chronological photo-route overlay.
+          Drawn UNDER the photo markers so the markers stay clickable. */}
+      <PhotoRouteLayer photos={photos} mode={photoRouteMode} onRoadSnapStatus={onPhotoRouteSnapStatus} />
       {/* [460-fork] M6 follow-up — geotagged-photo marker layer.
           Click bubbles up to TripPlannerPage (typically: navigate to
           the photo's day so the user can see it in the photo grid). */}

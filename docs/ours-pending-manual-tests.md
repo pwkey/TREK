@@ -6,7 +6,32 @@ Last updated: 2026-04-29
 
 ---
 
-## M6 follow-up — Map auto-fits to photos + Sydney default centre (uncommitted)
+## M6 follow-up — Chronological photo route on the trip map (uncommitted)
+
+**Idea:** with geotagged photos imported, the Plan tab now draws a route through them in `taken_at` order with directional arrows — useful as an at-a-glance reconstruction of the day's travel, even before places are added. Two modes:
+
+- **Straight** (default) — dashed amber polyline, photo-to-photo straight lines. Honest about being approximate; useful for boats, hikes, flights where roads aren't relevant.
+- **Road** — solid green polyline, snapped to roads via OSRM. Falls back to straight silently if OSRM has no answer (and the toolbar shows "no road match").
+- **Off** — hide the route layer entirely.
+
+Toolbar lives top-centre on the map, only renders when there are 2+ geotagged photos.
+
+**Steps:**
+1. Open a trip with geotagged photos already imported (or import them via the batch dialog first).
+2. Plan tab map: should auto-show the dashed amber route between photos in capture order, with small ▶ arrows at each segment midpoint pointing in direction of travel.
+3. Click the **Road** segment of the toolbar → the route should briefly say "snapping…" then redraw as a solid green road-snapped line. Arrows stay at photo midpoints (intentional).
+4. If you have any waypoint OSRM can't resolve (e.g. a photo over water), expect the toolbar to flip to red "no road match" and the layer to fall back to straight.
+5. Click **Off** → both polyline and arrows disappear.
+
+---
+
+## M6 follow-up — Photo-marker click opens day detail (committed `bdb0cdb`)
+
+Clicking a red photo marker on the Plan map should now pop the day-detail panel (the photo grid for that day), instead of doing nothing visible.
+
+---
+
+## M6 follow-up — Map auto-fits to photos + Sydney default centre (committed `7fa9b30`)
 
 **Bug observed:** opened a fresh trip after batch-importing photos with GPS, but the trip map stayed at the upstream Paris default — even though the red camera markers were rendering at the photo locations, the viewport never zoomed to them. Cause: `BoundsController` only considered `places` for the auto-fit, and `fitKey` only ticked on day-select (never on initial trip load).
 

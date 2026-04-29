@@ -76,7 +76,8 @@ export default function SharedTripPage() {
     ? (assignments[String(selectedDay)] || []).map((a: any) => a.place).filter((p: any) => p?.lat && p?.lng)
     : (places || []).filter((p: any) => p?.lat && p?.lng)
 
-  const center = mapPlaces.length > 0 ? [mapPlaces[0].lat, mapPlaces[0].lng] : [48.85, 2.35]
+  // [460-fork] Default fallback was Paris in upstream — Sydney here too.
+  const center = mapPlaces.length > 0 ? [mapPlaces[0].lat, mapPlaces[0].lng] : [-33.8688, 151.2093]
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-secondary, #f3f4f6)', fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }}>

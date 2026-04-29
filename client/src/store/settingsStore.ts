@@ -16,8 +16,12 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: {
     map_tile_url: '',
-    default_lat: 48.8566,
-    default_lng: 2.3522,
+    // [460-fork] Default centre was Paris in upstream — Sydney is the
+    // sensible household default. This is the *initial* Zustand state
+    // that wins until the server's settings record loads, so a fresh
+    // user with no row never sees Paris.
+    default_lat: -33.8688,
+    default_lng: 151.2093,
     default_zoom: 10,
     dark_mode: false,
     default_currency: 'USD',

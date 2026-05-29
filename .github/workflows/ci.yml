@@ -1,0 +1,54 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [personal]
+  pull_request:
+    branches: [personal, main]
+
+jobs:
+  server:
+    name: Server tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install
+        run: cd server && npm ci
+
+      - name: Test
+        run: cd server && npm test
+
+  client:
+    name: Client build + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install
+        run: cd client && npm ci
+
+      - name: Test
+        run: cd client && npm test
+
+      - name: Build (production bundle)
+        run: cd client && npm run build

@@ -1,0 +1,26 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Maskable variant of icon.svg. Android adaptive icons mask the image
+    to the launcher's shape (circle / squircle / rounded square) and crop
+    everything outside the inner 80% safe zone. So:
+      - Background extends edge-to-edge (otherwise masking shows grey at corners).
+      - All content (sun, "460" text) sits centred within the inner safe circle.
+      - The "TRIP PLANNER" subtitle and landscape band from icon.svg are dropped
+        — they live in the outer 20% which gets clipped on most launchers.
+  -->
+  <defs>
+    <linearGradient id="skyGrad2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f4a85d"/>
+      <stop offset="55%" stop-color="#e88a6a"/>
+      <stop offset="100%" stop-color="#8b3a1a"/>
+    </linearGradient>
+    <radialGradient id="sunGlow2" cx="50%" cy="35%">
+      <stop offset="0%" stop-color="#f4d4a8" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#e4a93f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#skyGrad2)"/>
+  <circle cx="512" cy="360" r="220" fill="url(#sunGlow2)"/>
+  <circle cx="512" cy="360" r="95" fill="#f4d4a8"/>
+  <text x="512" y="700" text-anchor="middle" font-family="Impact, 'Arial Black', sans-serif" font-size="380" font-weight="900" fill="#5a2a0f" letter-spacing="-12" stroke="#faf0d9" stroke-width="10" paint-order="stroke">460</text>
+</svg>

@@ -94,11 +94,17 @@ export default defineConfig({
         orientation: 'any',
         categories: ['travel', 'navigation'],
         icons: [
-          { src: 'icons/apple-touch-icon-180x180.png', sizes: '180x180', type: 'image/png' },
-          { src: 'icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-          { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+          { src: 'icons/apple-touch-icon-180x180.png', sizes: '180x180', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          // [460-fork] Maskable icon points to a SEPARATE source designed for
+          // Android adaptive icons — content inside the inner 80% safe zone,
+          // background filling to the edges. Previously this entry reused the
+          // regular icon-512x512.png, which has 460-text near the bottom edge;
+          // Android couldn't form a valid adaptive icon from it and fell back
+          // to grey on the home screen.
+          { src: 'icons/icon-512x512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
         ],
       },
     }),

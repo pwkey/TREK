@@ -15,7 +15,6 @@ import PublicPollPage from './pages/PublicPollPage' // [460-fork] Milestone 9
 import SharedTripPage from './pages/SharedTripPage'
 import SegmentAcceptPage from './pages/SegmentAcceptPage' // [460-fork] Milestone 4
 import { startSyncWorker, stopSyncWorker } from './db/syncWorker' // [460-fork] Milestone 5
-import { startCapacitorLifecycle, stopCapacitorLifecycle } from './capacitor' // [460-fork] Milestone 5 slice 5
 import { requestPersistentStorage } from './db/persistentStorage' // [460-fork] M1 follow-up
 import { restoreFromSnapshot } from './db/offlineSnapshot' // [460-fork] M1 follow-up
 import InAppNotificationsPage from './pages/InAppNotificationsPage.tsx'
@@ -156,10 +155,8 @@ export default function App() {
       })
       .catch(() => {/* silent — restore is best-effort */})
     startSyncWorker()
-    void startCapacitorLifecycle()
     return () => {
       stopSyncWorker()
-      stopCapacitorLifecycle()
     }
   }, [])
 

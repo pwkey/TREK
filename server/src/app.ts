@@ -125,6 +125,12 @@ export function createApp(): express.Application {
 
   if (shouldForceHttps) {
     app.use((req: Request, res: Response, next: NextFunction) => {
+      // [460-fork] Exempt /api/health from the HTTPS redirect so internal
+      // Docker/Coolify healthchecks (which hit http://localhost:3000 directly,
+      // without going through Traefik and so without an X-Forwarded-Proto
+      // header) get a 200 instead of being redirected to https://localhost,
+      // which then fails SSL handshake against the plain-HTTP container.
+      if (req.path === '/api/health') return next();
       if (req.secure || req.headers['x-forwarded-proto'] === 'https') return next();
       res.redirect(301, 'https://' + req.headers.host + req.url);
     });

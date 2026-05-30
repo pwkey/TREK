@@ -2,7 +2,7 @@
 FROM node:22-alpine AS client-builder
 WORKDIR /app/client
 COPY client/package*.json ./
-RUN npm ci
+RUN npm install --no-audit --no-fund
 COPY client/ ./
 RUN npm run build
 
@@ -14,7 +14,7 @@ WORKDIR /app
 # Timezone support + native deps (better-sqlite3 needs build tools)
 COPY server/package*.json ./
 RUN apk add --no-cache tzdata dumb-init su-exec python3 make g++ && \
-    npm ci --production && \
+    npm install --omit=dev --no-audit --no-fund && \
     apk del python3 make g++
 
 COPY server/ ./

@@ -68,7 +68,32 @@ Then plan the rebase as its own milestone before touching code.
 
 ---
 
+## Security reconnaissance (2026-06-01)
+
+A low-cost recon pass over what upstream fixed since our fork point
+(`git merge-base`: `6df5edf`, **571 upstream commits** behind).
+
+**Upstream security work since fork (assess during rebase, not cheap cherry-picks — they touch auth/upload/share code we've also modified):**
+- v3.0.18 — login-timing user-enumeration fix (CWE-203/208)
+- An internal security audit: "internal audit batch 1" (`2d0414b4`), second-pass findings (`9f57ab45`), "close SEC-H4/H6 gaps" (`20bf9c23`), silent-failure review (`292e443d`)
+- `b556c636` tighten 401-redirect allowlist; `82cce365` validate image-only uploads; `51387b0a` password-reset with MFA + session invalidation; OAuth/OIDC hardening (iss normalization, RFC 8707 audience binding)
+
+**Spot-checks against OUR code — all came back fine:**
+- multer: we're on `^2.1.1` ≥ 2.0.1 → CVE-2025-7338 already patched.
+- SVG stored-XSS: `files.ts` already rejects `svg` mimetype.
+- Files IDOR: our `/files` routes gate every method with `requireTripAccess` + `verifyTripAccess` + `checkPermission`.
+
+**Dependency vulns — corrected conclusion (initial local `npm audit` over-stated exposure):**
+- Our Docker build does a fresh `npm install` against caret (`^`) ranges, so axios / ws / express / qs resolve to patched latest-in-range automatically in production. Not a live gap.
+- Only two deps sit outside caret range (genuinely "stuck" without a package.json bump): `uuid` (<11.1.1) and `@anthropic-ai/sdk` (0.90.x). **Both advisories are non-applicable to our usage** — uuid: we use `v4` and never pass `buf`; anthropic-sdk: we don't use its Local Filesystem Memory Tool.
+- **No urgent, applicable dependency vuln.** Defer deterministic floor-pinning / `overrides` (so "we're patched" is guaranteed not incidental) plus the uuid→14 and anthropic-sdk bumps to the rebase.
+
+**Net:** no emergency. The fork's own application-code security posture is sound on the items checked; the upstream gap is real but not on fire. Rebase remains the right vehicle, on its own schedule.
+
 ## Log
 
 - **2026-05-31** — Noted upstream at 3.0.22 vs our 2.9.14 base. Disabled the
   upstream version-check notification (commit `37d50a9`). Rebase deferred.
+- **2026-06-01** — Security recon pass (above). No urgent applicable vuln
+  found; dependency exposure over-stated by a stale local audit. Deferred
+  dependency hardening to the rebase.

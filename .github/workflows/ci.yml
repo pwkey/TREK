@@ -9,6 +9,13 @@ on:
   pull_request:
     branches: [personal, main]
 
+# Note: install uses `npm install` rather than `npm ci`, matching the
+# Dockerfile. Lockfiles were generated on Windows and lack Linux-platform
+# optional deps (e.g. @rollup/rollup-linux-x64-gnu, sharp's musl/glibc
+# bindings); `npm ci` would fail strict-mode validation on the runner.
+# This makes CI installs slightly non-deterministic — acceptable for a
+# personal-scale fork; revisit if we ever need reproducibility guarantees.
+
 jobs:
   server:
     name: Server tests
@@ -16,16 +23,16 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: server/package-lock.json
 
       - name: Install
-        run: cd server && npm ci
+        run: cd server && npm install --no-audit --no-fund
 
       - name: Test
         run: cd server && npm test
@@ -36,16 +43,18 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      # No `cache:` here — client/package-lock.json is intentionally
+      # untracked (Windows-generated lockfile lacks Linux sharp bindings),
+      # so the setup-node cache resolver can't find a stable cache key.
+      # The npm install below resolves from package.json fresh each run.
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: client/package-lock.json
 
       - name: Install
-        run: cd client && npm ci
+        run: cd client && npm install --no-audit --no-fund
 
       - name: Test
         run: cd client && npm test

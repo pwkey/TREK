@@ -220,4 +220,14 @@ Worth noting for guide-writing context:
 
 ## Resolved
 
-*Nothing resolved yet — this document was created at the same time as the first batch of entries.*
+### 2026-05-30 — Q1 splash duration
+
+- **Observation:** "The splash screen should stay on for a bit longer, maybe twice as long."
+- **Fix shipped:** commit `4995e0f` — `HOLD_MS` 900 → 1800 in `client/src/components/shared/SplashScreen.tsx`. Total splash is now ~2.25 s (was ~1.35 s).
+- **Behaviour note:** still shows once per browser session (sessionStorage gate). To see the new duration on a device that's already loaded the app, you need a fresh tab or to clear sessionStorage.
+
+### 2026-05-30 — Q3 time fields on place creation
+
+- **Observation:** Time fields were only shown when editing an existing place, requiring a save-then-reopen workflow to assign timing.
+- **Fix shipped:** commit `9717449` — dropped the `{place && ...}` gate around `<TimeSection>` in `PlaceFormModal.tsx`, and relaxed `hasTimeError` so it no longer requires edit-mode to flag end-before-start. Time fields now appear on creation; collision detection still no-ops until an assignment exists.
+- **Implication for guide:** the "create-first-then-edit-to-set-time" workaround is no longer needed — document the simpler flow.

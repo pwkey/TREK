@@ -57,20 +57,30 @@ describe('Pre-migration snapshot', () => {
     const dbPath = path.join(dir, 'travel.db');
     const backupsDir = path.join(dir, 'backups');
 
-    const db1 = new Database(dbPath);
-    createTables(db1);
-    runMigrations(db1); // applies all → 1 snapshot
-    db1.close();
-    const afterFirst = fs.readdirSync(backupsDir).filter(f => f.startsWith('pre-migration-')).length;
-    expect(afterFirst).toBe(1);
+    // Count snapshots without throwing if the dir doesn't exist yet.
+    const snapCount = () =>
+      fs.existsSync(backupsDir)
+        ? fs.readdirSync(backupsDir).filter(f => f.startsWith('pre-migration-') && f.endsWith('.db')).length
+        : 0;
 
-    // Second run on an already-migrated DB: currentVersion == migrations.length,
-    // so the snapshot block is skipped entirely.
-    const db2 = new Database(dbPath);
-    runMigrations(db2);
-    db2.close();
-    const afterSecond = fs.readdirSync(backupsDir).filter(f => f.startsWith('pre-migration-')).length;
-    expect(afterSecond).toBe(1);
+    // Use a SINGLE connection for both passes. Opening a second connection to
+    // the same on-disk file mid-test was racy on Windows (file handles / WAL
+    // sidecar not yet released), producing a flaky ENOENT. One connection
+    // still exercises the real invariant: the first runMigrations applies all
+    // pending migrations (→ 1 snapshot); the second sees currentVersion ==
+    // migrations.length and skips the snapshot block entirely.
+    const db = new Database(dbPath);
+    try {
+      createTables(db);
+      runMigrations(db);
+      const afterFirst = snapCount();
+      expect(afterFirst).toBe(1);
+
+      runMigrations(db); // no pending migrations now
+      expect(snapCount()).toBe(afterFirst);
+    } finally {
+      db.close();
+    }
   });
 
   it('MIGSNAP-003 — in-memory DB is migrated but produces no snapshot (nothing to copy)', () => {

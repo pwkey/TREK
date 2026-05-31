@@ -88,77 +88,37 @@ describe('checkAndNotifyVersion', () => {
     expect(getLastNotifiedVersion()).toBeUndefined();
   });
 
-  it('VNOTIF-002 — creates a navigate notification for all admins when update available', async () => {
-    const { user: admin1 } = createAdmin(testDb);
-    const { user: admin2 } = createAdmin(testDb);
+  // [460-fork] checkAndNotifyVersion was deliberately turned into a no-op in
+  // commit 37d50a9. Upstream's version checker compares OUR fork's
+  // package.json version against the latest mauriceboe/TREK GitHub release
+  // and fires a "version available" admin notification — misleading on a
+  // fork, which tracks upstream via git, not an in-app nag. So the tests
+  // that previously asserted a notification IS created now assert the
+  // opposite: regardless of what GitHub reports, NOTHING is sent and no
+  // state is written. (VNOTIF-002 replaces the old 002–006 block.)
+  it('VNOTIF-002 — does NOT notify even when GitHub reports a much newer release (fork: checker disabled)', async () => {
+    createAdmin(testDb);
+    createAdmin(testDb);
     mockGitHubLatest('v99.0.0');
 
     await checkAndNotifyVersion();
 
-    const notifications = testDb.prepare('SELECT * FROM notifications ORDER BY id').all() as Array<{ recipient_id: number; type: string; scope: string }>;
-    expect(notifications.length).toBe(2);
-    const recipientIds = notifications.map(n => n.recipient_id);
-    expect(recipientIds).toContain(admin1.id);
-    expect(recipientIds).toContain(admin2.id);
-    expect(notifications[0].type).toBe('navigate');
-    expect(notifications[0].scope).toBe('admin');
+    expect(getNotificationCount()).toBe(0);
+    expect(getLastNotifiedVersion()).toBeUndefined();
   });
 
-  it('VNOTIF-003 — sets last_notified_version in app_settings after notifying', async () => {
+  it('VNOTIF-003 — no notification regardless of any prior last_notified_version state', async () => {
     createAdmin(testDb);
-    mockGitHubLatest('v99.1.0');
-
-    await checkAndNotifyVersion();
-
-    expect(getLastNotifiedVersion()).toBe('99.1.0');
-  });
-
-  it('VNOTIF-004 — does NOT create duplicate notification if last_notified_version matches', async () => {
-    createAdmin(testDb);
-    mockGitHubLatest('v99.2.0');
-
-    // First call notifies
-    await checkAndNotifyVersion();
-    const countAfterFirst = getNotificationCount();
-    expect(countAfterFirst).toBe(1);
-
-    // Second call with same version — should not create another
-    await checkAndNotifyVersion();
-    expect(getNotificationCount()).toBe(countAfterFirst);
-  });
-
-  it('VNOTIF-005 — creates new notification when last_notified_version is an older version', async () => {
-    createAdmin(testDb);
-    // Simulate having been notified about an older version
+    // Even with a stale "previously notified" marker for an older version,
+    // the disabled checker writes nothing new.
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('last_notified_version', '98.0.0');
     mockGitHubLatest('v99.3.0');
 
     await checkAndNotifyVersion();
 
-    expect(getNotificationCount()).toBe(1);
-    expect(getLastNotifiedVersion()).toBe('99.3.0');
-  });
-
-  it('VNOTIF-006 — notification has correct type, scope, and navigate_target', async () => {
-    createAdmin(testDb);
-    mockGitHubLatest('v99.4.0');
-
-    await checkAndNotifyVersion();
-
-    const notif = testDb.prepare('SELECT * FROM notifications LIMIT 1').get() as {
-      type: string;
-      scope: string;
-      navigate_target: string;
-      title_key: string;
-      text_key: string;
-      navigate_text_key: string;
-    };
-    expect(notif.type).toBe('navigate');
-    expect(notif.scope).toBe('admin');
-    expect(notif.navigate_target).toBe('/admin');
-    expect(notif.title_key).toBe('notif.version_available.title');
-    expect(notif.text_key).toBe('notif.version_available.text');
-    expect(notif.navigate_text_key).toBe('notif.action.view_admin');
+    expect(getNotificationCount()).toBe(0);
+    // The pre-existing marker is left untouched (we never reach the write path).
+    expect(getLastNotifiedVersion()).toBe('98.0.0');
   });
 
   it('VNOTIF-007 — silently handles GitHub API fetch failure (no crash, no notification)', async () => {

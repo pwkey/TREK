@@ -228,6 +228,14 @@ Worth noting for guide-writing context:
 - **Fix shipped:** commit `4995e0f` — `HOLD_MS` 900 → 1800 in `client/src/components/shared/SplashScreen.tsx`. Total splash is now ~2.25 s (was ~1.35 s).
 - **Behaviour note:** still shows once per browser session (sessionStorage gate). To see the new duration on a device that's already loaded the app, you need a fresh tab or to clear sessionStorage.
 
+### 2026-05-31 — Q5 day-header camera button
+
+- **Observation:** "Would be useful to have a quick access button to upload photos on the day header strip, rather than having to go into the day to then do it. Uploading photos is probably one of the most common things that will be done during a trip!"
+- **Fix shipped:** commit `d0a5312` — added a `<Camera>` icon button to each day header in `DayPlanSidebar.tsx`, next to the existing `<FileText>` add-note button, gated by `canEditDays`. Click triggers a hidden `<input type="file" accept="image/*" capture="environment">` — on mobile pops the native camera UI; on desktop opens the file picker. Upload reuses the existing `uploadDayPhoto` store action so EXIF extraction, auto-caption via reverse-geocode, and photo-marker map rendering all kick in automatically.
+- **Behaviour:** one-tap-to-camera from anywhere in the day list — no day-detail panel expansion, no modal. Per-day busy state shows a "wait" cursor while uploading. Toast on success/failure.
+- **Out of scope (intentional):** multi-photo selection (use the existing batch-import or per-day grid), drag-drop onto day header (clashes with place-drag), long-press context menu (clashes with drag-to-reorder).
+- **Implication for guide:** photo capture is now a first-class workflow with its own surface in the planner — document the day-header camera affordance as the primary path for in-trip recording, and the per-day photo grid as the path for reviewing/editing/captioning what's already uploaded.
+
 ### 2026-05-30 — Q3 time fields on place creation
 
 - **Observation:** Time fields were only shown when editing an existing place, requiring a save-then-reopen workflow to assign timing.

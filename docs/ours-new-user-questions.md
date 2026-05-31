@@ -228,6 +228,14 @@ Worth noting for guide-writing context:
 - **Fix shipped:** commit `4995e0f` — `HOLD_MS` 900 → 1800 in `client/src/components/shared/SplashScreen.tsx`. Total splash is now ~2.25 s (was ~1.35 s).
 - **Behaviour note:** still shows once per browser session (sessionStorage gate). To see the new duration on a device that's already loaded the app, you need a fresh tab or to clear sessionStorage.
 
+### 2026-05-31 — Q2 quick category change via context menu
+
+- **Observation:** "Might want to add this to the quick-add flow, as on any decent sized trip there will be a lot of places/activities and being able to view by category would be very useful straight up."
+- **Reinterpretation that led to the fix:** There isn't actually a "quick-add bypass" path that skips the full PlaceFormModal — every add already goes through it and shows the category picker. The real friction is **changing/setting category on lots of places after the fact** (especially after bulk-imports like Google list or GPX, where everything lands uncategorised). So the fix targets that: a way to set category quickly without opening the full edit modal.
+- **Fix shipped:** commit `b1f2772` — extended `shared/ContextMenu.tsx` with optional one-level `submenu` support on MenuItem (ChevronRight indicator + hover/click flyout), then added a "Set category →" entry to the right-click menu on each place in `Planner/PlacesSidebar.tsx`. Submenu lists all categories with their icons + "(no category)" to unset. Updates go through the existing `updatePlace` store action so real-time sync, mutation queue, and undo all work.
+- **Cost:** one right-click → hover/click "Set category" → click a category. Three interactions per place.
+- **Implication for guide:** Document the right-click context menu as the primary quick-action surface for places. Mention "Set category" as the natural follow-up after a Google-list / GPX import.
+
 ### 2026-05-31 — Q5 day-header camera button
 
 - **Observation:** "Would be useful to have a quick access button to upload photos on the day header strip, rather than having to go into the day to then do it. Uploading photos is probably one of the most common things that will be done during a trip!"

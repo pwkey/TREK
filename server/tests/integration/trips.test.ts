@@ -694,3 +694,38 @@ describe('Trip members', () => {
     expect(res.status).toBe(404);
   });
 });
+
+// [460-fork] Milestone 11 slice 4 — Trip auto-add to household members on create.
+describe('Trip auto-add to household (M11)', () => {
+  it('TRIP-016 — creating a trip auto-adds every other household user as trip_member', async () => {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    const { user: carol } = createUser(testDb);
+    // Put all three in the same household via direct DB mutation (the
+    // household-creation flow is tested separately in household.test.ts).
+    const hh = testDb.prepare('INSERT INTO households (created_by) VALUES (?)').run(alice.id);
+    const hid = Number(hh.lastInsertRowid);
+    testDb.prepare('UPDATE users SET household_id = ? WHERE id IN (?, ?, ?)').run(hid, alice.id, bob.id, carol.id);
+
+    const res = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(alice.id))
+      .send({ title: 'Family Sydney', start_date: '2026-07-01', end_date: '2026-07-05' });
+    expect(res.status).toBe(201);
+    const tripId = res.body.trip.id;
+
+    const members = testDb.prepare('SELECT user_id FROM trip_members WHERE trip_id = ? ORDER BY user_id').all(tripId) as Array<{ user_id: number }>;
+    expect(members.map(m => m.user_id).sort()).toEqual([bob.id, carol.id].sort());
+  });
+
+  it('TRIP-016 — solo user (no household) creates a trip and gets no auto-add', async () => {
+    const { user } = createUser(testDb);
+    const res = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(user.id))
+      .send({ title: 'Solo Hike', start_date: '2026-08-01', end_date: '2026-08-03' });
+    expect(res.status).toBe(201);
+    const members = testDb.prepare('SELECT COUNT(*) AS c FROM trip_members WHERE trip_id = ?').get(res.body.trip.id) as { c: number };
+    expect(members.c).toBe(0);
+  });
+});

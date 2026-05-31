@@ -71,14 +71,14 @@ function cleanupTmp(filePath: string | undefined) {
   fs.unlink(filePath, () => undefined);
 }
 
-// [460-fork] M3 slice 5 / M11 slice 1 — build the candidate list for the
-// passenger matcher. M3 included the user + their partner. M11 generalises
-// to user + every other household user. Named household_members (no
-// account) get folded in by M11 slice 5; until then the candidate set is
-// account-only.
+// [460-fork] M3 slice 5 / M11 — build the candidate list for the
+// passenger matcher. The candidate set is the calling user + every other
+// user in their household + every named household member.
 //
-// Candidates are aliased on username, email local-part, and full email so
-// the matcher can score token splits.
+// User-account candidates are aliased on username, email local-part, and
+// full email so the matcher can score token splits. Named members are
+// aliased only on their name (the matcher's token-set + Levenshtein logic
+// handles "Emily" vs "Emily Key" within reason).
 function buildMatchCandidates(userId: number): PassengerMatchCandidate[] {
   const user = db.prepare('SELECT id, username, email, household_id FROM users WHERE id = ?').get(userId) as { id: number; username: string; email: string; household_id: number | null } | undefined;
   if (!user) return [];
@@ -90,8 +90,40 @@ function buildMatchCandidates(userId: number): PassengerMatchCandidate[] {
     for (const peer of others) {
       candidates.push(aliasesFor(peer.id, peer.username, peer.email));
     }
+    // [460-fork] M11 slice 5 — named household_members (no-account):
+    // pets, kids, granny. Single-alias entries; matcher token-logic
+    // handles "Emily" vs "Emily Key" reasonably.
+    const members = db
+      .prepare('SELECT id, name FROM household_members WHERE household_id = ?')
+      .all(user.household_id) as Array<{ id: number; name: string }>;
+    for (const m of members) {
+      candidates.push({ id: m.id, kind: 'member', aliases: [m.name].filter(Boolean) });
+    }
   }
   return candidates;
+}
+
+// [460-fork] M11 slice 5 — split a matchPassengers result into the two
+// shaped fields the wire API exposes: matched_user_ids[] for user-account
+// matches (legacy field, unchanged shape) and matched_member_ids[] for
+// named household_members (new field, additive — clients that don't read
+// it ignore it harmlessly).
+function splitMatchedIds(matches: ReturnType<typeof matchPassengers>): { matched_user_ids: Array<number | null>; matched_member_ids: Array<number | null> } {
+  const matched_user_ids: Array<number | null> = [];
+  const matched_member_ids: Array<number | null> = [];
+  for (const m of matches) {
+    if (!m) {
+      matched_user_ids.push(null);
+      matched_member_ids.push(null);
+    } else if (m.kind === 'user') {
+      matched_user_ids.push(m.id);
+      matched_member_ids.push(null);
+    } else {
+      matched_user_ids.push(null);
+      matched_member_ids.push(m.id);
+    }
+  }
+  return { matched_user_ids, matched_member_ids };
 }
 
 function aliasesFor(id: number, username: string, email: string): PassengerMatchCandidate {
@@ -169,16 +201,18 @@ router.post('/extract', authenticate, singlePdfUpload, async (req: Request, res:
       if (existing && existing.status === 'draft' && existing.parsed_json) {
         cleanupTmp(uploadedFile?.path);
         const replayedDraft = JSON.parse(existing.parsed_json);
+        const split = splitMatchedIds(matchPassengers(
+          Array.isArray(replayedDraft?.passenger_names) ? replayedDraft.passenger_names : [],
+          buildMatchCandidates(authReq.user.id),
+        ));
         return res.json({
           import_id: existing.id,
           draft: replayedDraft,
           confidence: existing.confidence ?? 0,
           provider_used: existing.provider,
           attached_file_id: existing.source_file_id ?? null,
-          matched_user_ids: matchPassengers(
-            Array.isArray(replayedDraft?.passenger_names) ? replayedDraft.passenger_names : [],
-            buildMatchCandidates(authReq.user.id),
-          ),
+          matched_user_ids: split.matched_user_ids,
+          matched_member_ids: split.matched_member_ids,
           replayed: true,
         });
       }
@@ -235,16 +269,18 @@ router.post('/extract', authenticate, singlePdfUpload, async (req: Request, res:
         }
       }
 
+      const split = splitMatchedIds(matchPassengers(
+        result.draft.passenger_names ?? [],
+        buildMatchCandidates(authReq.user.id),
+      ));
       return res.json({
         import_id: importId,
         draft: result.draft,
         confidence: result.confidence,
         provider_used: result.provider_used,
         attached_file_id: attachedFileId,
-        matched_user_ids: matchPassengers(
-          result.draft.passenger_names ?? [],
-          buildMatchCandidates(authReq.user.id),
-        ),
+        matched_user_ids: split.matched_user_ids,
+        matched_member_ids: split.matched_member_ids,
       });
     } catch (innerErr) {
       const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);

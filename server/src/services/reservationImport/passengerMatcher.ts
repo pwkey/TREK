@@ -14,22 +14,36 @@
 // resolution picks the single best-scoring match and falls back to null on a
 // tie to avoid false positives.
 
+export type PassengerKind = 'user' | 'member';
+
 export interface PassengerMatchCandidate {
   id: number;
+  // [460-fork] M11 slice 5: candidates may be user-accounts or named
+  // household_members. The matcher returns the kind alongside the id
+  // so the route can split results into matched_user_ids and
+  // matched_member_ids. Defaults to 'user' for backwards compatibility
+  // with the M3-era callers.
+  kind?: PassengerKind;
   // One or more aliases per candidate — e.g. username, email local-part,
   // full-name variants. Each is matched independently; the best wins.
   aliases: string[];
 }
 
+export interface PassengerMatchResult {
+  kind: PassengerKind;
+  id: number;
+}
+
 export function matchPassengers(
   names: string[],
   candidates: PassengerMatchCandidate[],
-): Array<number | null> {
+): Array<PassengerMatchResult | null> {
   if (!Array.isArray(names) || names.length === 0) return [];
   if (!candidates.length) return names.map(() => null);
 
   const prepared = candidates.map((c) => ({
     id: c.id,
+    kind: c.kind ?? 'user',
     aliases: c.aliases.map(normalise).filter(Boolean),
   }));
 
@@ -38,29 +52,30 @@ export function matchPassengers(
     if (!n) return null;
     const nTokens = n.split(' ');
 
-    let best: { id: number; score: number } | null = null;
+    let best: { id: number; kind: PassengerKind; score: number } | null = null;
     let tiedAtBest = false;
-    const consider = (id: number, score: number) => {
-      if (!best || score < best.score) { best = { id, score }; tiedAtBest = false; }
-      else if (score === best.score && best.id !== id) tiedAtBest = true;
+    const consider = (id: number, kind: PassengerKind, score: number) => {
+      if (!best || score < best.score) { best = { id, kind, score }; tiedAtBest = false; }
+      else if (score === best.score && !(best.id === id && best.kind === kind)) tiedAtBest = true;
     };
 
     for (const c of prepared) {
       for (const a of c.aliases) {
         if (!a) continue;
-        if (a === n) { consider(c.id, 0); continue; }
+        if (a === n) { consider(c.id, c.kind, 0); continue; }
         const aTokens = a.split(' ').filter(Boolean);
         if (aTokens.length > 0 && aTokens.every((t) => nTokens.includes(t))) {
-          consider(c.id, 1);
+          consider(c.id, c.kind, 1);
           continue;
         }
         const d = levenshtein(a, n);
-        if (d <= 2) consider(c.id, 2 + d);
+        if (d <= 2) consider(c.id, c.kind, 2 + d);
       }
     }
 
     if (!best || tiedAtBest) return null;
-    return (best as { id: number; score: number }).id;
+    const winner = best as { id: number; kind: PassengerKind; score: number };
+    return { kind: winner.kind, id: winner.id };
   });
 }
 

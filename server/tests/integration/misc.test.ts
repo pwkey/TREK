@@ -95,7 +95,28 @@ describe('Photo endpoint auth', () => {
 
 describe('Force HTTPS redirect', () => {
   it('MISC-004 — FORCE_HTTPS redirect sends 301 for HTTP requests', async () => {
-    // createApp() reads FORCE_HTTPS at call time, so we need a fresh app instance
+    // createApp() reads FORCE_HTTPS at call time, so we need a fresh app instance.
+    // [460-fork] commit 55d595e exempted /api/health from the redirect so internal
+    // Docker healthchecks succeed. So we now hit a non-health endpoint to verify
+    // the redirect, and a separate test (below) covers the /api/health exemption.
+    process.env.FORCE_HTTPS = 'true';
+    let httpsApp: Express;
+    try {
+      httpsApp = createApp();
+    } finally {
+      delete process.env.FORCE_HTTPS;
+    }
+    const res = await request(httpsApp)
+      .get('/api/categories')
+      .set('X-Forwarded-Proto', 'http');
+    expect(res.status).toBe(301);
+  });
+
+  it('MISC-004 — /api/health is exempt from FORCE_HTTPS redirect', async () => {
+    // [460-fork] Internal Docker / Coolify healthchecks hit http://localhost:3000
+    // directly (no X-Forwarded-Proto). Without this exemption busybox wget would
+    // follow the 301 to https://localhost, attempt SSL on a plain-HTTP container,
+    // and fail with "wrong version number" — marking the container Unhealthy.
     process.env.FORCE_HTTPS = 'true';
     let httpsApp: Express;
     try {
@@ -106,7 +127,7 @@ describe('Force HTTPS redirect', () => {
     const res = await request(httpsApp)
       .get('/api/health')
       .set('X-Forwarded-Proto', 'http');
-    expect(res.status).toBe(301);
+    expect(res.status).toBe(200);
   });
 
   it('MISC-004 — no redirect when FORCE_HTTPS is not set', async () => {

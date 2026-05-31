@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import { useState, useRef, useMemo, useCallback } from 'react'
 import DOM from 'react-dom'
-import { Search, Plus, X, CalendarDays, Pencil, Trash2, ExternalLink, Navigation, Upload, ChevronDown, Check, MapPin, Eye } from 'lucide-react'
+import { Search, Plus, X, CalendarDays, Pencil, Trash2, ExternalLink, Navigation, Upload, ChevronDown, Check, MapPin, Eye, Tag } from 'lucide-react'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import { getCategoryIcon } from '../shared/categoryIcons'
 import { useTranslation } from '../../i18n'
@@ -315,6 +315,36 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
                 onContextMenu={e => ctxMenu.open(e, [
                   canEditPlaces && { label: t('common.edit'), icon: Pencil, onClick: () => onEditPlace(place) },
                   selectedDayId && { label: t('planner.addToDay'), icon: CalendarDays, onClick: () => onAssignToDay(place.id, selectedDayId) },
+                  // [460-fork] Q2 — quick category change without opening the
+                  // full edit modal. Submenu lists all categories + an
+                  // "(no category)" option to unset.
+                  canEditPlaces && {
+                    label: t('places.setCategory') || 'Set category',
+                    icon: Tag,
+                    submenu: [
+                      {
+                        label: t('places.noCategory') || '(no category)',
+                        onClick: async () => {
+                          try {
+                            await useTripStore.getState().updatePlace(tripId, place.id, { category_id: null })
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : 'Failed to update category')
+                          }
+                        },
+                      },
+                      ...categories.map(c => ({
+                        label: c.name,
+                        icon: getCategoryIcon(c.icon),
+                        onClick: async () => {
+                          try {
+                            await useTripStore.getState().updatePlace(tripId, place.id, { category_id: c.id })
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : 'Failed to update category')
+                          }
+                        },
+                      })),
+                    ],
+                  },
                   place.website && { label: t('inspector.website'), icon: ExternalLink, onClick: () => window.open(place.website, '_blank') },
                   (place.lat && place.lng) && { label: 'Google Maps', icon: Navigation, onClick: () => window.open(`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`, '_blank') },
                   { divider: true },

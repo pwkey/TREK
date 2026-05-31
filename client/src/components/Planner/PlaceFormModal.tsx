@@ -189,7 +189,10 @@ export default function PlaceFormModal({
     }
   }
 
-  const hasTimeError = place && form.place_time && form.end_time && form.place_time.length >= 5 && form.end_time.length >= 5 && form.end_time <= form.place_time
+  // [460-fork] Q3 — time fields now show on creation, so validate without
+  // requiring edit-mode. Empty times remain valid; only flag when both are
+  // present and end <= start.
+  const hasTimeError = !!(form.place_time && form.end_time && form.place_time.length >= 5 && form.end_time.length >= 5 && form.end_time <= form.place_time)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -367,17 +370,17 @@ export default function PlaceFormModal({
           )}
         </div>
 
-        {/* Time — only shown when editing, not when creating */}
-        {place && (
-          <TimeSection
-            form={form}
-            handleChange={handleChange}
-            assignmentId={assignmentId}
-            dayAssignments={dayAssignments}
-            hasTimeError={hasTimeError}
-            t={t}
-          />
-        )}
+        {/* [460-fork] Q3 — Time fields now appear on creation as well as
+            editing. TimeSection's collision check no-ops when there's no
+            assignmentId yet (creation before save). */}
+        <TimeSection
+          form={form}
+          handleChange={handleChange}
+          assignmentId={assignmentId}
+          dayAssignments={dayAssignments}
+          hasTimeError={hasTimeError}
+          t={t}
+        />
 
         {/* Website */}
         <div>

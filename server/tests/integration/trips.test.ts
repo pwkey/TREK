@@ -695,6 +695,72 @@ describe('Trip members', () => {
   });
 });
 
+// [460-fork] Q12 — dates-preview endpoint reports impact of a proposed date change.
+describe('Q12 — POST /api/trips/:id/dates-preview', () => {
+  it('Q12-001 — truncating end_date reports which days would be deleted', async () => {
+    const { user } = createUser(testDb);
+    // 5-day trip with content on day 5.
+    const tripRes = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(user.id))
+      .send({ title: 'Was 5 days', start_date: '2027-09-01', end_date: '2027-09-05' });
+    const tripId = tripRes.body.trip.id;
+    const day5 = testDb.prepare('SELECT id FROM days WHERE trip_id = ? AND date = ?').get(tripId, '2027-09-05') as { id: number };
+    testDb.prepare('UPDATE days SET title = ? WHERE id = ?').run('Final dinner', day5.id);
+
+    const preview = await request(app)
+      .post(`/api/trips/${tripId}/dates-preview`)
+      .set('Cookie', authCookie(user.id))
+      .send({ end_date: '2027-09-03' });
+    expect(preview.status).toBe(200);
+    expect(preview.body.deleted_count).toBe(2); // days 4 and 5 deleted
+    expect(preview.body.with_content_count).toBe(1); // only day 5 had a title
+    const day5Summary = preview.body.deleted_days.find((d: any) => d.date === '2027-09-05');
+    expect(day5Summary.title).toBe('Final dinner');
+    expect(day5Summary.has_content).toBe(true);
+  });
+
+  it('Q12-002 — clearing end_date (open-ended) deletes nothing', async () => {
+    const { user } = createUser(testDb);
+    const tripRes = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(user.id))
+      .send({ title: 'Closing the end', start_date: '2027-09-01', end_date: '2027-09-05' });
+    const preview = await request(app)
+      .post(`/api/trips/${tripRes.body.trip.id}/dates-preview`)
+      .set('Cookie', authCookie(user.id))
+      .send({ end_date: null });
+    expect(preview.body.deleted_count).toBe(0);
+  });
+
+  it('Q12-003 — no-op date change reports nothing deleted', async () => {
+    const { user } = createUser(testDb);
+    const tripRes = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(user.id))
+      .send({ title: 'Same dates', start_date: '2027-09-01', end_date: '2027-09-05' });
+    const preview = await request(app)
+      .post(`/api/trips/${tripRes.body.trip.id}/dates-preview`)
+      .set('Cookie', authCookie(user.id))
+      .send({ start_date: '2027-09-01', end_date: '2027-09-05' });
+    expect(preview.body.deleted_count).toBe(0);
+  });
+
+  it('Q12-004 — shifting forward by 5 days deletes the 5 earliest days', async () => {
+    const { user } = createUser(testDb);
+    const tripRes = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(user.id))
+      .send({ title: 'Shift', start_date: '2027-09-01', end_date: '2027-09-10' });
+    const preview = await request(app)
+      .post(`/api/trips/${tripRes.body.trip.id}/dates-preview`)
+      .set('Cookie', authCookie(user.id))
+      .send({ start_date: '2027-09-06', end_date: '2027-09-15' });
+    // Old range 09-01..09-10. New range 09-06..09-15. Deleted: 09-01..09-05.
+    expect(preview.body.deleted_count).toBe(5);
+  });
+});
+
 // [460-fork] Milestone 11 slice 4 — Trip auto-add to household members on create.
 describe('Trip auto-add to household (M11)', () => {
   it('TRIP-016 — creating a trip auto-adds every other household user as trip_member', async () => {

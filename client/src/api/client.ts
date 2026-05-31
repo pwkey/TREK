@@ -187,6 +187,14 @@ export const tripsApi = {
   create: (data: Record<string, unknown>) => apiClient.post('/trips', data).then(r => r.data),
   get: (id: number | string) => apiClient.get(`/trips/${id}`).then(r => r.data),
   update: (id: number | string, data: Record<string, unknown>) => apiClient.put(`/trips/${id}`, data).then(r => r.data),
+  // [460-fork] Q12 — preview what would be deleted by a date change so the
+  // UI can warn the user before the destructive PUT.
+  datesPreview: (id: number | string, data: { start_date?: string | null; end_date?: string | null }) =>
+    apiClient.post(`/trips/${id}/dates-preview`, data).then(r => r.data as {
+      deleted_count: number
+      with_content_count: number
+      deleted_days: Array<{ day_id: number; day_number: number; date: string | null; title: string | null; assignments: number; photos: number; has_notes: boolean; has_journal: boolean; has_content: boolean }>
+    }),
   delete: (id: number | string) => apiClient.delete(`/trips/${id}`).then(r => r.data),
   uploadCover: (id: number | string, formData: FormData) => apiClient.post(`/trips/${id}/cover`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
   archive: (id: number | string) => apiClient.put(`/trips/${id}`, { is_archived: true }).then(r => r.data),

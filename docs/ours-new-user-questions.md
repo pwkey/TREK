@@ -303,6 +303,32 @@ Worth noting for guide-writing context:
 - **Fix shipped:** commit `4995e0f` — `HOLD_MS` 900 → 1800 in `client/src/components/shared/SplashScreen.tsx`. Total splash is now ~2.25 s (was ~1.35 s).
 - **Behaviour note:** still shows once per browser session (sessionStorage gate). To see the new duration on a device that's already loaded the app, you need a fresh tab or to clear sessionStorage.
 
+### 2026-05-31 — Q11 Open-ended trips + "+ Add day" affordance
+
+- **Observation:** "Some trips may not have a defined end date... We need to define an open-ended trip and also be able to extend a trip with additional days"
+- **Fix shipped:** commit `b22f446`.
+  - Server: `generateDays` now distinguishes three modes — both dates missing → dateless placeholders, start set + end null → **open-ended** (single day at start_date), both set → dated range. Trip-create route no longer manufactures a 6-days-later `end_date` when only start_date is given.
+  - New `addDayAtStart` / `addDayAtEnd` service helpers + `POST /api/trips/:id/days/at-start` and `/at-end` endpoints. Date inheritance: ±1 calendar day from the neighbour, or dateless if neighbour is dateless.
+  - Client: `daysApi.addAtStart / addAtEnd`. Two small dashed-buttons bracket the day list in `DayPlanSidebar`. `TripFormModal` no longer auto-fills `end_date` when user types `start_date` if `end_date` was previously blank.
+  - `remoteEventHandler` sorts the local days array by `day_number` on day:created/updated so an at-start renumbering renders in the right place.
+  - 6 new server tests cover the matrix.
+
+### 2026-05-31 — Q13 Segment invite with guided trip creation
+
+- **Observation:** "What if they have not yet started putting their trip into 460 Planner when I put out the request?"
+- **Fix shipped:** commit `d6dba09`.
+  - Server: `segmentService.acceptInvite` now accepts `targetTripId` OR `newTripTitle`. When `newTripTitle` is set, server creates a stub trip on the segment's date range and adopts its id. Route validates that exactly one is provided.
+  - Client: SegmentAcceptPage gains a "+ Create a new trip with this segment" radio option at the top of the trip picker, with an inline title input defaulting to "Shared trip with {inviter}". Accept handler branches on the choice.
+  - 2 new server tests (guided creation + missing-input rejection).
+
+### 2026-05-31 — Q12 Warn-before-data-loss on trip-date truncation
+
+- **Observation:** "What provisions do we have for editing a planned trip? ...things change."
+- **Fix shipped:** the same commit as the user reads this update from (current).
+  - New `POST /api/trips/:id/dates-preview` endpoint: takes proposed `start_date` / `end_date`, returns which existing days would be deleted with content summary (assignments, photos, notes, journal, title) — without mutating state.
+  - `TripFormModal.handleSubmit` calls dates-preview before the destructive PUT when editing an existing trip's dates. If any days would be deleted, shows a confirmation modal listing them. User must explicitly click "Delete those days and proceed" to commit.
+  - 4 new server tests (truncate, clear-to-open-ended, no-op, shift).
+
 ### 2026-05-31 — Q10 Household supersedes 1-to-1 partner pairing (M11)
 
 - **Observation:** "We should probably ensure that more than two people can be part of the 'partner' group ie kids etc"

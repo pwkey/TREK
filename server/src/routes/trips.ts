@@ -128,6 +128,101 @@ router.get('/:id', authenticate, (req: Request, res: Response) => {
 
 // ── Update trip ───────────────────────────────────────────────────────────
 
+// [460-fork] Q12 — Warn-before-data-loss preview for date edits.
+//
+// Returns which days WOULD be deleted by changing the trip's dates, along
+// with a content summary so the client can warn the user before the real
+// PUT. Does not mutate state. Both modes:
+//   - Truncate: days outside the new range get deleted
+//   - Shift: same — days outside the new range deleted
+//   - Open-ended (end_date cleared): preserves all days
+//   - Dateless (both cleared): deletes all dated days, keeps dateless
+router.post('/:id/dates-preview', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const access = canAccessTrip(req.params.id, authReq.user.id);
+  if (!access) return res.status(404).json({ error: 'Trip not found' });
+  const tripOwnerId = access.user_id;
+  const isMember = access.user_id !== authReq.user.id;
+  if (!checkPermission('trip_edit', authReq.user.role, tripOwnerId, authReq.user.id, isMember))
+    return res.status(403).json({ error: 'No permission to edit this trip' });
+
+  const newStart = req.body?.start_date === null ? null : (typeof req.body?.start_date === 'string' ? req.body.start_date : undefined);
+  const newEnd = req.body?.end_date === null ? null : (typeof req.body?.end_date === 'string' ? req.body.end_date : undefined);
+  const tripId = Number(req.params.id);
+
+  // Determine the effective new range. Fall back to existing trip dates for
+  // fields the caller didn't send.
+  const tripRow = db.prepare('SELECT start_date, end_date FROM trips WHERE id = ?').get(tripId) as { start_date: string | null; end_date: string | null };
+  const effectiveStart = newStart !== undefined ? newStart : tripRow.start_date;
+  const effectiveEnd = newEnd !== undefined ? newEnd : tripRow.end_date;
+
+  // Open-ended (only one date) preserves all days — nothing to warn about.
+  if ((effectiveStart && !effectiveEnd) || (!effectiveStart && effectiveEnd)) {
+    return res.json({ deleted_count: 0, with_content_count: 0, deleted_days: [] });
+  }
+
+  // Build the set of dates that survive the change.
+  let survivors: Set<string> | null = null;
+  if (effectiveStart && effectiveEnd) {
+    survivors = new Set<string>();
+    const [sy, sm, sd] = effectiveStart.split('-').map(Number);
+    const [ey, em, ed] = effectiveEnd.split('-').map(Number);
+    const startMs = Date.UTC(sy, sm - 1, sd);
+    const endMs = Date.UTC(ey, em - 1, ed);
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    for (let t = startMs; t <= endMs; t += ONE_DAY) {
+      const d = new Date(t);
+      const yy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      survivors.add(`${yy}-${mm}-${dd}`);
+    }
+  }
+  // else: both null → dateless mode → all dated days are deleted.
+
+  const days = db.prepare('SELECT id, day_number, date, title, notes FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as Array<{ id: number; day_number: number; date: string | null; title: string | null; notes: string | null }>;
+  const deletedDays = days.filter(d => d.date && (survivors === null || !survivors.has(d.date)));
+
+  // For each deleted day, compute whether it has content. Anything beyond
+  // an empty shell counts: title, notes, day_assignments, day_photos,
+  // day_journals (markdown).
+  const contentByDay = new Map<number, { has_title: boolean; has_notes: boolean; assignments: number; photos: number; has_journal: boolean }>();
+  for (const d of deletedDays) {
+    const aCount = (db.prepare('SELECT COUNT(*) AS c FROM day_assignments WHERE day_id = ?').get(d.id) as { c: number }).c;
+    const pCount = (db.prepare('SELECT COUNT(*) AS c FROM day_photos WHERE day_id = ?').get(d.id) as { c: number }).c;
+    const journal = db.prepare('SELECT content_markdown FROM day_journals WHERE day_id = ?').get(d.id) as { content_markdown: string | null } | undefined;
+    contentByDay.set(d.id, {
+      has_title: !!d.title?.trim(),
+      has_notes: !!d.notes?.trim(),
+      assignments: aCount,
+      photos: pCount,
+      has_journal: !!journal?.content_markdown?.trim(),
+    });
+  }
+
+  const summary = deletedDays.map(d => {
+    const c = contentByDay.get(d.id)!;
+    return {
+      day_id: d.id,
+      day_number: d.day_number,
+      date: d.date,
+      title: d.title,
+      assignments: c.assignments,
+      photos: c.photos,
+      has_notes: c.has_notes,
+      has_journal: c.has_journal,
+      has_content: c.has_title || c.has_notes || c.has_journal || c.assignments > 0 || c.photos > 0,
+    };
+  });
+  const withContent = summary.filter(s => s.has_content).length;
+
+  return res.json({
+    deleted_count: deletedDays.length,
+    with_content_count: withContent,
+    deleted_days: summary,
+  });
+});
+
 router.put('/:id', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const access = canAccessTrip(req.params.id, authReq.user.id);

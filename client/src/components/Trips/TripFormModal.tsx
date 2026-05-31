@@ -85,6 +85,12 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
     }
   }, [tripRemindersEnabled])
 
+  // [460-fork] Q12 — warn-before-data-loss state. When the user changes
+  // dates such that days with content would be deleted, we show a confirm
+  // modal listing the impact. The actual save happens only on confirm.
+  const [pendingSaveData, setPendingSaveData] = useState<Record<string, unknown> | null>(null)
+  const [datePreview, setDatePreview] = useState<{ deleted_count: number; with_content_count: number; deleted_days: Array<{ day_id: number; day_number: number; date: string | null; title: string | null; assignments: number; photos: number; has_notes: boolean; has_journal: boolean; has_content: boolean }> } | null>(null)
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -92,16 +98,54 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
     if (formData.start_date && formData.end_date && new Date(formData.end_date) < new Date(formData.start_date)) {
       setError(t('dashboard.endDateError')); return
     }
+
+    // [460-fork] Q12 — if editing an existing trip AND dates are changing,
+    // ask the server which days would be lost. If any have content, prompt
+    // the user before proceeding.
+    if (trip && (formData.start_date !== (trip.start_date ?? '') || formData.end_date !== (trip.end_date ?? ''))) {
+      try {
+        const preview = await tripsApi.datesPreview(trip.id, {
+          start_date: formData.start_date || null,
+          end_date: formData.end_date || null,
+        })
+        if (preview.deleted_count > 0) {
+          // Stash the save payload; the confirm-modal's "Proceed" button will
+          // commit. "Cancel" just clears the modal and the user goes back to
+          // the form.
+          setPendingSaveData({
+            title: formData.title.trim(),
+            description: formData.description.trim() || null,
+            start_date: formData.start_date || null,
+            end_date: formData.end_date || null,
+            reminder_days: formData.reminder_days,
+          })
+          setDatePreview(preview)
+          return
+        }
+      } catch (err) {
+        // Preview failure is non-fatal — fall through to the real save and
+        // let the user discover any issue from the server response.
+        console.warn('[Q12] dates-preview failed; proceeding without warning:', err)
+      }
+    }
+
+    await commitSave({
+      title: formData.title.trim(),
+      description: formData.description.trim() || null,
+      start_date: formData.start_date || null,
+      end_date: formData.end_date || null,
+      reminder_days: formData.reminder_days,
+      ...(!formData.start_date && !formData.end_date ? { day_count: formData.day_count } : {}),
+    })
+  }
+
+  // [460-fork] Q12 — central save path. Called by handleSubmit on the
+  // safe path, and by the date-warning modal's "Proceed" button after
+  // the user acknowledges the impact.
+  const commitSave = async (data: Record<string, unknown>) => {
     setIsLoading(true)
     try {
-      const result = await onSave({
-        title: formData.title.trim(),
-        description: formData.description.trim() || null,
-        start_date: formData.start_date || null,
-        end_date: formData.end_date || null,
-        reminder_days: formData.reminder_days,
-        ...(!formData.start_date && !formData.end_date ? { day_count: formData.day_count } : {}),
-      })
+      const result = await onSave(data)
       // Add selected members for newly created trips
       if (selectedMembers.length > 0 && result?.trip?.id) {
         for (const userId of selectedMembers) {
@@ -221,6 +265,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
   const inputCls = "w-full px-3 py-2.5 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-transparent text-sm"
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -414,5 +459,81 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
 
       </form>
     </Modal>
+
+    {/* [460-fork] Q12 — Warn-before-data-loss confirmation modal. */}
+    {datePreview && pendingSaveData && (
+      <Modal
+        isOpen={true}
+        onClose={() => { setDatePreview(null); setPendingSaveData(null) }}
+        title="Some days will be deleted"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: 'var(--bg-warning, #fef3c7)', color: 'var(--text-warning, #92400e)' }}>
+            <span style={{ flexShrink: 0, fontSize: 20, lineHeight: '1.2em' }}>⚠️</span>
+            <div className="text-sm">
+              <div className="font-medium mb-1">
+                This date change will delete {datePreview.deleted_count} day{datePreview.deleted_count === 1 ? '' : 's'}
+                {datePreview.with_content_count > 0 && ` (${datePreview.with_content_count} with content)`}.
+              </div>
+              <div className="opacity-90">
+                Places, notes, photos, and journal entries on those days will be lost. This can't be undone.
+              </div>
+            </div>
+          </div>
+
+          <div className="text-xs uppercase tracking-wide" style={{ color: 'var(--text-faint)' }}>Affected days</div>
+          <div className="max-h-64 overflow-y-auto rounded-lg border" style={{ borderColor: 'var(--border-primary)' }}>
+            {datePreview.deleted_days.map(d => (
+              <div key={d.day_id} className="flex items-center gap-3 px-3 py-2 border-b last:border-b-0" style={{ borderColor: 'var(--border-faint)' }}>
+                <div className="text-xs font-semibold" style={{ color: 'var(--text-faint)', width: 24 }}>{d.day_number}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                    {d.date}
+                    {d.title && <span className="ml-2 font-medium">{d.title}</span>}
+                  </div>
+                  <div className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                    {(() => {
+                      const bits: string[] = []
+                      if (d.assignments > 0) bits.push(`${d.assignments} place${d.assignments === 1 ? '' : 's'}`)
+                      if (d.photos > 0) bits.push(`${d.photos} photo${d.photos === 1 ? '' : 's'}`)
+                      if (d.has_notes) bits.push('notes')
+                      if (d.has_journal) bits.push('journal')
+                      return bits.length > 0 ? bits.join(' · ') : 'no content'
+                    })()}
+                  </div>
+                </div>
+                {d.has_content && <span style={{ fontSize: 12 }}>⚠️</span>}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2 justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => { setDatePreview(null); setPendingSaveData(null) }}
+              className="px-4 py-2 rounded-lg text-sm font-medium"
+              style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                const data = pendingSaveData
+                setDatePreview(null)
+                setPendingSaveData(null)
+                if (data) await commitSave(data)
+              }}
+              className="px-4 py-2 rounded-lg text-sm font-medium"
+              style={{ background: '#dc2626', color: 'white', border: '1px solid #dc2626' }}
+            >
+              Delete those days and proceed
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )}
+  </>
   )
 }

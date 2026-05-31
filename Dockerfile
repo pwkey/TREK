@@ -1,6 +1,14 @@
 # Stage 1: Build React client
 FROM node:22-alpine AS client-builder
 WORKDIR /app/client
+# [460-fork] Install fonts + fontconfig so the PWA-icon prebuild step
+# (sharp rendering SVG -> PNG) can resolve `font-family` references in
+# the icon SVGs. Without this, sharp/libvips silently renders <text>
+# elements as blank — the PNG icons get the gradient + sun but no
+# "460" text, and the home-screen icon ends up unidentifiable.
+# ttf-liberation gives us Liberation Sans Narrow as the closest
+# available substitute for Impact (the SVG's preferred font).
+RUN apk add --no-cache fontconfig ttf-liberation && fc-cache -f
 COPY client/package*.json ./
 RUN npm install --no-audit --no-fund
 COPY client/ ./

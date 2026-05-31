@@ -10,7 +10,6 @@ import { getAllPermissions, savePermissions as savePerms, PERMISSION_ACTIONS } f
 import { revokeUserSessions } from '../mcp';
 import { validatePassword } from './passwordPolicy';
 import { getPhotoProviderConfig } from './memories/helpersService';
-import { send as sendNotification } from './notificationService';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -315,25 +314,25 @@ export async function checkVersion() {
 }
 
 export async function checkAndNotifyVersion(): Promise<void> {
-  try {
-    const result = await checkVersion();
-    if (!result.update_available) return;
-
-    const lastNotified = (db.prepare('SELECT value FROM app_settings WHERE key = ?').get('last_notified_version') as { value: string } | undefined)?.value;
-    if (lastNotified === result.latest) return;
-
-    db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('last_notified_version', result.latest);
-
-    await sendNotification({
-      event: 'version_available',
-      actorId: null,
-      scope: 'admin',
-      targetId: 0,
-      params: { version: result.latest as string },
-    });
-  } catch {
-    // Silently ignore — version check is non-critical
-  }
+  // [460-fork] Disabled. Upstream TREK's version checker compares OUR
+  // package.json version against the latest release of mauriceboe/TREK and
+  // fires a "version available" admin notification. For a fork that is
+  // intentionally diverged (M1–M11 of custom work on top of TREK 2.9.14),
+  // upstream's version number is NOT an actionable update for us — it's a
+  // strategic "upstream has moved, consider rebasing" signal, which we
+  // track deliberately via git (CLAUDE.md §4), not via an in-app nag that
+  // misleadingly reads as "your app has an update waiting".
+  //
+  // We auto-deploy our own changes via CI → Coolify, and the PWA
+  // service-worker (registerType: 'autoUpdate' + skipWaiting/clientsClaim)
+  // plus the App.tsx version-based cache-bust means our users silently get
+  // new builds on next launch. So no notification system is needed for our
+  // own updates either.
+  //
+  // If we ever want to notify users about OUR releases, repurpose this
+  // function to compare against pwkey/TREK (or a hardcoded build stamp)
+  // rather than mauriceboe/TREK.
+  return;
 }
 
 // ── Invite Tokens ──────────────────────────────────────────────────────────

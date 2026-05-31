@@ -257,6 +257,18 @@ Worth noting for guide-writing context:
 - **Fix shipped:** commit `4995e0f` — `HOLD_MS` 900 → 1800 in `client/src/components/shared/SplashScreen.tsx`. Total splash is now ~2.25 s (was ~1.35 s).
 - **Behaviour note:** still shows once per browser session (sessionStorage gate). To see the new duration on a device that's already loaded the app, you need a fresh tab or to clear sessionStorage.
 
+### 2026-05-31 — Q10 Household supersedes 1-to-1 partner pairing (M11)
+
+- **Observation:** "We should probably ensure that more than two people can be part of the 'partner' group ie kids etc"
+- **Resolution:** Milestone 11 — full plan in `docs/ours-milestone-11-plan.md`. Five slices shipped in five commits:
+  - **Slice 1** (`9f872d7`): schema for households + household_members + household_invites; users.household_id FK; migration that converts existing M3 partner pairs to 2-person households then drops users.partner_user_id and partner_invites; new householdService.ts with CRUD + autoAddHouseholdToTrip; replaced M3 partner reads in authService, tripService, routes/trips, routes/reservationImport, routes/auth; deleted partnerService.ts and M3 partner tests; 23 new service unit tests.
+  - **Slice 2** (`b5d4cbd`): REST routes at `/api/household` (create / get / rename / leave + invites send/cancel/accept/decline + members CRUD); notification event type renamed partner_invite → household_invite; new in-app action handlers; 22 new integration tests.
+  - **Slice 3** (`51dd4ea`): client UI panel `HouseholdSection.tsx` replaces `PartnerSection.tsx`; new household types + API client; DashboardPage "include on copy?" prompt switched to household; M3 partner stub endpoints removed entirely now that nothing calls them.
+  - **Slice 4** (`384aea8`): two trip-creation tests verifying auto-add for multi-user households and no-op for solo users.
+  - **Slice 5** (`384aea8`): passenger matcher returns `{ kind, id }` tagged results; reservationImport candidates now include named household_members; response splits into matched_user_ids[] + matched_member_ids[] (additive — old clients still work).
+- **Both (A) family group accounts AND (B) named non-account members shipped** as per the user's "go for both" decision. Adult travel-companions get their own logins; kids/granny/pets are name-only.
+- **Implication for guide:** Settings → Account → Household replaces the old Partner Pairing section. Document: create household → invite by email → either side accepts → new trips auto-add. Named members for kids/non-app-users via "+ Add member" in the same panel. Smart Import will recognise named members in passenger lists from reservation PDFs.
+
 ### 2026-05-31 — Q6 EXIF-timestamp warning for single-photo uploads
 
 - **Observation:** "I uploaded a random photo into a day on a new trip I have created for testing. It did not flag that the photo was not actually taken on the day that is being assigned to it. I think there needs to be some sort of warning before proceeding..."

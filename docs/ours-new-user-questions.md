@@ -228,6 +228,20 @@ Worth noting for guide-writing context:
 - **Fix shipped:** commit `4995e0f` — `HOLD_MS` 900 → 1800 in `client/src/components/shared/SplashScreen.tsx`. Total splash is now ~2.25 s (was ~1.35 s).
 - **Behaviour note:** still shows once per browser session (sessionStorage gate). To see the new duration on a device that's already loaded the app, you need a fresh tab or to clear sessionStorage.
 
+### 2026-05-31 — Q6 EXIF-timestamp warning for single-photo uploads
+
+- **Observation:** "I uploaded a random photo into a day on a new trip I have created for testing. It did not flag that the photo was not actually taken on the day that is being assigned to it. I think there needs to be some sort of warning before proceeding..."
+- **Fix shipped:** commit `694d911`.
+  - New `utils/photoTimestampCheck.ts` extracts the photo's EXIF date via the existing `extractMetadata()` helper, encapsulates all "skip silently" cases (no EXIF, match, setting off), and finds matching days in the trip.
+  - New `components/Photos/PhotoTimestampWarning.tsx` dialog with thumbnail + photo date vs selected day, three actions: "Add to selected day anyway" / "Use photo's date (→ matching day)" (only shown when a matching day exists in the trip) / "Cancel".
+  - New `check_photo_timestamp` setting (default true), surfaced as a toggle in Settings → Display → "Warn when photo date doesn't match day" with hint text explaining the disable case (souvenirs, scans, placeholders).
+  - Wired into both single-photo upload paths: `Journal/PhotoGrid.tsx` (only for single-file uploads — multi-file drops skip since batch-import already does smart matching), and `Planner/DayPlanSidebar.tsx` (Q5 day-header camera button, always single-file, always checks).
+- **Behaviour:**
+  - Default-on: every user gets the warning until they explicitly opt out.
+  - Localised to photo's local calendar day, not UTC — a 11pm Sydney photo matches Sydney's current day, not next-day UTC.
+  - "Use photo's date" only appears when there's actually a matching day in the trip to route to. If the photo was taken outside the trip's date range, that option is hidden and the user picks between Add Anyway or Cancel.
+- **Implication for guide:** Document the safeguard, mention the toggle's location, explain when you'd want to turn it off (deliberate misassignment for souvenir-style photos).
+
 ### 2026-05-31 — Q2 quick category change via context menu
 
 - **Observation:** "Might want to add this to the quick-add flow, as on any decent sized trip there will be a lot of places/activities and being able to view by category would be very useful straight up."

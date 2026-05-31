@@ -1097,7 +1097,6 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'packing.menuCheckAll': 'Alle abhaken',
   'packing.menuUncheckAll': 'Alle Haken entfernen',
   'packing.menuDeleteCat': 'Kategorie löschen',
-  'packing.assignUser': 'Benutzer zuweisen',
   'packing.noMembers': 'Keine Mitglieder',
   'packing.addItem': 'Eintrag hinzufügen',
   'packing.addItemPlaceholder': 'Artikelname...',

@@ -1116,7 +1116,6 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'packing.menuCheckAll': 'Check All',
   'packing.menuUncheckAll': 'Uncheck All',
   'packing.menuDeleteCat': 'Delete Category',
-  'packing.assignUser': 'Assign user',
   'packing.noMembers': 'No trip members',
   'packing.addItem': 'Add item',
   'packing.addItemPlaceholder': 'Item name...',

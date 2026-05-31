@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 const STORAGE_KEY = '460-splash-shown'
-const HOLD_MS = 900
+const HOLD_MS = 1800
 const FADE_MS = 450
 
 // Shows once per browser session on first load. Animates the 460 mark in

@@ -146,6 +146,14 @@ router.post('/extract', authenticate, singlePdfUpload, async (req: Request, res:
     }
 
     // Idempotency: if the client retries with the same X-Client-Mutation-Id, return the cached result.
+    // [460-fork] Note: in practice this per-route check is unreachable
+    // because the global idempotency middleware (Milestone 5 slice 2,
+    // src/middleware/idempotency.ts) fires earlier and serves cached
+    // responses keyed by (user_id, mutation_id). Kept as a defensive
+    // fallback for the (tripId, cmid) edge case where the same cmid is
+    // reused across different trips — the global middleware would
+    // collide on (userId, cmid) and incorrectly serve the wrong trip's
+    // cached response, but the global middleware is the actual fix.
     const clientMutationId = (req.headers['x-client-mutation-id'] as string | undefined)?.trim() || null;
     if (clientMutationId) {
       const existing = findByClientMutationId(tripId, clientMutationId);

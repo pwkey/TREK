@@ -39,7 +39,16 @@ export function idempotency(req: Request, res: Response, next: NextFunction): vo
 
   if (cached) {
     try {
-      res.status(cached.status_code).json(JSON.parse(cached.response_body));
+      let body: unknown = JSON.parse(cached.response_body);
+      // [460-fork] Signal "this is a replay" by adding `replayed: true`
+      // to object bodies. Useful for client diagnostics (and for tests
+      // that need to distinguish a fresh response from a cached one).
+      // Non-object bodies (arrays, scalars, null) pass through unchanged
+      // so we don't accidentally corrupt list endpoints.
+      if (body && typeof body === 'object' && !Array.isArray(body)) {
+        body = { ...(body as Record<string, unknown>), replayed: true };
+      }
+      res.status(cached.status_code).json(body);
     } catch {
       // Stored row was somehow malformed; fall through to the real handler.
       // Best-effort recovery, shouldn't happen.

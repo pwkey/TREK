@@ -79,7 +79,10 @@ describe('X-Client-Mutation-Id idempotency middleware', () => {
       .set('X-Client-Mutation-Id', MUTATION_ID)
       .send({ title: 'Different write', notes: 'should be ignored' });
     expect(replay.status).toBe(first.status);
-    expect(replay.body).toEqual(first.body);
+    // [460-fork] The middleware now decorates cached object bodies with
+    // `replayed: true` so callers can distinguish a cache hit from a
+    // fresh response. The rest of the body must still match byte-for-byte.
+    expect(replay.body).toEqual({ ...first.body, replayed: true });
 
     // DB confirms the second write was suppressed.
     const dayRow = testDb.prepare('SELECT title, notes FROM days WHERE id = ?').get(day.id) as { title: string; notes: string };

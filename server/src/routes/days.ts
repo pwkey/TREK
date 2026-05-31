@@ -29,6 +29,34 @@ router.post('/', authenticate, requireTripAccess, (req: Request, res: Response) 
   broadcast(tripId, 'day:created', { day }, req.headers['x-socket-id'] as string);
 });
 
+// [460-fork] Q11 — convenience endpoints for the day-list "+ Add day"
+// affordance. The end variant matches POST / above but auto-inherits the
+// date from the last day (+1 calendar day). The start variant shifts the
+// existing day_numbers up by one before inserting at position 1.
+router.post('/at-end', authenticate, requireTripAccess, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+  const { tripId } = req.params;
+  const day = dayService.addDayAtEnd(tripId, req.body?.notes);
+  res.status(201).json({ day });
+  broadcast(tripId, 'day:created', { day }, req.headers['x-socket-id'] as string);
+});
+
+router.post('/at-start', authenticate, requireTripAccess, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+  const { tripId } = req.params;
+  const day = dayService.addDayAtStart(tripId, req.body?.notes);
+  res.status(201).json({ day });
+  // Renumbering shifted every other day's day_number. Emit day:created for
+  // the new day; the client's sort-by-day_number in remoteEventHandler keeps
+  // visual order correct. Other clients may see stale numbers until they
+  // refetch (e.g. on next focus / reconnect). Acceptable for this affordance.
+  broadcast(tripId, 'day:created', { day }, req.headers['x-socket-id'] as string);
+});
+
 router.put('/:id', authenticate, requireTripAccess, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))

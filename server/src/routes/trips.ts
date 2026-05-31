@@ -94,11 +94,14 @@ router.post('/', authenticate, (req: Request, res: Response) => {
 
   if (!start_date && !end_date) {
     // No dates: create dateless placeholder days (day_count or default 7)
-  } else if (start_date && !end_date) {
-    end_date = toDateStr(addDays(new Date(start_date), 6));
   } else if (!start_date && end_date) {
+    // [460-fork] Q11 — back-compat: only end_date set means "ended on date X,
+    // started 6 days earlier", same as the pre-Q11 default.
     start_date = toDateStr(addDays(new Date(end_date), -6));
   }
+  // [460-fork] Q11 — start_date alone (no end_date) is now open-ended: the
+  // route no longer manufactures a 6-days-later end_date. generateDays
+  // creates a single day at start_date; user extends with "+ Add day at end".
 
   if (start_date && end_date && new Date(end_date) < new Date(start_date))
     return res.status(400).json({ error: 'End date must be after start date' });

@@ -287,6 +287,9 @@ export const daysApi = {
     return apiClient.put(`/trips/${tripId}/days/${dayId}`, data, { headers }).then(r => r.data)
   },
   delete: (tripId: number | string, dayId: number | string) => apiClient.delete(`/trips/${tripId}/days/${dayId}`).then(r => r.data),
+  // [460-fork] Q11 — at-start / at-end "+ Add day" affordances.
+  addAtStart: (tripId: number | string) => apiClient.post(`/trips/${tripId}/days/at-start`, {}).then(r => r.data),
+  addAtEnd: (tripId: number | string) => apiClient.post(`/trips/${tripId}/days/at-end`, {}).then(r => r.data),
 }
 
 export const placesApi = {

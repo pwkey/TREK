@@ -36,7 +36,16 @@ export { isOwner };
 export function generateDays(tripId: number | bigint | string, startDate: string | null, endDate: string | null, maxDays?: number, dayCount?: number) {
   const existing = db.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ?').all(tripId) as { id: number; day_number: number; date: string | null }[];
 
-  if (!startDate || !endDate) {
+  // [460-fork] Q11 — Three modes:
+  //   1. dateless (both dates null) → 7 (or day_count) placeholder days
+  //   2. open-ended (start_date set, end_date null) → ensure day 1 has
+  //      start_date; preserve everything else. New trips get 1 day.
+  //   3. dated range (both set) → existing logic below
+  //
+  // Mode 2 is new in Q11 — previously the code treated either-missing as
+  // both-missing (the OR guard), silently discarding the start_date for
+  // open-ended trips.
+  if (!startDate && !endDate) {
     const datelessExisting = existing.filter(d => !d.date).sort((a, b) => a.day_number - b.day_number);
     const withDates = existing.filter(d => d.date);
     if (withDates.length > 0) {
@@ -57,6 +66,27 @@ export function generateDays(tripId: number | bigint | string, startDate: string
     remaining.forEach((d, i) => tmpUpd.run(-(i + 1), d.id));
     remaining.forEach((d, i) => tmpUpd.run(i + 1, d.id));
     return;
+  }
+
+  if (startDate && !endDate) {
+    // Open-ended trip. Ensure day 1 exists with date = start_date. Keep
+    // everything else (other days' dates, content, day_numbers). User
+    // extends via "+ Add day at end" as the trip unfolds.
+    const sorted = [...existing].sort((a, b) => a.day_number - b.day_number);
+    if (sorted.length === 0) {
+      db.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, ?)')
+        .run(tripId, 1, startDate);
+    } else if (sorted[0].date !== startDate) {
+      db.prepare('UPDATE days SET date = ? WHERE id = ?').run(startDate, sorted[0].id);
+    }
+    return;
+  }
+
+  // Defensive: if only end_date is set (unusual / probably client bug),
+  // fall through to dated-range mode using end_date as both bounds so we
+  // get a single dated day. Acceptable degenerate case.
+  if (!startDate && endDate) {
+    startDate = endDate;
   }
 
   const [sy, sm, sd] = startDate.split('-').map(Number);

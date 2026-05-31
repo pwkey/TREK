@@ -463,3 +463,99 @@ describe('Accommodations', () => {
     expect(reservationAfter).toBeUndefined();
   });
 });
+
+// [460-fork] Q11 — Open-ended trip + add-day affordances.
+describe('Q11 — open-ended trips and add-day affordances', () => {
+  it('Q11-001 — open-ended trip (start_date but no end_date) creates 1 dated day at start', async () => {
+    const { user } = createUser(testDb);
+    const res = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(user.id))
+      .send({ title: 'Caravan to Anywhere', start_date: '2027-03-01' });
+    expect(res.status).toBe(201);
+    const days = testDb.prepare('SELECT * FROM days WHERE trip_id = ? ORDER BY day_number').all(res.body.trip.id) as any[];
+    expect(days).toHaveLength(1);
+    expect(days[0].date).toBe('2027-03-01');
+    expect(days[0].day_number).toBe(1);
+  });
+
+  it('Q11-002 — POST /days/at-end inherits the date from the last day (+1 day)', async () => {
+    const { user } = createUser(testDb);
+    // Create via API so generateDays runs (the test factory only autoseeds
+    // when BOTH dates are present).
+    const tripRes = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(user.id))
+      .send({ title: 'Open Trip', start_date: '2027-03-01' });
+    const tripId = tripRes.body.trip.id;
+    const res = await request(app)
+      .post(`/api/trips/${tripId}/days/at-end`)
+      .set('Cookie', authCookie(user.id))
+      .send({});
+    expect(res.status).toBe(201);
+    expect(res.body.day.date).toBe('2027-03-02');
+    expect(res.body.day.day_number).toBe(2);
+  });
+
+  it('Q11-003 — POST /days/at-end on a dateless trip creates a dateless day', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Vague' });
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/days/at-end`)
+      .set('Cookie', authCookie(user.id))
+      .send({});
+    expect(res.status).toBe(201);
+    expect(res.body.day.date).toBeNull();
+  });
+
+  it('Q11-004 — POST /days/at-start inherits the previous calendar day and renumbers', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2027-03-05', end_date: '2027-03-07' });
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/days/at-start`)
+      .set('Cookie', authCookie(user.id))
+      .send({});
+    expect(res.status).toBe(201);
+    expect(res.body.day.day_number).toBe(1);
+    expect(res.body.day.date).toBe('2027-03-04');
+
+    // Verify the previously day_number=1 is now day_number=2 etc.
+    const days = testDb.prepare('SELECT day_number, date FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as Array<{ day_number: number; date: string }>;
+    expect(days.map(d => d.date)).toEqual(['2027-03-04', '2027-03-05', '2027-03-06', '2027-03-07']);
+  });
+
+  it('Q11-005 — POST /days/at-start on a dateless trip creates a dateless day at position 1', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Vague' });
+    const before = testDb.prepare('SELECT COUNT(*) AS c FROM days WHERE trip_id = ?').get(trip.id) as { c: number };
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/days/at-start`)
+      .set('Cookie', authCookie(user.id))
+      .send({});
+    expect(res.status).toBe(201);
+    expect(res.body.day.day_number).toBe(1);
+    expect(res.body.day.date).toBeNull();
+    const after = testDb.prepare('SELECT COUNT(*) AS c FROM days WHERE trip_id = ?').get(trip.id) as { c: number };
+    expect(after.c).toBe(before.c + 1);
+  });
+
+  it('Q11-006 — editing a dated-range trip to open-ended (end_date cleared) preserves existing days', async () => {
+    const { user } = createUser(testDb);
+    // Use API so generateDays seeds the 5 dated days.
+    const tripRes = await request(app)
+      .post('/api/trips')
+      .set('Cookie', authCookie(user.id))
+      .send({ title: 'Was Dated', start_date: '2027-04-01', end_date: '2027-04-05' });
+    const tripId = tripRes.body.trip.id;
+    const before = testDb.prepare('SELECT COUNT(*) AS c FROM days WHERE trip_id = ?').get(tripId) as { c: number };
+    expect(before.c).toBe(5);
+    const res = await request(app)
+      .put(`/api/trips/${tripId}`)
+      .set('Cookie', authCookie(user.id))
+      .send({ end_date: null });
+    expect(res.status).toBe(200);
+    const after = testDb.prepare('SELECT COUNT(*) AS c FROM days WHERE trip_id = ?').get(tripId) as { c: number };
+    // The 5 days should survive — open-ended just clears the commitment to an end date.
+    expect(after.c).toBe(5);
+  });
+});

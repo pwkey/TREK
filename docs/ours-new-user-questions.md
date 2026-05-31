@@ -237,6 +237,52 @@ The full sequence the user went through trying to install the PWA on a Samsung G
 
 ---
 
+#### Q11. "Some trips may not have a defined end date. For example, our caravanning trips around Australia likely start on a defined date but may be open-ended. We need to define an open-ended trip and also be able to extend a trip with additional days"
+
+- **Category:** Real-use case the data model partially supports but the UX doesn't cleanly express.
+- **What's there today:**
+  - Trips can have no dates at all → 7 (or `day_count`) dateless placeholder days. User fills dates later.
+  - Trips with both `start_date` and `end_date` → days generated for the range.
+  - Editing dates via update trip → `generateDays` regenerates, preserving content where dates overlap.
+- **The actual bug:** `generateDays` at line 39 reads `if (!startDate || !endDate)` — if EITHER is missing, BOTH are treated as missing. So providing `start_date` without `end_date` silently throws away the start_date and gives dateless placeholders. Open-ended (start-known, end-unknown) is not a first-class concept.
+- **Also missing:** no "+ Add day" affordance. Extending requires editing trip's `end_date`. Mid-trip insertion ("we stayed an extra day in Sydney" between Day 3 and Day 4) isn't supported beyond shuffle-after-extend.
+- **Decision (locked):** Both — open-ended trips as a first-class type AND explicit "+ Add day" buttons.
+  - Open-ended: `start_date` set + `end_date` null → trip starts with **1 dated day** at start_date. User adds more via "+ Add day at end" as the trip unfolds. (Choosing 1 day, not 7, so the user has to actively own the open-endedness rather than being shown phantom future days.)
+  - Explicit affordances: "+ Add day at start" / "+ Add day at end" buttons in the day list. Date inheritance: increment from neighbour by 1 day (or stay dateless if neighbour has no date).
+- **Implication for guide:** Document the two trip modes (date-range vs open-ended) and the add-day affordance. Caravanning gets its own example in the planning section.
+- **Implication for product:** Server: fix the `generateDays` guard, new addDayAtStart/addDayAtEnd helpers, new endpoints. Client: TripFormModal allow empty `end_date`; small "+ Add day" buttons on day list.
+
+---
+
+#### Q12. "What provisions do we have for editing a planned trip? As you know, things change"
+
+- **Category:** Existing capability + a data-loss safety gap.
+- **What's editable today:** Trip metadata (title, description, dates, currency, cover); day metadata (title, notes, journal); places (CRUD + drag-reorder + assignments); reservations; photos; budget; packing list; household membership.
+- **The gotchas:**
+  - **Truncating dates silently wipes content.** Trip March 1–10 with content on every day → user edits end_date to March 5 → days 6–10 are deleted (cascading places, notes, photos). No "are you sure?" today.
+  - **Shifting dates only partially preserves.** March 1–10 → March 8–17 keeps Mar 8–10's content but deletes Mar 1–7. There's no "slide the trip forward by N days, keep everything" affordance.
+  - **No first-class day reorder.** Days are date-keyed; swapping day 3 and day 4 means manually swapping dates.
+- **Decision (locked):** Warn-before-data-loss first. The shift-trip and reorder-days are nice-to-haves but data-loss-prevention is non-negotiable.
+- **Implementation approach:** Client-side compute (we already have trip data loaded) → if user changes dates such that days with content would be deleted, surface a confirmation modal listing affected days + content summary + "Cancel / Delete those days and proceed".
+- **Implication for guide:** Cover the editing model + the safety nets. Explicitly call out "shifting a trip by N days" as a future feature, not currently safe.
+- **Implication for product:** Single client-side change on TripFormModal's save handler. ~30-min fix. Server-side dry-run mode is an alternative if we want to keep the safety net server-side, but client compute is cheaper.
+
+---
+
+#### Q13. "When I invite another family to share 'X' days on a trip, how does that fit into an existing trip they are planning that may have one or two (or more) segments that are shared with us? What if they have not yet started putting their trip into 460 Planner when I put out the request?"
+
+- **Category:** Two scenarios — one works today, one is a real gap.
+- **Scenario A — they have an existing trip with segments already.** Works today. A trip can be linked to N segments simultaneously (each is a separate `trip_segments` row). So their trip can have: "Sydney week with you", "Brisbane week with you", "Adelaide week with another family", "their solo days" — all coexisting in the same parent trip via the union read in `dayService.listDays`. Accept flow: click invite link → see preview → pick which of their trips to link the segment to → segment days slot into their day list alongside other segments.
+- **Scenario B — they don't have a trip yet.** Gap. `acceptInvite` in `segmentService.ts` line 296 requires `tripExists(targetTripId)` and line 297 requires `isTripOwner`. So the flow is: register → create a trip → come back and accept. High friction.
+- **Decision (locked):** Guided creation (option B). Accept flow asks for a trip title if user has no trips, then creates a stub trip with the segment's dates and that title, then links the segment in.
+- **Implementation approach:**
+  - Server: extend acceptInvite to accept either `target_trip_id` (existing) OR `new_trip_title` (creates a stub trip from the segment's dates).
+  - Client: SegmentAcceptPage trip-picker shows existing trips + a "+ New trip with this segment" option that asks for a title.
+- **Implication for guide:** Document both flows side-by-side. Frame: "if you've already started planning your trip, link your shared days in. If not, accept here and we'll create a starter trip for you."
+- **Implication for product:** Schema unchanged (segments and trip_segments cover both). Server change is one new code path in acceptInvite + maybe a new variant endpoint. Client change is one trip-picker affordance.
+
+---
+
 ## Meta-observations from this session
 
 Worth noting for guide-writing context:

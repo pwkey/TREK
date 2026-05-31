@@ -8,7 +8,7 @@ import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLi
 import BatchPhotoImport from '../Journal/BatchPhotoImport' // [460-fork] M6 follow-up
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
-import { assignmentsApi, reservationsApi, tripsApi } from '../../api/client'
+import { assignmentsApi, reservationsApi, tripsApi, daysApi } from '../../api/client'
 import { writeTripSnapshot } from '../../db/localDb' // [460-fork] Milestone 5 slice 5
 import { downloadTripPDF } from '../PDF/TripPDF'
 import { calculateRoute, generateGoogleMapsUrl, optimizeRoute } from '../Map/RouteCalculator'
@@ -1190,6 +1190,25 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
 
       {/* Tagesliste */}
       <div className="scroll-container" style={{ flex: 1, overflowY: 'auto', minHeight: 0, scrollbarWidth: 'thin', scrollbarColor: 'var(--scrollbar-thumb) transparent' }}>
+        {/* [460-fork] Q11 — "+ Add day at start" affordance */}
+        {canEditDays && days.length > 0 && (
+          <div style={{ padding: '6px 14px', borderBottom: '1px solid var(--border-faint)', display: 'flex', justifyContent: 'center' }}>
+            <button
+              onClick={async () => {
+                try {
+                  await daysApi.addAtStart(tripId)
+                  await tripActions.refreshDays(tripId)
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Failed to add day')
+                }
+              }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 11, fontWeight: 500, background: 'transparent', color: 'var(--text-faint)', border: '1px dashed var(--border-primary)', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit' }}
+              title={t('dayplan.addDayAtStart') || 'Add day at start'}
+            >
+              <Plus size={11} strokeWidth={2} /> {t('dayplan.addDayAtStart') || 'Add day at start'}
+            </button>
+          </div>
+        )}
         {days.map((day, index) => {
           const isSelected = selectedDayId === day.id
           const isExpanded = expandedDays.has(day.id)
@@ -1908,6 +1927,25 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
             </div>
           )
         })}
+        {/* [460-fork] Q11 — "+ Add day at end" affordance */}
+        {canEditDays && (
+          <div style={{ padding: '8px 14px', display: 'flex', justifyContent: 'center' }}>
+            <button
+              onClick={async () => {
+                try {
+                  await daysApi.addAtEnd(tripId)
+                  await tripActions.refreshDays(tripId)
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Failed to add day')
+                }
+              }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 12px', fontSize: 11, fontWeight: 500, background: 'transparent', color: 'var(--text-faint)', border: '1px dashed var(--border-primary)', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit' }}
+              title={t('dayplan.addDayAtEnd') || 'Add day at end'}
+            >
+              <Plus size={11} strokeWidth={2} /> {t('dayplan.addDayAtEnd') || 'Add day at end'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Notiz-Popup-Modal — über Portal gerendert, um den backdropFilter-Stapelkontext zu umgehen */}

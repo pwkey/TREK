@@ -111,12 +111,16 @@ export function handleRemoteEvent(set: SetState, event: WebSocketEvent): void {
       }
 
       // Days
-      case 'day:created':
+      case 'day:created': {
         if (state.days.some(d => d.id === (payload.day as Day).id)) return {}
-        return { days: [...state.days, payload.day as Day] }
+        // [460-fork] Q11 — sort by day_number so an "add at start" day_number=1
+        // (with all other days shifted up to 2..N+1) renders in the right place.
+        const next = [...state.days, payload.day as Day].sort((a, b) => (a.day_number ?? 0) - (b.day_number ?? 0))
+        return { days: next }
+      }
       case 'day:updated':
         return {
-          days: state.days.map(d => d.id === (payload.day as Day).id ? payload.day as Day : d),
+          days: state.days.map(d => d.id === (payload.day as Day).id ? payload.day as Day : d).sort((a, b) => (a.day_number ?? 0) - (b.day_number ?? 0)),
         }
 
       // [460-fork] Milestone 6 slice 1 — per-day journal upserts.

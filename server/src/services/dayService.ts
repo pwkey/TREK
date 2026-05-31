@@ -180,6 +180,54 @@ export function createDay(tripId: string | number, date?: string, notes?: string
   return { ...day, assignments: [] };
 }
 
+// [460-fork] Q11 — "+ Add day" affordances on the day-list. Computes the
+// next date by stepping from the neighbour by one calendar day; if the
+// neighbour is dateless the new day is dateless too (caller fills it in).
+//
+// addDayAtEnd: inserts at max(day_number)+1. Date = lastDay.date + 1 or null.
+// addDayAtStart: shifts all existing day_numbers +1 (under a transaction to
+//   avoid the UNIQUE constraint on (trip_id, day_number) tripping), inserts
+//   day_number=1. Date = firstDay.date - 1 or null.
+
+function stepDate(yyyymmdd: string | null, deltaDays: 1 | -1): string | null {
+  if (!yyyymmdd) return null;
+  const [y, m, d] = yyyymmdd.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const ms = Date.UTC(y, m - 1, d) + deltaDays * 24 * 60 * 60 * 1000;
+  const next = new Date(ms);
+  const yy = next.getUTCFullYear();
+  const mm = String(next.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(next.getUTCDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+export function addDayAtEnd(tripId: string | number, notes?: string) {
+  const last = db.prepare('SELECT date FROM days WHERE trip_id = ? ORDER BY day_number DESC LIMIT 1').get(tripId) as { date: string | null } | undefined;
+  const newDate = stepDate(last?.date ?? null, 1);
+  return createDay(tripId, newDate || undefined, notes);
+}
+
+export function addDayAtStart(tripId: string | number, notes?: string) {
+  const first = db.prepare('SELECT date FROM days WHERE trip_id = ? ORDER BY day_number ASC LIMIT 1').get(tripId) as { date: string | null } | undefined;
+  const newDate = stepDate(first?.date ?? null, -1);
+
+  // Renumber: shift existing day_numbers up by 1 using a two-pass temp
+  // negative trick (same approach generateDays uses) so we don't hit the
+  // UNIQUE (trip_id, day_number) constraint mid-update.
+  let insertedId: number | bigint = 0;
+  db.transaction(() => {
+    const existing = db.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as Array<{ id: number }>;
+    const tmp = db.prepare('UPDATE days SET day_number = ? WHERE id = ?');
+    existing.forEach((d, i) => tmp.run(-(i + 1), d.id));
+    existing.forEach((d, i) => tmp.run(i + 2, d.id));
+    const res = db.prepare('INSERT INTO days (trip_id, day_number, date, notes) VALUES (?, 1, ?, ?)')
+      .run(tripId, newDate, notes || null);
+    insertedId = res.lastInsertRowid;
+  })();
+  const day = db.prepare('SELECT * FROM days WHERE id = ?').get(insertedId) as Day;
+  return { ...day, assignments: [] };
+}
+
 export function getDay(id: string | number, tripId: string | number) {
   return db.prepare('SELECT * FROM days WHERE id = ? AND trip_id = ?').get(id, tripId) as Day | undefined;
 }

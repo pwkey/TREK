@@ -197,16 +197,23 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
   const update = (field, value) => setFormData(prev => {
     const next = { ...prev, [field]: value }
     if (field === 'start_date' && value) {
-      if (!prev.end_date || prev.end_date < value) {
-        next.end_date = value
-      } else if (prev.start_date) {
+      // [460-fork] Q11 — only auto-fill end_date if it was already set.
+      // Leaving end_date blank when start_date is set is now valid: the
+      // trip is "open-ended" (1 day at start_date; extend with "+ Add day").
+      if (prev.end_date && prev.end_date < value && prev.start_date) {
+        // User pushed start_date forward past an earlier end_date — slide
+        // end_date to preserve the trip's duration.
         const oldStart = new Date(prev.start_date + 'T00:00:00Z')
         const oldEnd = new Date(prev.end_date + 'T00:00:00Z')
         const duration = Math.round((oldEnd - oldStart) / 86400000)
         const newEnd = new Date(value + 'T00:00:00Z')
         newEnd.setDate(newEnd.getDate() + duration)
         next.end_date = newEnd.toISOString().split('T')[0]
+      } else if (prev.end_date && prev.end_date < value) {
+        // Trip had an end_date earlier than the new start — clamp to start.
+        next.end_date = value
       }
+      // Otherwise: leave end_date as the user had it (empty or in-future).
     }
     return next
   })

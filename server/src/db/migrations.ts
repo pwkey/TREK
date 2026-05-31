@@ -1364,6 +1364,8 @@ function runMigrations(db: Database.Database): void {
   ];
 
   if (currentVersion < migrations.length) {
+    // [460-fork] Snapshot the live DB before applying any pending migration.
+    snapshotBeforeMigrations(db, currentVersion, migrations.length);
     for (let i = currentVersion; i < migrations.length; i++) {
       console.log(`[DB] Running migration ${i + 1}/${migrations.length}`);
       try {

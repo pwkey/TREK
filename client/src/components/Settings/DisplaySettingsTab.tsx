@@ -201,6 +201,44 @@ export default function DisplaySettingsTab(): React.ReactElement {
           ))}
         </div>
       </div>
+
+      {/* [460-fork] Q6 — Warn when photo date doesn't match day */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+          {t('settings.checkPhotoTimestamp') || 'Warn when photo date doesn’t match day'}
+        </label>
+        <p className="text-xs mb-2" style={{ color: 'var(--text-faint)' }}>
+          {t('settings.checkPhotoTimestampHint') || 'Shows a warning when uploading a single photo to a day whose date doesn’t match the photo’s EXIF capture date. Turn off if you regularly assign photos to days deliberately (souvenirs, scans, placeholders).'}
+        </p>
+        <div className="flex gap-3">
+          {[
+            { value: true, label: t('settings.on') || 'On' },
+            { value: false, label: t('settings.off') || 'Off' },
+          ].map(opt => {
+            const current = settings.check_photo_timestamp !== false
+            return (
+              <button
+                key={String(opt.value)}
+                onClick={async () => {
+                  try { await updateSetting('check_photo_timestamp', opt.value) }
+                  catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Error') }
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+                  border: current === opt.value ? '2px solid var(--text-primary)' : '2px solid var(--border-primary)',
+                  background: current === opt.value ? 'var(--bg-hover)' : 'var(--bg-card)',
+                  color: 'var(--text-primary)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
     </Section>
   )
 }

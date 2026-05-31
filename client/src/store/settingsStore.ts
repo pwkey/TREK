@@ -29,6 +29,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     temperature_unit: 'fahrenheit',
     time_format: '12h',
     show_place_description: false,
+    // [460-fork] Q6 — default-on safeguard against single-photo uploads
+    // landing on the wrong day. Disabled by users who deliberately
+    // assign photos to non-matching days (souvenirs, scans, etc).
+    check_photo_timestamp: true,
   },
   isLoaded: false,
 

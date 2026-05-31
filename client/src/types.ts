@@ -194,6 +194,10 @@ export interface Settings {
   show_place_description: boolean
   route_calculation?: boolean
   blur_booking_codes?: boolean
+  // [460-fork] Q6 — warn before uploading a single photo whose EXIF
+  // taken_at doesn't match the target day's date. Per-user setting,
+  // default true.
+  check_photo_timestamp?: boolean
 }
 
 export interface AssignmentsMap {

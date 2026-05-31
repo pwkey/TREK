@@ -20,6 +20,8 @@ import WeatherWidget from '../Weather/WeatherWidget'
 import { useToast } from '../shared/Toast'
 import { getCategoryIcon } from '../shared/categoryIcons'
 import { useTripStore } from '../../store/tripStore'
+import { checkPhotoTimestamp } from '../../utils/photoTimestampCheck' // [460-fork] Q6
+import PhotoTimestampWarning from '../Photos/PhotoTimestampWarning' // [460-fork] Q6
 import CreateSegmentModal from '../Segments/CreateSegmentModal' // [460-fork] Milestone 4
 import SharedDayChip from '../Segments/SharedDayChip' // [460-fork] Milestone 4
 import { useCanDo } from '../../store/permissionsStore'
@@ -168,9 +170,23 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   // on desktop it opens the file picker. The same uploadDayPhoto store
   // action that PhotoGrid uses handles EXIF extraction + auto-caption
   // server-side, so no other plumbing is needed.
+  //
+  // [460-fork] Q6 — before uploading, run the EXIF-timestamp check so
+  // the user gets a warning if the photo's date doesn't match the day
+  // they tapped. Per-user setting (Settings -> Display -> Warn when
+  // photo date doesn't match day) controls whether the check runs.
   const photoInputRef = useRef<HTMLInputElement | null>(null)
   const photoUploadTargetDayRef = useRef<number | null>(null)
   const [photoUploadBusyDayId, setPhotoUploadBusyDayId] = useState<number | null>(null)
+  const checkPhotoTimestampEnabled = useSettingsStore(s => s.settings.check_photo_timestamp !== false)
+  const [photoTimestampWarning, setPhotoTimestampWarning] = useState<{
+    file: File
+    photoDate: string
+    targetDay: Day
+    matchingDay: Day | null
+    thumbnail: string | null
+    resolve: (decision: 'add-anyway' | 'use-photo-date' | 'cancel') => void
+  } | null>(null)
 
   const handlePhotoCaptureClick = (dayId: number, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -181,18 +197,40 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
 
   const handlePhotoCaptureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    const dayId = photoUploadTargetDayRef.current
+    const originDayId = photoUploadTargetDayRef.current
     e.target.value = '' // allow re-selection of same file
-    if (!file || dayId == null) return
+    if (!file || originDayId == null) return
     const isImageMime = file.type.startsWith('image/')
     const isHeicByExt = /\.hei[cf]$/i.test(file.name)
     if (!isImageMime && !isHeicByExt) {
       toast.error(t('photos.notAnImage') || 'Not an image')
       return
     }
-    setPhotoUploadBusyDayId(dayId)
+    setPhotoUploadBusyDayId(originDayId)
     try {
-      await useTripStore.getState().uploadDayPhoto(tripId, dayId, file)
+      // [460-fork] Q6 — Run the timestamp check. May surface a warning
+      // dialog the user has to resolve before the upload proceeds.
+      let targetDayId = originDayId
+      const check = await checkPhotoTimestamp(file, originDayId, days, checkPhotoTimestampEnabled)
+      if (check.shouldWarn && check.photoDate) {
+        const targetDay = days.find(d => d.id === originDayId)
+        if (targetDay) {
+          let thumbnail: string | null = null
+          try { thumbnail = URL.createObjectURL(file) } catch {}
+          const decision = await new Promise<'add-anyway' | 'use-photo-date' | 'cancel'>(resolve => {
+            setPhotoTimestampWarning({ file, photoDate: check.photoDate!, targetDay, matchingDay: check.matchingDay, thumbnail, resolve })
+          })
+          setPhotoTimestampWarning(null)
+          if (thumbnail) { try { URL.revokeObjectURL(thumbnail) } catch {} }
+          if (decision === 'cancel') {
+            return
+          }
+          if (decision === 'use-photo-date' && check.matchingDay) {
+            targetDayId = check.matchingDay.id
+          }
+        }
+      }
+      await useTripStore.getState().uploadDayPhoto(tripId, targetDayId, file)
       toast.success(t('photos.uploadSuccess') || 'Photo added')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed'
@@ -2156,6 +2194,22 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
         style={{ display: 'none' }}
         onChange={handlePhotoCaptureChange}
       />
+
+      {/* [460-fork] Q6 — Timestamp-mismatch warning dialog for the
+          day-header camera button. Toggled per-user via Settings ->
+          Display -> Warn when photo date doesn't match day. */}
+      {photoTimestampWarning && (
+        <PhotoTimestampWarning
+          isOpen
+          photoDate={photoTimestampWarning.photoDate}
+          targetDay={photoTimestampWarning.targetDay}
+          matchingDay={photoTimestampWarning.matchingDay}
+          thumbnail={photoTimestampWarning.thumbnail}
+          onAddAnyway={() => photoTimestampWarning.resolve('add-anyway')}
+          onUsePhotoDate={() => photoTimestampWarning.resolve('use-photo-date')}
+          onCancel={() => photoTimestampWarning.resolve('cancel')}
+        />
+      )}
     </div>
   )
 })

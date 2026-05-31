@@ -10,7 +10,11 @@ import { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
 import { Camera, Upload, X, Trash2, MapPin } from 'lucide-react'
 import { useTripStore } from '../../store/tripStore'
+import { useSettingsStore } from '../../store/settingsStore'
+import { checkPhotoTimestamp } from '../../utils/photoTimestampCheck'
+import PhotoTimestampWarning from '../Photos/PhotoTimestampWarning'
 import PhotoImg from './PhotoImg'
+import type { Day } from '../../types'
 
 interface PhotoGridProps {
   tripId: number | string
@@ -19,10 +23,13 @@ interface PhotoGridProps {
 
 export default function PhotoGrid({ tripId, dayId }: PhotoGridProps) {
   const photos = useTripStore(s => s.dayPhotos[String(dayId)] ?? [])
+  const days = useTripStore(s => s.days)
   const loadDayPhotos = useTripStore(s => s.loadDayPhotos)
   const uploadDayPhoto = useTripStore(s => s.uploadDayPhoto)
   const updateDayPhoto = useTripStore(s => s.updateDayPhoto)
   const deleteDayPhoto = useTripStore(s => s.deleteDayPhoto)
+  // [460-fork] Q6 — read the EXIF-check toggle; default true if unset.
+  const checkEnabled = useSettingsStore(s => s.settings.check_photo_timestamp !== false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
@@ -31,6 +38,16 @@ export default function PhotoGrid({ tripId, dayId }: PhotoGridProps) {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingCaption, setEditingCaption] = useState('')
   const [lightbox, setLightbox] = useState<number | null>(null)
+  // [460-fork] Q6 — pending single-photo upload paused on the timestamp
+  // warning dialog. handlers resolve the promise so handleFiles can wait.
+  const [timestampWarning, setTimestampWarning] = useState<{
+    file: File
+    photoDate: string
+    targetDay: Day
+    matchingDay: Day | null
+    thumbnail: string | null
+    resolve: (decision: 'add-anyway' | 'use-photo-date' | 'cancel') => void
+  } | null>(null)
 
   useEffect(() => {
     void loadDayPhotos(tripId, dayId)
@@ -50,6 +67,34 @@ export default function PhotoGrid({ tripId, dayId }: PhotoGridProps) {
     const skipped: string[] = []
     let succeeded = 0
     let lastError: string | null = null
+
+    // [460-fork] Q6 — for single-file uploads, run the EXIF-timestamp
+    // check before uploading and prompt the user if there's a mismatch.
+    // Multi-file batches skip the check (the batch-import flow already
+    // does smart per-row matching). Returns the dayId to upload to, or
+    // null if cancelled.
+    const resolveTargetDay = async (f: File): Promise<number | null> => {
+      if (list.length !== 1) return dayId
+      const check = await checkPhotoTimestamp(f, dayId, days, checkEnabled)
+      if (!check.shouldWarn || !check.photoDate) return dayId
+      const targetDay = days.find(d => d.id === dayId)
+      if (!targetDay) return dayId
+      const thumbnail = await new Promise<string | null>(resolve => {
+        try {
+          const url = URL.createObjectURL(f)
+          resolve(url)
+        } catch { resolve(null) }
+      })
+      const decision = await new Promise<'add-anyway' | 'use-photo-date' | 'cancel'>(resolve => {
+        setTimestampWarning({ file: f, photoDate: check.photoDate!, targetDay, matchingDay: check.matchingDay, thumbnail, resolve })
+      })
+      setTimestampWarning(null)
+      if (thumbnail) { try { URL.revokeObjectURL(thumbnail) } catch {} }
+      if (decision === 'cancel') return null
+      if (decision === 'use-photo-date' && check.matchingDay) return check.matchingDay.id
+      return dayId
+    }
+
     // Sequential to keep memory usage sane when the user drops a large
     // batch, and so we can report which files succeeded vs failed
     // individually rather than aborting the whole batch on first error.
@@ -62,8 +107,13 @@ export default function PhotoGrid({ tripId, dayId }: PhotoGridProps) {
         skipped.push(`${f.name} (not an image)`)
         continue
       }
+      const targetDayId = await resolveTargetDay(f)
+      if (targetDayId === null) {
+        skipped.push(`${f.name} (cancelled)`)
+        continue
+      }
       try {
-        await uploadDayPhoto(tripId, dayId, f)
+        await uploadDayPhoto(tripId, targetDayId, f)
         succeeded++
       } catch (err: unknown) {
         lastError = err instanceof Error ? err.message : 'Upload failed'
@@ -244,6 +294,20 @@ export default function PhotoGrid({ tripId, dayId }: PhotoGridProps) {
           </button>
         </div>,
         document.body,
+      )}
+
+      {/* [460-fork] Q6 — timestamp-mismatch warning dialog */}
+      {timestampWarning && (
+        <PhotoTimestampWarning
+          isOpen
+          photoDate={timestampWarning.photoDate}
+          targetDay={timestampWarning.targetDay}
+          matchingDay={timestampWarning.matchingDay}
+          thumbnail={timestampWarning.thumbnail}
+          onAddAnyway={() => timestampWarning.resolve('add-anyway')}
+          onUsePhotoDate={() => timestampWarning.resolve('use-photo-date')}
+          onCancel={() => timestampWarning.resolve('cancel')}
+        />
       )}
     </section>
   )

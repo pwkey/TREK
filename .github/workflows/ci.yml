@@ -25,11 +25,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # No `cache:` here — server/package-lock.json is now untracked for
+      # the same reason as client (Windows-generated lockfile lacked the
+      # @rollup/rollup-linux-x64-gnu and similar platform-specific
+      # optional deps; `npm install` still honoured the stale lockfile
+      # and skipped them, vitest then crashed at `require('rollup')`).
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: server/package-lock.json
 
       - name: Install
         run: cd server && npm install --no-audit --no-fund

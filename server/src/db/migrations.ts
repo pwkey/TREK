@@ -1,5 +1,42 @@
 import Database from 'better-sqlite3';
+import fs from 'fs';
+import path from 'path';
 import { encrypt_api_key } from '../services/apiKeyCrypto';
+
+// [460-fork] Pre-migration safety snapshot.
+//
+// Migrations run automatically at container startup and are forward-only —
+// some are destructive (e.g. M11 dropped users.partner_user_id). A buggy
+// migration would damage the live DB on the persistent volume, which a
+// plain redeploy can't undo. So before applying ANY pending migration we
+// copy the raw DB file aside. Migrations only touch the DB (never uploads),
+// so a file copy — not the full ZIP — is the right, dependency-light unit.
+// Kept files: last 10 pre-migration snapshots. Skipped for in-memory test
+// DBs. Never throws into the migration path; snapshot failure is logged but
+// does not block boot (we'd rather start than wedge on a snapshot error).
+function snapshotBeforeMigrations(db: Database.Database, fromVersion: number, toVersion: number): void {
+  try {
+    const dbPath = (db as unknown as { name?: string }).name;
+    if (!dbPath || dbPath === ':memory:' || !fs.existsSync(dbPath)) return;
+    try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch { /* best effort */ }
+    const backupsDir = path.join(path.dirname(dbPath), 'backups');
+    fs.mkdirSync(backupsDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const dest = path.join(backupsDir, `pre-migration-v${fromVersion}-to-v${toVersion}-${stamp}.db`);
+    fs.copyFileSync(dbPath, dest);
+    console.log(`[DB] Pre-migration snapshot saved: ${path.basename(dest)}`);
+    // Retention: keep the 10 most-recent pre-migration snapshots.
+    const snaps = fs.readdirSync(backupsDir)
+      .filter(f => f.startsWith('pre-migration-') && f.endsWith('.db'))
+      .map(f => ({ f, t: fs.statSync(path.join(backupsDir, f)).mtimeMs }))
+      .sort((a, b) => b.t - a.t);
+    for (const old of snaps.slice(10)) {
+      try { fs.unlinkSync(path.join(backupsDir, old.f)); } catch { /* ignore */ }
+    }
+  } catch (err) {
+    console.error('[DB] Pre-migration snapshot failed (continuing):', err);
+  }
+}
 
 function runMigrations(db: Database.Database): void {
   db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)');

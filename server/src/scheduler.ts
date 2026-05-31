@@ -38,7 +38,14 @@ export function buildCronExpression(settings: BackupSettings): string {
 let currentTask: ScheduledTask | null = null;
 
 function getDefaults(): BackupSettings {
-  return { enabled: false, interval: 'daily', keep_days: 7, hour: 2, day_of_week: 0, day_of_month: 1 };
+  // [460-fork] On-by-default. Upstream ships auto-backup OFF; for our
+  // single self-hosted instance holding real, irreplaceable trip data we
+  // want a daily snapshot from the first boot, no manual toggle required.
+  // These defaults only apply when data/backup-settings.json is absent —
+  // once the admin saves settings in the UI, that file wins. keep_days 14
+  // gives a fortnight of restore points; backups land on the persistent
+  // /app/data volume (and should be copied off-VM — see docs).
+  return { enabled: true, interval: 'daily', keep_days: 14, hour: 2, day_of_week: 0, day_of_month: 1 };
 }
 
 function loadSettings(): BackupSettings {

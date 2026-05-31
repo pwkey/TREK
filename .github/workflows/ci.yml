@@ -64,3 +64,29 @@ jobs:
 
       - name: Build (production bundle)
         run: cd client && npm run build
+
+  # Single-file CI gate: deploys ONLY after server + client jobs succeed,
+  # AND only on a push to `personal` (not on PRs to personal/main).
+  #
+  # Earlier this was a separate workflow_run-triggered file (deploy.yml),
+  # but GitHub requires workflow_run trigger files to exist on the default
+  # branch (main). Our default is the upstream-mirror branch which we
+  # don't want to touch — so we keep the gate co-located with the tests
+  # that drive it, and use `needs:` for ordering instead of workflow_run.
+  deploy:
+    name: Trigger Coolify deploy
+    needs: [server, client]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/personal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Trigger 460tp deploy
+        env:
+          BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
+          UUID: ${{ secrets.COOLIFY_DEPLOY_UUID_460TP }}
+          TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          curl --fail-with-body -sS -X GET \
+            "$BASE_URL/api/v1/deploy?uuid=$UUID&force=false" \
+            -H "Authorization: Bearer $TOKEN"

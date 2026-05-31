@@ -50,21 +50,31 @@ router.post('/:id/invites', authenticate, (req: Request, res: Response) => {
 });
 
 // Accept an invite: attach the caller's target trip to the segment.
+// [460-fork] Q13 — accepts EITHER `target_trip_id` (existing trip) OR
+// `new_trip_title` (guided creation: server spins up a stub trip on the
+// segment's date range and links it).
 router.post('/accept', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const { token, target_trip_id } = req.body ?? {};
-  if (typeof token !== 'string' || typeof target_trip_id !== 'number') {
-    return res.status(400).json({ error: 'token and target_trip_id required', code: 'INVALID_INPUT' });
+  const { token, target_trip_id, new_trip_title } = req.body ?? {};
+  if (typeof token !== 'string') {
+    return res.status(400).json({ error: 'token required', code: 'INVALID_INPUT' });
   }
-  const result = segmentService.acceptInvite({ token, userId: authReq.user.id, targetTripId: target_trip_id });
+  if (typeof target_trip_id !== 'number' && (typeof new_trip_title !== 'string' || !new_trip_title.trim())) {
+    return res.status(400).json({ error: 'Either target_trip_id or new_trip_title required', code: 'INVALID_INPUT' });
+  }
+  const result = segmentService.acceptInvite({
+    token,
+    userId: authReq.user.id,
+    targetTripId: typeof target_trip_id === 'number' ? target_trip_id : undefined,
+    newTripTitle: typeof new_trip_title === 'string' ? new_trip_title : undefined,
+  });
   if ('error' in result) return sendErr(res, result);
-  writeAudit({ userId: authReq.user.id, action: 'segment.accept', ip: getClientIp(req), details: { segmentId: result.segment.id, targetTripId: target_trip_id } });
-  // Tell every linked trip (including the new one) to refresh — days are
-  // about to appear on the new side, and existing sides may want to see the
-  // "now linked with N trips" update. Payload key is `attachedTripId` to
-  // avoid colliding with the room-scoped `tripId` the broadcast helper
-  // stamps on the wire event.
-  const payload = { segmentId: result.segment.id, attachedTripId: target_trip_id };
+  writeAudit({ userId: authReq.user.id, action: 'segment.accept', ip: getClientIp(req), details: { segmentId: result.segment.id, targetTripId: target_trip_id ?? null, newTripTitle: new_trip_title ?? null } });
+  // The "attached trip id" the broadcast cares about is whichever trip ended
+  // up linked — either the existing one the caller picked, or the freshly
+  // minted stub. result.linked_trip_ids contains all of them.
+  const attachedTripId = typeof target_trip_id === 'number' ? target_trip_id : result.linked_trip_ids[result.linked_trip_ids.length - 1];
+  const payload = { segmentId: result.segment.id, attachedTripId };
   for (const linkedTripId of result.linked_trip_ids) {
     broadcast(linkedTripId, 'segment:attached', payload, req.headers['x-socket-id'] as string);
   }

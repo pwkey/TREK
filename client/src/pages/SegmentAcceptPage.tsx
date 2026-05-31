@@ -29,6 +29,11 @@ export default function SegmentAcceptPage() {
   const [loading, setLoading] = useState(true)
   const [accepting, setAccepting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // [460-fork] Q13 — "create a new trip from this segment" path. When
+  // useNewTrip is true, the radio "Create a new trip" is selected and
+  // we POST { token, new_trip_title } rather than { token, target_trip_id }.
+  const [useNewTrip, setUseNewTrip] = useState(false)
+  const [newTripTitle, setNewTripTitle] = useState('')
 
   // Initial load: preview + trip list in parallel.
   useEffect(() => {
@@ -87,13 +92,32 @@ export default function SegmentAcceptPage() {
   }, [preview])
 
   const accept = async () => {
-    if (!preview || !selectedTripId) return
+    if (!preview) return
+    // Validate selection: either an existing trip OR a new-trip title.
+    if (useNewTrip) {
+      if (!newTripTitle.trim()) {
+        setError('Please give your new trip a title.')
+        return
+      }
+    } else {
+      if (!selectedTripId) return
+    }
     setAccepting(true)
     setError(null)
     try {
-      await segmentsApi.accept({ token, target_trip_id: selectedTripId })
-      toast.success('Segment linked to your trip')
-      navigate(`/trips/${selectedTripId}`)
+      // [460-fork] Q13 — accept can also pass new_trip_title to spin up a
+      // stub trip on the segment's dates server-side.
+      const res = await segmentsApi.accept(
+        useNewTrip
+          ? { token, new_trip_title: newTripTitle.trim() }
+          : { token, target_trip_id: selectedTripId! }
+      ) as { linked_trip_ids: number[] } | undefined
+      toast.success(useNewTrip ? 'Trip created with shared days' : 'Segment linked to your trip')
+      const navTripId = useNewTrip
+        ? (res?.linked_trip_ids?.[res.linked_trip_ids.length - 1] ?? null)
+        : selectedTripId
+      if (navTripId) navigate(`/trips/${navTripId}`)
+      else navigate('/dashboard')
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Failed to accept invite'))
     } finally {
@@ -143,13 +167,54 @@ export default function SegmentAcceptPage() {
 
               <section style={{ padding: 16, borderRadius: 12, background: 'var(--bg-card)', border: '1px solid var(--border-primary)', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>Attach to which of your trips?</div>
-                {trips.length === 0 ? (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                    You don't own any trips yet. <a href="/dashboard" style={{ color: 'var(--text-primary)', textDecoration: 'underline' }}>Create one</a> first, then come back to this link.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {trips.map(t => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {/* [460-fork] Q13 — "Create a new trip" option, always shown.
+                      Picks `new_trip_title`; server spins up a stub trip on
+                      the segment's date range. */}
+                  <label
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 10,
+                      padding: 10, borderRadius: 8,
+                      border: `1px solid ${useNewTrip ? 'var(--text-primary)' : 'var(--border-primary)'}`,
+                      background: useNewTrip ? 'rgba(17,24,39,0.04)' : 'transparent',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="trip"
+                      checked={useNewTrip}
+                      onChange={() => { setUseNewTrip(true); setSelectedTripId(null) }}
+                      style={{ cursor: 'pointer', marginTop: 4 }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>+ Create a new trip with this segment</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: useNewTrip ? 8 : 0 }}>
+                        We'll set up a trip on {segmentDateLabel || 'the segment\'s dates'} with the shared days already linked.
+                      </div>
+                      {useNewTrip && (
+                        <input
+                          type="text"
+                          value={newTripTitle}
+                          onChange={e => setNewTripTitle(e.target.value)}
+                          placeholder={`Shared trip with ${preview.inviter.username}`}
+                          style={{
+                            width: '100%', border: '1px solid var(--border-primary)', borderRadius: 8,
+                            padding: '7px 10px', fontSize: 12, fontFamily: 'inherit', outline: 'none',
+                            background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box',
+                          }}
+                          autoFocus
+                        />
+                      )}
+                    </div>
+                  </label>
+
+                  {trips.length > 0 && (
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.4, padding: '4px 0' }}>
+                      Or attach to an existing trip
+                    </div>
+                  )}
+                  {trips.map(t => (
                       <label
                         key={t.id}
                         style={{
@@ -163,8 +228,8 @@ export default function SegmentAcceptPage() {
                         <input
                           type="radio"
                           name="trip"
-                          checked={selectedTripId === t.id}
-                          onChange={() => setSelectedTripId(t.id)}
+                          checked={!useNewTrip && selectedTripId === t.id}
+                          onChange={() => { setUseNewTrip(false); setSelectedTripId(t.id) }}
                           style={{ cursor: 'pointer' }}
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -177,8 +242,7 @@ export default function SegmentAcceptPage() {
                         </div>
                       </label>
                     ))}
-                  </div>
-                )}
+                </div>
               </section>
 
               {selectedTripId && overlapDates.length > 0 && (
@@ -206,26 +270,36 @@ export default function SegmentAcceptPage() {
                 >
                   Cancel
                 </button>
-                <button
-                  type="button"
-                  onClick={accept}
-                  disabled={!selectedTripId || accepting || preview.accepted}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '8px 16px', borderRadius: 8,
-                    border: '1px solid var(--text-primary)',
-                    background: !selectedTripId || accepting || preview.accepted ? 'var(--border-primary)' : 'var(--text-primary)',
-                    color: 'var(--bg-primary)', fontSize: 13, fontWeight: 600,
-                    cursor: !selectedTripId || accepting || preview.accepted ? 'default' : 'pointer', fontFamily: 'inherit',
-                    opacity: !selectedTripId || accepting || preview.accepted ? 0.5 : 1,
-                  }}
-                >
-                  {accepting
-                    ? <div style={{ width: 12, height: 12, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
-                    : <Check size={13} />
-                  }
-                  {accepting ? 'Attaching…' : 'Attach to this trip'}
-                </button>
+                {(() => {
+                  // [460-fork] Q13 — gate by whichever path is active.
+                  const hasTarget = useNewTrip ? !!newTripTitle.trim() : !!selectedTripId
+                  const disabled = !hasTarget || accepting || preview.accepted
+                  const label = accepting
+                    ? (useNewTrip ? 'Creating trip…' : 'Attaching…')
+                    : (useNewTrip ? 'Create trip and accept' : 'Attach to this trip')
+                  return (
+                    <button
+                      type="button"
+                      onClick={accept}
+                      disabled={disabled}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '8px 16px', borderRadius: 8,
+                        border: '1px solid var(--text-primary)',
+                        background: disabled ? 'var(--border-primary)' : 'var(--text-primary)',
+                        color: 'var(--bg-primary)', fontSize: 13, fontWeight: 600,
+                        cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit',
+                        opacity: disabled ? 0.5 : 1,
+                      }}
+                    >
+                      {accepting
+                        ? <div style={{ width: 12, height: 12, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                        : <Check size={13} />
+                      }
+                      {label}
+                    </button>
+                  )
+                })()}
               </div>
             </div>
           )}

@@ -73,7 +73,18 @@ export type OverlapStrategy = 'replace_own';
 export interface AcceptInviteParams {
   token: string;
   userId: number;
-  targetTripId: number;
+  /**
+   * Existing trip to link the segment to. Either this OR `newTripTitle`
+   * is required.
+   */
+  targetTripId?: number;
+  /**
+   * [460-fork] Q13 — Guided trip creation. If set (and `targetTripId` is
+   * not), the accept flow creates a stub trip with the segment's date
+   * range and the given title, then links the segment to it. This is the
+   * path the user takes when they don't have a 460TP trip yet.
+   */
+  newTripTitle?: string;
   strategy?: OverlapStrategy;
 }
 
@@ -289,13 +300,13 @@ export function getInvitePreview(token: string): InvitePreview | SegmentServiceE
 }
 
 export function acceptInvite(params: AcceptInviteParams): SegmentView | SegmentServiceError {
-  const { token, userId, targetTripId } = params;
+  const { token, userId, newTripTitle } = params;
+  let { targetTripId } = params;
   // Slice 1 supports replace_own only; keep_own is deferred.
   const strategy: OverlapStrategy = 'replace_own';
 
-  if (!tripExists(targetTripId)) return { error: 'Target trip not found', code: 'TRIP_NOT_FOUND', status: 404 };
-  if (!isTripOwner(targetTripId, userId)) return { error: 'Only the target trip owner can accept', code: 'NOT_TRIP_OWNER', status: 403 };
-
+  // Resolve the invite + segment dates FIRST — both the existing-trip path
+  // and the new-trip path need the segment metadata.
   const invite = db.prepare('SELECT * FROM segment_invites WHERE token = ?').get(token) as {
     id: string; segment_id: string; expires_at: string; accepted_at: string | null;
   } | undefined;
@@ -305,11 +316,34 @@ export function acceptInvite(params: AcceptInviteParams): SegmentView | SegmentS
     return { error: 'Invite has expired', code: 'INVITE_EXPIRED', status: 410 };
   }
 
-  const already = db.prepare('SELECT 1 FROM trip_segments WHERE trip_id = ? AND segment_id = ?').get(targetTripId, invite.segment_id);
-  if (already) return { error: 'Trip is already part of this segment', code: 'TRIP_ALREADY_IN_SEGMENT', status: 409 };
-
   // Segment's canonical dates are stamped on the home trip's day rows.
   const segmentDates = (db.prepare('SELECT date FROM days WHERE segment_id = ? AND date IS NOT NULL ORDER BY date').all(invite.segment_id) as Array<{ date: string }>).map((r) => r.date);
+
+  // [460-fork] Q13 — Guided trip creation. If the caller passed
+  // `newTripTitle` (and not `targetTripId`), spin up a stub trip on the
+  // segment's date range and adopt its id.
+  if (!targetTripId && newTripTitle) {
+    const seg = db.prepare('SELECT start_date, end_date FROM segments WHERE id = ?').get(invite.segment_id) as { start_date: string | null; end_date: string | null } | undefined;
+    const start = seg?.start_date ?? segmentDates[0] ?? null;
+    const end = seg?.end_date ?? segmentDates[segmentDates.length - 1] ?? null;
+    const created = db.prepare(`
+      INSERT INTO trips (user_id, title, description, start_date, end_date, currency)
+      VALUES (?, ?, NULL, ?, ?, 'EUR')
+    `).run(userId, newTripTitle.trim().slice(0, 200) || 'Shared trip', start, end);
+    targetTripId = Number(created.lastInsertRowid);
+    // Days will be filled by the segment link itself via the UNION read; no
+    // need to generate solo days. The trip is purely a host for the segment.
+  }
+
+  if (targetTripId === undefined || targetTripId === null) {
+    return { error: 'Either targetTripId or newTripTitle is required', code: 'TRIP_NOT_FOUND', status: 400 };
+  }
+
+  if (!tripExists(targetTripId)) return { error: 'Target trip not found', code: 'TRIP_NOT_FOUND', status: 404 };
+  if (!isTripOwner(targetTripId, userId)) return { error: 'Only the target trip owner can accept', code: 'NOT_TRIP_OWNER', status: 403 };
+
+  const already = db.prepare('SELECT 1 FROM trip_segments WHERE trip_id = ? AND segment_id = ?').get(targetTripId, invite.segment_id);
+  if (already) return { error: 'Trip is already part of this segment', code: 'TRIP_ALREADY_IN_SEGMENT', status: 409 };
 
   const txn = db.transaction(() => {
     // replace_own: drop any existing day rows in the target trip on the segment's

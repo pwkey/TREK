@@ -310,6 +310,55 @@ describe('GET /api/segments/invite/:token (preview)', () => {
   });
 });
 
+describe('Q13 — accept invite with guided trip creation', () => {
+  it('Q13-001 — Bob accepts a segment invite without an existing trip; server creates a stub trip', async () => {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    // Alice creates a segment + invite.
+    const aTrip = createTrip(testDb, alice.id, { title: 'Europe 2027', start_date: '2027-06-10', end_date: '2027-06-15' });
+    const dayIds = dayIdsForDates(aTrip.id, ['2027-06-11', '2027-06-12', '2027-06-13']);
+    const created = await request(app)
+      .post('/api/segments')
+      .set('Cookie', authCookie(alice.id))
+      .send({ trip_id: aTrip.id, day_ids: dayIds, title: 'Adventure' });
+    const segmentId = created.body.segment.id;
+    const invite = await request(app).post(`/api/segments/${segmentId}/invites`).set('Cookie', authCookie(alice.id));
+
+    // Bob has NO trips at all. Accept with new_trip_title.
+    const bobTripsBefore = testDb.prepare('SELECT COUNT(*) AS c FROM trips WHERE user_id = ?').get(bob.id) as { c: number };
+    expect(bobTripsBefore.c).toBe(0);
+
+    const accept = await request(app)
+      .post('/api/segments/accept')
+      .set('Cookie', authCookie(bob.id))
+      .send({ token: invite.body.token, new_trip_title: 'Bob\'s shared trip with Alice' });
+    expect(accept.status).toBe(200);
+
+    // Verify Bob now owns a trip with the segment's dates and the given title.
+    const bobTrips = testDb.prepare('SELECT * FROM trips WHERE user_id = ?').all(bob.id) as Array<{ id: number; title: string; start_date: string; end_date: string }>;
+    expect(bobTrips).toHaveLength(1);
+    expect(bobTrips[0].title).toBe('Bob\'s shared trip with Alice');
+    expect(bobTrips[0].start_date).toBe('2027-06-11');
+    expect(bobTrips[0].end_date).toBe('2027-06-13');
+
+    // Verify trip_segments row exists.
+    const linked = testDb.prepare('SELECT trip_id FROM trip_segments WHERE segment_id = ? AND is_home = 0').get(segmentId) as { trip_id: number };
+    expect(linked.trip_id).toBe(bobTrips[0].id);
+  });
+
+  it('Q13-002 — accept rejects when neither target_trip_id nor new_trip_title is provided', async () => {
+    const { user: alice } = createUser(testDb);
+    const { user: bob } = createUser(testDb);
+    const aTrip = createTrip(testDb, alice.id, { title: 'T', start_date: '2027-06-10', end_date: '2027-06-13' });
+    const dayIds = dayIdsForDates(aTrip.id, ['2027-06-11']);
+    const created = await request(app).post('/api/segments').set('Cookie', authCookie(alice.id)).send({ trip_id: aTrip.id, day_ids: dayIds, title: 'X' });
+    const invite = await request(app).post(`/api/segments/${created.body.segment.id}/invites`).set('Cookie', authCookie(alice.id));
+    const res = await request(app).post('/api/segments/accept').set('Cookie', authCookie(bob.id)).send({ token: invite.body.token });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_INPUT');
+  });
+});
+
 describe('Day edit on a shared day — cross-trip write via getAccessibleDay', () => {
   it('Bob can PUT a shared day (segment-linked) and the canonical row updates', async () => {
     const { user: alice } = createUser(testDb);

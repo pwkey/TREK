@@ -58,7 +58,10 @@ export const segmentsApi = {
   getInvitePreview: (token: string) =>
     apiClient.get(`/segments/invite/${token}`).then(r => r.data as InvitePreview),
 
-  accept: (data: { token: string; target_trip_id: number }) =>
+  // [460-fork] Q13 — accept accepts EITHER an existing trip OR a new-trip
+  // title. When new_trip_title is set the server spins up a stub trip on
+  // the segment's dates and links it.
+  accept: (data: { token: string; target_trip_id: number } | { token: string; new_trip_title: string }) =>
     apiClient.post('/segments/accept', data).then(r => r.data as SegmentView),
 
   leave: (segmentId: string, tripId: number) =>

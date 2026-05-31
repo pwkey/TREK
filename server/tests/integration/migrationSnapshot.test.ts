@@ -75,7 +75,11 @@ describe('Pre-migration snapshot', () => {
 
   it('MIGSNAP-003 — in-memory DB is migrated but produces no snapshot (nothing to copy)', () => {
     const db = new Database(':memory:');
-    // Should not throw; should simply skip the file copy.
+    // Mirror production boot order (createTables then runMigrations) so the
+    // migrations have the tables they ALTER. The point of this test is that
+    // the snapshot's `:memory:` guard means no file is written — there's no
+    // on-disk DB to copy. Should complete without throwing.
+    createTables(db);
     expect(() => runMigrations(db)).not.toThrow();
     db.close();
   });

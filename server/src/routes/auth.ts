@@ -323,47 +323,10 @@ router.post('/resource-token', authenticate, (req: Request, res: Response) => {
   res.json(token);
 });
 
-// ── [460-fork] Partner pairing (Milestone 3) — DEPRECATED, replaced by ──────
-// Households (Milestone 11). Slice 1 stubs these endpoints so the existing
-// client UI (PartnerSection.tsx) degrades gracefully through the deploy
-// window. Slice 2 adds the new /api/household endpoints; slice 3 replaces
-// the client UI and deletes both this block and PartnerSection.tsx.
-
-router.get('/me/partner', authenticate, (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  // Derive a backward-compatible "partner" snapshot from the household:
-  // the first OTHER user in the household, if any. Mutations (invite/cancel/
-  // unpair) below return 410 so the UI's empty state shows.
-  const hh = getHouseholdForUser(authReq.user.id);
-  const otherUser = hh?.users.find(u => u.id !== authReq.user.id) ?? null;
-  res.json({
-    partner: otherUser,
-    incoming: [],
-    outgoing: [],
-    backfill_done: true,
-  });
-});
-
-const PARTNER_DEPRECATED = {
-  error: 'Partner pairing has been replaced by Households. Please update the app.',
-  code: 'PARTNER_DEPRECATED',
-};
-
-router.post('/me/partner/invites', authenticate, (_req: Request, res: Response) => {
-  res.status(410).json(PARTNER_DEPRECATED);
-});
-
-router.delete('/me/partner/invites/:inviteId', authenticate, (_req: Request, res: Response) => {
-  res.status(410).json(PARTNER_DEPRECATED);
-});
-
-router.delete('/me/partner', authenticate, (_req: Request, res: Response) => {
-  res.status(410).json(PARTNER_DEPRECATED);
-});
-
-router.post('/me/partner/backfill-trips', authenticate, (_req: Request, res: Response) => {
-  res.json({ added: 0, skipped: 0, trip_ids: [] });
-});
+// [460-fork] Milestone 3 partner-pairing endpoints removed in M11 slice 3.
+// All clients are now expected to use /api/household. Old endpoints (
+// /me/partner, /me/partner/invites, /me/partner/backfill-trips) no longer
+// exist — requests get a 404 from Express's default handler.
 
 export default router;
 

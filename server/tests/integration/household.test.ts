@@ -268,22 +268,5 @@ describe('Named members CRUD', () => {
   });
 });
 
-// ── Legacy M3 partner endpoints ────────────────────────────────────────────
-
-describe('Legacy /api/auth/me/partner stubs (M11 slice 1)', () => {
-  it('GET returns empty payload (used by old PartnerSection UI)', async () => {
-    const { user } = createUser(testDb);
-    const res = await request(app).get('/api/auth/me/partner').set('Cookie', authCookie(user.id));
-    expect(res.status).toBe(200);
-    expect(res.body.partner).toBeNull();
-    expect(res.body.incoming).toEqual([]);
-    expect(res.body.outgoing).toEqual([]);
-  });
-
-  it('POST invites returns 410 PARTNER_DEPRECATED', async () => {
-    const { user } = createUser(testDb);
-    const res = await request(app).post('/api/auth/me/partner/invites').set('Cookie', authCookie(user.id)).send({ identifier: 'x@example.com' });
-    expect(res.status).toBe(410);
-    expect(res.body.code).toBe('PARTNER_DEPRECATED');
-  });
-});
+// Legacy M3 partner endpoints were removed in M11 slice 3 — no tests
+// against them.

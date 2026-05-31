@@ -129,19 +129,34 @@ export const authApi = {
     create: (name: string) => apiClient.post('/auth/mcp-tokens', { name }).then(r => r.data),
     delete: (id: number) => apiClient.delete(`/auth/mcp-tokens/${id}`).then(r => r.data),
   },
-  // [460-fork] Partner pairing (Milestone 3)
-  partner: {
-    get: () => apiClient.get('/auth/me/partner').then(r => r.data),
-    invite: (data: { identifier: string; message?: string; clientMutationId?: string }) =>
-      apiClient.post('/auth/me/partner/invites', { identifier: data.identifier, message: data.message }, {
-        headers: data.clientMutationId ? { 'X-Client-Mutation-Id': data.clientMutationId } : undefined,
-      }).then(r => r.data),
-    cancelInvite: (inviteId: string) =>
-      apiClient.delete(`/auth/me/partner/invites/${inviteId}`).then(r => r.data),
-    respond: (notificationId: number, response: 'positive' | 'negative') =>
-      apiClient.post(`/notifications/in-app/${notificationId}/respond`, { response }).then(r => r.data),
-    unpair: () => apiClient.delete('/auth/me/partner').then(r => r.data),
-    backfillTrips: () => apiClient.post('/auth/me/partner/backfill-trips').then(r => r.data),
+  // [460-fork] Milestone 11 — Household (supersedes M3 partner pairing).
+  household: {
+    get: () => apiClient.get('/household').then(r => r.data),
+    create: (name?: string | null) =>
+      apiClient.post('/household', { name }).then(r => r.data),
+    rename: (name: string | null) =>
+      apiClient.patch('/household', { name }).then(r => r.data),
+    leave: () => apiClient.delete('/household').then(r => r.data),
+    invites: {
+      send: (data: { email: string; message?: string; clientMutationId?: string }) =>
+        apiClient.post('/household/invites', { email: data.email, message: data.message }, {
+          headers: data.clientMutationId ? { 'X-Client-Mutation-Id': data.clientMutationId } : undefined,
+        }).then(r => r.data),
+      cancel: (inviteId: string) =>
+        apiClient.delete(`/household/invites/${inviteId}`).then(r => r.data),
+      accept: (token: string) =>
+        apiClient.post(`/household/invites/${token}/accept`).then(r => r.data),
+      decline: (token: string) =>
+        apiClient.post(`/household/invites/${token}/decline`).then(r => r.data),
+    },
+    members: {
+      add: (data: { name: string; dob?: string | null; relationship?: string | null }) =>
+        apiClient.post('/household/members', data).then(r => r.data),
+      update: (id: number, data: { name?: string; dob?: string | null; relationship?: string | null }) =>
+        apiClient.put(`/household/members/${id}`, data).then(r => r.data),
+      delete: (id: number) =>
+        apiClient.delete(`/household/members/${id}`).then(r => r.data),
+    },
   },
 }
 

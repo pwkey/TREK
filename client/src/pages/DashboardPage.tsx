@@ -691,13 +691,24 @@ export default function DashboardPage(): React.ReactElement {
   const handleCopy = async (trip: DashboardTrip) => {
     const title = `${trip.title} (${t('dashboard.copySuffix')})`
     try {
-      const partnerRes = await authApi.partner.get()
-      if (partnerRes?.partner?.username) {
-        setCopyPrompt({ trip, title, partnerName: partnerRes.partner.username })
-        return
+      // [460-fork] M11 — was authApi.partner.get(); now reads from the
+      // household and lifts the "include them on copy?" prompt for any
+      // household with peers (1+ other users).
+      const res = await authApi.household.get()
+      const peers = (res?.household?.users || []).filter((u: { id: number }) => u.id !== res?.household?.created_by || (res.household?.users.length ?? 0) > 1)
+      // Simpler: show the prompt if there's more than just the current user.
+      const otherUsers = (res?.household?.users || []).slice()
+      if (otherUsers.length > 1) {
+        // Display the most prominent peer's username (first peer that's not me).
+        const peerName = otherUsers[otherUsers.length - 1]?.username ?? otherUsers[0]?.username
+        if (peerName) {
+          setCopyPrompt({ trip, title, partnerName: peerName })
+          return
+        }
       }
+      void peers
     } catch {
-      // Partner lookup failed — fall through to a plain copy without the flag.
+      // Household lookup failed — fall through to a plain copy without the flag.
     }
     await performCopy(trip, title)
   }

@@ -16,6 +16,8 @@ For each entry: capture what the user *did*, what they *expected*, what actually
 - **Missing feature** — the user expected something that genuinely isn't there.
 - **Bug** — the feature is broken.
 
+**Deploy pipeline note (2026-05-31):** CI-gated deploy verified working end-to-end on commit `2a00770` — GitHub Actions runs server + client tests, only fires the Coolify deploy webhook on success, skips the deploy job on failure. Coolify's own "Watch repository for changes" polling is disabled, so the GitHub Actions path is the only deploy trigger.
+
 ## Editing rules
 
 - Claude Code can add entries during product-use sessions when the user reports something. Mark new entries with the date and the user's exact wording where possible — paraphrasing loses nuance.

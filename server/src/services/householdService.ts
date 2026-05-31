@@ -10,7 +10,25 @@
 // invite / accept lives in slice 2 of M11 (see ours-milestone-11-plan.md).
 // This slice 1 service covers everything else: create, read, leave, and
 // CRUD on named members.
+import { randomUUID, randomBytes } from 'node:crypto';
 import { db } from '../db/database';
+
+// Dispatch wrappers for invite notifications. Lazy require avoids the
+// service ↔ notification ↔ websocket import cycle.
+function wsBroadcast(userId: number, message: Record<string, unknown>): void {
+  try {
+    const { broadcastToUser } = require('../websocket');
+    broadcastToUser(userId, message);
+  } catch { /* websocket unavailable (tests) */ }
+}
+
+function dispatchNotification(event: string, actorId: number, targetUserId: number, params: Record<string, string>, inApp?: Record<string, unknown>): void {
+  import('./notificationService').then(({ send }) => {
+    send({ event: event as any, actorId, scope: 'user', targetId: targetUserId, params, inApp: inApp as any }).catch(() => { /* swallow */ });
+  }).catch(() => { /* swallow */ });
+}
+
+const INVITE_TTL_DAYS = 7;
 
 export interface UserSnapshot {
   id: number;
@@ -48,8 +66,42 @@ export interface HouseholdServiceError {
     | 'HOUSEHOLD_NOT_FOUND'
     | 'MEMBER_NOT_FOUND'
     | 'NOT_AUTHORISED'
-    | 'INVALID_INPUT';
+    | 'INVALID_INPUT'
+    | 'INVITE_NOT_FOUND'
+    | 'INVITE_EXPIRED'
+    | 'INVITE_ALREADY_RESOLVED'
+    | 'INVITE_NOT_FOR_YOU'
+    | 'PENDING_INVITE_EXISTS'
+    | 'SELF_INVITE';
   status: number;
+}
+
+export interface InviteRow {
+  id: string;
+  household_id: number;
+  invitee_email: string;
+  invited_by: number;
+  token: string;
+  status: 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled';
+  message: string | null;
+  expires_at: string;
+  responded_at: string | null;
+  client_mutation_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InviteView {
+  id: string;
+  household_id: number;
+  household_name: string | null;
+  invitee_email: string;
+  invited_by: UserSnapshot | null;
+  token: string;
+  status: InviteRow['status'];
+  message: string | null;
+  expires_at: string;
+  created_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +335,262 @@ export function deleteMember(params: {
   }
   db.prepare('DELETE FROM household_members WHERE id = ?').run(params.memberId);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Invites (Milestone 11 slice 2)
+// ---------------------------------------------------------------------------
+
+function isoTimestamp(d: Date): string {
+  return d.toISOString().replace('T', ' ').replace('Z', '').slice(0, 19);
+}
+
+function inviteRowToView(row: InviteRow): InviteView {
+  const household = householdRow(row.household_id);
+  const inviter = userSnapshot(row.invited_by);
+  return {
+    id: row.id,
+    household_id: row.household_id,
+    household_name: household?.name ?? null,
+    invitee_email: row.invitee_email,
+    invited_by: inviter,
+    token: row.token,
+    status: row.status,
+    message: row.message,
+    expires_at: row.expires_at,
+    created_at: row.created_at,
+  };
+}
+
+function findUserByEmail(email: string): { id: number; email: string } | null {
+  const lowered = email.trim().toLowerCase();
+  const row = db
+    .prepare('SELECT id, email FROM users WHERE LOWER(email) = ?')
+    .get(lowered) as { id: number; email: string } | undefined;
+  return row ?? null;
+}
+
+export function sendInvite(params: {
+  userId: number;
+  inviteeEmail: string;
+  message?: string | null;
+  clientMutationId?: string | null;
+}): { invite: InviteView } | HouseholdServiceError {
+  const { userId, inviteeEmail, message, clientMutationId } = params;
+  const email = inviteeEmail?.trim();
+  if (!email || !email.includes('@')) {
+    return { error: 'A valid email is required', code: 'INVALID_INPUT', status: 400 };
+  }
+  const snap = getHouseholdForUser(userId);
+  if (!snap) return { error: 'Create a household first', code: 'NOT_IN_HOUSEHOLD', status: 404 };
+
+  const inviter = userSnapshot(userId);
+  if (inviter && inviter.email.toLowerCase() === email.toLowerCase()) {
+    return { error: 'Cannot invite yourself', code: 'SELF_INVITE', status: 400 };
+  }
+
+  // If the invitee already exists AND is already in a household (this one or
+  // another), surface a clear error.
+  const existingUser = findUserByEmail(email);
+  if (existingUser) {
+    const userHh = db
+      .prepare('SELECT household_id FROM users WHERE id = ?')
+      .get(existingUser.id) as { household_id: number | null } | undefined;
+    if (userHh?.household_id === snap.id) {
+      return { error: 'That user is already in your household', code: 'ALREADY_IN_HOUSEHOLD', status: 409 };
+    }
+    if (userHh?.household_id) {
+      return { error: 'That user is already in another household', code: 'ALREADY_IN_HOUSEHOLD', status: 409 };
+    }
+  }
+
+  // Idempotency: replaying with the same client_mutation_id returns the
+  // already-stored invite.
+  if (clientMutationId) {
+    const existing = db
+      .prepare('SELECT * FROM household_invites WHERE client_mutation_id = ?')
+      .get(clientMutationId) as InviteRow | undefined;
+    if (existing) {
+      return { invite: inviteRowToView(existing) };
+    }
+  }
+
+  // No more than one outstanding pending invite for the same (household, email).
+  const pending = db
+    .prepare(`
+      SELECT id FROM household_invites
+      WHERE household_id = ? AND LOWER(invitee_email) = ?
+        AND status = 'pending' AND expires_at > CURRENT_TIMESTAMP
+    `)
+    .get(snap.id, email.toLowerCase()) as { id: string } | undefined;
+  if (pending) {
+    return { error: 'A pending invite already exists for that email', code: 'PENDING_INVITE_EXISTS', status: 409 };
+  }
+
+  const inviteId = randomUUID();
+  const token = randomBytes(24).toString('base64url');
+  const expiresAt = isoTimestamp(new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000));
+  const trimmedMessage = message?.trim().slice(0, 200) || null;
+
+  db.prepare(`
+    INSERT INTO household_invites (
+      id, household_id, invitee_email, invited_by, token, status,
+      message, expires_at, client_mutation_id
+    ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+  `).run(inviteId, snap.id, email, userId, token, trimmedMessage, expiresAt, clientMutationId ?? null);
+
+  const created = db
+    .prepare('SELECT * FROM household_invites WHERE id = ?')
+    .get(inviteId) as InviteRow;
+  const view = inviteRowToView(created);
+
+  // Notify the invitee if they already have an account.
+  if (existingUser) {
+    wsBroadcast(existingUser.id, { type: 'household:invite', from: inviter, inviteId, token, householdName: snap.name });
+    dispatchNotification('household_invite', userId, existingUser.id,
+      { actor: inviter?.username ?? 'A household', household: snap.name ?? 'household' },
+      {
+        type: 'boolean',
+        positiveCallback: { action: 'household_invite_accept', payload: { token } },
+        negativeCallback: { action: 'household_invite_decline', payload: { token } },
+      });
+  }
+
+  return { invite: view };
+}
+
+export function cancelInvite(params: { userId: number; inviteId: string }): { ok: true } | HouseholdServiceError {
+  const snap = getHouseholdForUser(params.userId);
+  if (!snap) return { error: 'Not in a household', code: 'NOT_IN_HOUSEHOLD', status: 404 };
+  const invite = db
+    .prepare('SELECT * FROM household_invites WHERE id = ?')
+    .get(params.inviteId) as InviteRow | undefined;
+  if (!invite || invite.household_id !== snap.id) {
+    return { error: 'Invite not found', code: 'INVITE_NOT_FOUND', status: 404 };
+  }
+  if (invite.status !== 'pending') {
+    // Idempotent.
+    return { ok: true };
+  }
+  db.prepare(`
+    UPDATE household_invites
+       SET status = 'cancelled', responded_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND status = 'pending'
+  `).run(params.inviteId);
+  return { ok: true };
+}
+
+export function acceptInvite(params: {
+  userId: number;
+  token: string;
+}): { household: HouseholdSnapshot } | HouseholdServiceError {
+  const { userId, token } = params;
+  const invite = db
+    .prepare('SELECT * FROM household_invites WHERE token = ?')
+    .get(token) as InviteRow | undefined;
+  if (!invite) return { error: 'Invite not found', code: 'INVITE_NOT_FOUND', status: 404 };
+  if (invite.status !== 'pending') {
+    return { error: `Invite already ${invite.status}`, code: 'INVITE_ALREADY_RESOLVED', status: 410 };
+  }
+  if (new Date(invite.expires_at.replace(' ', 'T') + 'Z') < new Date()) {
+    db.prepare("UPDATE household_invites SET status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'")
+      .run(invite.id);
+    return { error: 'Invite has expired', code: 'INVITE_EXPIRED', status: 410 };
+  }
+
+  // Confirm the acting user's email matches the invite's invitee_email.
+  // We accept either an exact match OR the user is logged in (the email is
+  // who the invite was for — defence against guessed tokens).
+  const user = db
+    .prepare('SELECT id, email, household_id FROM users WHERE id = ?')
+    .get(userId) as { id: number; email: string; household_id: number | null } | undefined;
+  if (!user) return { error: 'User not found', code: 'INVITE_NOT_FOUND', status: 404 };
+  if (user.email.toLowerCase() !== invite.invitee_email.toLowerCase()) {
+    return { error: 'This invite is for a different email', code: 'INVITE_NOT_FOR_YOU', status: 403 };
+  }
+
+  let leftPreviousHousehold = false;
+  db.transaction(() => {
+    const res = db
+      .prepare("UPDATE household_invites SET status = 'accepted', responded_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'")
+      .run(invite.id);
+    if (res.changes !== 1) {
+      throw new Error('RACE_RESOLVED');
+    }
+    // If the user is already in another household, leave it first.
+    if (user.household_id && user.household_id !== invite.household_id) {
+      const remaining = db
+        .prepare('SELECT COUNT(*) AS c FROM users WHERE household_id = ? AND id != ?')
+        .get(user.household_id, user.id) as { c: number };
+      db.prepare('UPDATE users SET household_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+      if (remaining.c === 0) {
+        db.prepare('DELETE FROM households WHERE id = ?').run(user.household_id);
+      }
+      leftPreviousHousehold = true;
+    }
+    db.prepare('UPDATE users SET household_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(invite.household_id, user.id);
+  })();
+
+  // Notify the inviter.
+  wsBroadcast(invite.invited_by, { type: 'household:response', token: invite.token, status: 'accepted' });
+
+  const snap = getHouseholdForUser(userId);
+  if (!snap) {
+    return { error: 'Household disappeared after accept', code: 'HOUSEHOLD_NOT_FOUND', status: 500 };
+  }
+  // Silence the unused warning — kept for clarity around what this method does.
+  void leftPreviousHousehold;
+  return { household: snap };
+}
+
+export function declineInvite(params: { userId: number; token: string }): { ok: true } | HouseholdServiceError {
+  const invite = db
+    .prepare('SELECT * FROM household_invites WHERE token = ?')
+    .get(params.token) as InviteRow | undefined;
+  if (!invite) return { error: 'Invite not found', code: 'INVITE_NOT_FOUND', status: 404 };
+  if (invite.status !== 'pending') return { ok: true }; // idempotent
+  const user = db
+    .prepare('SELECT email FROM users WHERE id = ?')
+    .get(params.userId) as { email: string } | undefined;
+  if (!user || user.email.toLowerCase() !== invite.invitee_email.toLowerCase()) {
+    return { error: 'This invite is for a different email', code: 'INVITE_NOT_FOR_YOU', status: 403 };
+  }
+  db.prepare(`
+    UPDATE household_invites
+       SET status = 'declined', responded_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND status = 'pending'
+  `).run(invite.id);
+  wsBroadcast(invite.invited_by, { type: 'household:response', token: invite.token, status: 'declined' });
+  return { ok: true };
+}
+
+export function listOutgoingInvites(userId: number): InviteView[] {
+  const snap = getHouseholdForUser(userId);
+  if (!snap) return [];
+  const rows = db
+    .prepare(`
+      SELECT * FROM household_invites
+      WHERE household_id = ? AND status = 'pending' AND expires_at > CURRENT_TIMESTAMP
+      ORDER BY created_at DESC
+    `)
+    .all(snap.id) as InviteRow[];
+  return rows.map(inviteRowToView);
+}
+
+export function listIncomingInvites(userId: number): InviteView[] {
+  const user = db
+    .prepare('SELECT email FROM users WHERE id = ?')
+    .get(userId) as { email: string } | undefined;
+  if (!user) return [];
+  const rows = db
+    .prepare(`
+      SELECT * FROM household_invites
+      WHERE LOWER(invitee_email) = ? AND status = 'pending' AND expires_at > CURRENT_TIMESTAMP
+      ORDER BY created_at DESC
+    `)
+    .all(user.email.toLowerCase()) as InviteRow[];
+  return rows.map(inviteRowToView);
 }
 
 // ---------------------------------------------------------------------------

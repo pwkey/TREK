@@ -13,6 +13,7 @@ import { authenticate } from './middleware/auth';
 import { db } from './db/database';
 
 import authRoutes from './routes/auth';
+import householdRoutes from './routes/household'; // [460-fork] Milestone 11 slice 2
 import tripsRoutes from './routes/trips';
 import daysRoutes, { accommodationsRouter as accommodationsRoutes } from './routes/days';
 import placesRoutes from './routes/places';
@@ -209,6 +210,7 @@ export function createApp(): express.Application {
   // API Routes
   app.use('/api/auth', authRoutes);
   app.use('/api/auth/oidc', oidcRoutes);
+  app.use('/api/household', householdRoutes); // [460-fork] Milestone 11 slice 2
   // [460-fork] Milestone 7 slice 3 — mount BEFORE /api/trips so the
   // string "import" can't be matched as a trip id by tripsRoutes.
   app.use('/api/trips/import', importRoutes);

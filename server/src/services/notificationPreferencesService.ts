@@ -14,7 +14,7 @@ export type NotifEventType =
   | 'collab_message'
   | 'packing_tagged'
   | 'version_available'
-  | 'partner_invite';
+  | 'household_invite';
 
 export interface AvailableChannels {
   email: boolean;
@@ -33,7 +33,7 @@ const IMPLEMENTED_COMBOS: Record<NotifEventType, NotifChannel[]> = {
   collab_message:    ['inapp', 'email', 'webhook'],
   packing_tagged:    ['inapp', 'email', 'webhook'],
   version_available: ['inapp', 'email', 'webhook'],
-  partner_invite:    ['inapp', 'email', 'webhook'],
+  household_invite:  ['inapp', 'email', 'webhook'],
 };
 
 /** Events that target admins only (shown in admin panel, not in user settings). */

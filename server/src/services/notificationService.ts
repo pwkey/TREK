@@ -105,12 +105,14 @@ const EVENT_NOTIFICATION_CONFIG: Record<string, EventNotifConfig> = {
     navigateTextKey: 'notif.action.view_packing',
     navigateTarget: p => (p.tripId ? `/trips/${p.tripId}` : null),
   },
-  // [460-fork] Partner pairing (Milestone 3) — boolean notification with
+  // [460-fork] Milestone 11 — household invite. Boolean notification with
   // positive/negative callbacks dispatched via inAppNotificationActions.
-  partner_invite: {
+  // (Renamed from M3's partner_invite; the inApp action types are also
+  // renamed: household_invite_accept / household_invite_decline.)
+  household_invite: {
     inAppType: 'simple', // overridden by inApp.type='boolean' at call site
-    titleKey: 'notif.partner_invite.title',
-    textKey: 'notif.partner_invite.text',
+    titleKey: 'notif.household_invite.title',
+    textKey: 'notif.household_invite.text',
     navigateTarget: () => '/settings?tab=account',
   },
   version_available: {

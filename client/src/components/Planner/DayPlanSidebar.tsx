@@ -161,6 +161,48 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const dragDataRef = useRef(null)
   const initedTransportIds = useRef(new Set<number>()) // Speichert Drag-Daten als Backup (dataTransfer geht bei Re-Render verloren)
 
+  // [460-fork] Q5 — day-header camera button. Single hidden file input
+  // shared across all day rows; clicking a day's camera icon sets the
+  // target day on the ref, then synthetically clicks the input. On
+  // mobile (capture="environment") this pops the native camera UI;
+  // on desktop it opens the file picker. The same uploadDayPhoto store
+  // action that PhotoGrid uses handles EXIF extraction + auto-caption
+  // server-side, so no other plumbing is needed.
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
+  const photoUploadTargetDayRef = useRef<number | null>(null)
+  const [photoUploadBusyDayId, setPhotoUploadBusyDayId] = useState<number | null>(null)
+
+  const handlePhotoCaptureClick = (dayId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (photoUploadBusyDayId !== null) return
+    photoUploadTargetDayRef.current = dayId
+    photoInputRef.current?.click()
+  }
+
+  const handlePhotoCaptureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    const dayId = photoUploadTargetDayRef.current
+    e.target.value = '' // allow re-selection of same file
+    if (!file || dayId == null) return
+    const isImageMime = file.type.startsWith('image/')
+    const isHeicByExt = /\.hei[cf]$/i.test(file.name)
+    if (!isImageMime && !isHeicByExt) {
+      toast.error(t('photos.notAnImage') || 'Not an image')
+      return
+    }
+    setPhotoUploadBusyDayId(dayId)
+    try {
+      await useTripStore.getState().uploadDayPhoto(tripId, dayId, file)
+      toast.success(t('photos.uploadSuccess') || 'Photo added')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed'
+      toast.error(msg)
+    } finally {
+      setPhotoUploadBusyDayId(null)
+      photoUploadTargetDayRef.current = null
+    }
+  }
+
   const currency = trip?.currency || 'EUR'
 
   // Drag-Daten aus dataTransfer, Ref oder window lesen (dataTransfer geht bei Re-Render verloren)
@@ -1242,6 +1284,18 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                   </div>
                 </div>
 
+                {/* [460-fork] Q5 — day-header camera button: snap-and-store
+                    without expanding the day-detail panel. */}
+                {canEditDays && <button
+                  onClick={e => handlePhotoCaptureClick(day.id, e)}
+                  disabled={photoUploadBusyDayId === day.id}
+                  title={t('dayplan.addPhoto') || 'Add photo'}
+                  style={{ flexShrink: 0, background: 'none', border: 'none', padding: 6, cursor: photoUploadBusyDayId === day.id ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-faint)', opacity: photoUploadBusyDayId === day.id ? 0.5 : 1 }}
+                  onMouseEnter={e => { if (photoUploadBusyDayId !== day.id) e.currentTarget.style.color = 'var(--text-primary)' }}
+                  onMouseLeave={e => { if (photoUploadBusyDayId !== day.id) e.currentTarget.style.color = 'var(--text-faint)' }}
+                >
+                  <Camera size={16} strokeWidth={2} />
+                </button>}
                 {canEditDays && <button
                   onClick={e => openAddNote(day.id, e)}
                   title={t('dayplan.addNote')}
@@ -2089,6 +2143,19 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
       {showBatchImport && (
         <BatchPhotoImport tripId={tripId} days={days} onClose={() => setShowBatchImport(false)} />
       )}
+
+      {/* [460-fork] Q5 — hidden file input shared across all day-header
+          camera buttons. capture="environment" pops the native camera UI
+          on mobile; on desktop the attribute is ignored and a file picker
+          opens instead (which is what desktop users want anyway). */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: 'none' }}
+        onChange={handlePhotoCaptureChange}
+      />
     </div>
   )
 })

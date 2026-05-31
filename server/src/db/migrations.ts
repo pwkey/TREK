@@ -1203,6 +1203,127 @@ function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_gpx_tracks_trip ON gpx_tracks(trip_id);
       `);
     },
+    // [460-fork] Milestone 11 slice 1 — Household tables.
+    //
+    // Supersedes M3 partner pairing (1-to-1 partner_user_id) with an N-user
+    // group that also holds non-account "named members" (kids, infants,
+    // granny). This thunk only creates the new tables and adds the
+    // users.household_id FK. The next two migrations handle the data
+    // migration of existing partner pairs and the drop of the M3 columns.
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS households (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE TABLE IF NOT EXISTS household_members (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          dob TEXT,
+          relationship TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_household_members_household
+          ON household_members(household_id);
+        CREATE TABLE IF NOT EXISTS household_invites (
+          id TEXT PRIMARY KEY,
+          household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+          invitee_email TEXT NOT NULL,
+          invited_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          token TEXT NOT NULL UNIQUE,
+          status TEXT NOT NULL DEFAULT 'pending',
+          message TEXT,
+          expires_at DATETIME NOT NULL,
+          responded_at DATETIME,
+          client_mutation_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_household_invites_household
+          ON household_invites(household_id, status);
+        CREATE INDEX IF NOT EXISTS idx_household_invites_email
+          ON household_invites(LOWER(invitee_email), status);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_household_invites_cmid
+          ON household_invites(client_mutation_id) WHERE client_mutation_id IS NOT NULL;
+      `);
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN household_id INTEGER REFERENCES households(id) ON DELETE SET NULL');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      db.exec('CREATE INDEX IF NOT EXISTS idx_users_household ON users(household_id);');
+    },
+    // [460-fork] Milestone 11 slice 1 — Data migration: convert existing
+    // M3 partner pairs to 2-person households.
+    //
+    // For each pair (u1.partner_user_id = u2.id, u2.partner_user_id = u1.id),
+    // create one household and assign both users to it. Dedupe by id-order
+    // so each pair is processed exactly once.
+    //
+    // This is intentionally idempotent: if either user already has a
+    // household_id (from a partial earlier run), we use it instead of
+    // creating a duplicate.
+    () => {
+      const partnerInvitesTable = db.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='partner_invites'"
+      ).get();
+      // No-op if the M3 partner schema was never present (fresh installs):
+      // schema.ts already created the household tables, nothing to migrate.
+      const hasPartnerColumn = db.prepare(
+        "SELECT 1 FROM pragma_table_info('users') WHERE name = 'partner_user_id'"
+      ).get();
+      if (!hasPartnerColumn) return;
+      const pairs = db.prepare(`
+        SELECT u1.id AS user_a, u2.id AS user_b
+        FROM users u1 INNER JOIN users u2 ON u1.partner_user_id = u2.id
+        WHERE u2.partner_user_id = u1.id AND u1.id < u2.id
+      `).all() as Array<{ user_a: number; user_b: number }>;
+      for (const pair of pairs) {
+        const aHh = db.prepare('SELECT household_id FROM users WHERE id = ?').get(pair.user_a) as { household_id: number | null } | undefined;
+        const bHh = db.prepare('SELECT household_id FROM users WHERE id = ?').get(pair.user_b) as { household_id: number | null } | undefined;
+        const existing = aHh?.household_id ?? bHh?.household_id ?? null;
+        let hid: number;
+        if (existing) {
+          hid = existing;
+        } else {
+          const res = db.prepare('INSERT INTO households (created_by) VALUES (?)').run(pair.user_a);
+          hid = Number(res.lastInsertRowid);
+        }
+        db.prepare('UPDATE users SET household_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (?, ?) AND household_id IS NULL').run(hid, pair.user_a, pair.user_b);
+      }
+      // Silence the unused warning — kept for clarity around what this migration touches.
+      void partnerInvitesTable;
+    },
+    // [460-fork] Milestone 11 slice 1 — Drop the M3 partner schema.
+    //
+    // Runs *after* the data-migration above has captured the pairs.
+    // SQLite >= 3.35 supports ALTER TABLE DROP COLUMN; better-sqlite3 12.x
+    // bundles a recent SQLite, so this works in CI and production.
+    // partner_invites table is dropped wholesale — its content was
+    // transient (TTL invites that resolve via UPDATE) so no useful state
+    // is being thrown away.
+    () => {
+      db.exec('DROP INDEX IF EXISTS idx_partner_invites_target;');
+      db.exec('DROP INDEX IF EXISTS idx_partner_invites_inviter;');
+      db.exec('DROP INDEX IF EXISTS idx_partner_invites_cmid;');
+      db.exec('DROP INDEX IF EXISTS idx_partner_invites_pending_pair;');
+      db.exec('DROP TABLE IF EXISTS partner_invites;');
+      const hasPartnerColumn = db.prepare(
+        "SELECT 1 FROM pragma_table_info('users') WHERE name = 'partner_user_id'"
+      ).get();
+      if (hasPartnerColumn) {
+        db.exec('DROP INDEX IF EXISTS idx_users_partner;');
+        db.exec('ALTER TABLE users DROP COLUMN partner_user_id;');
+      }
+    },
   ];
 
   if (currentVersion < migrations.length) {

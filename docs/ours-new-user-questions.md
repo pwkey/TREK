@@ -208,6 +208,35 @@ The full sequence the user went through trying to install the PWA on a Samsung G
 
 ---
 
+#### Q10. "We should probably ensure that more than two people can be part of the 'partner' group ie kids etc"
+
+- **Category:** Product-spec evolution. M3 partner-pairing was deliberately scoped to 1-to-1 (CLAUDE.md §6 explicitly deferred "Multi-partner or family-unit (3+ accounts) support"). Real-trip use is now pushing against that limit.
+- **Important design ambiguity in "kids etc":** there are two distinct concepts under this umbrella and they probably need different solutions, not one combined one:
+
+  **A. Family group — multiple ACCOUNTS that auto-pair together.**
+  - Parent + adult child + adult child + adult child — each with their own login, edits trips, has their own settings, can install the PWA on their own phone.
+  - Semantically a generalisation of M3: instead of `partner_user_id` being a single FK, it becomes membership in a `household` table that any number of accounts can join.
+  - Trip auto-add behaviour scales naturally: new trip → all household members get added.
+  - Pairing is still bidirectional / mutual; needs an N-party accept flow rather than 2-party.
+
+  **B. Household members — non-account names tagged on the user.**
+  - Minor children, infants, pets, an elderly relative who doesn't use phones — people who appear on the trip but don't *use* the app.
+  - They show up in passenger-name lists (flights for the family of 4), photo captions ("kids at the beach"), and expense calculations (party of 5 split bills).
+  - Schema-wise this is a `user_household_members` table of `{ user_id, name, dob?, relationship? }` — never any accounts, never any logins.
+  - No invite / accept flow needed.
+
+- **Why splitting matters:** Building (A) gives you a fancy multi-account pairing system but doesn't solve the very common "we have a 3-year-old who needs to be on the flight booking" case. Building (B) gives you that case but doesn't help your adult kids actually collaborate on planning. Most household-extension needs combine both.
+- **Trade-offs to surface for product decision later:**
+  - Permissions: do adult-child accounts (A) get full edit on the parent's trips, or a more limited role?
+  - Expense splitting: are household-member-names (B) splittees for splitwise math, or are they free-riders on the parent's share?
+  - UI: where does adding a household member live? Settings → Account → Household? Or per-trip "add traveller"?
+  - Reservation Smart Import (M2): when extracting passenger names from a PDF, fuzzy-match against not just user + partner but the whole household.
+  - Photo auto-caption / tagging: should household members be auto-suggested when captioning?
+- **Implication for guide:** Document the current 1-to-1 partner limit explicitly so a user reaching for it doesn't try to add a third account and silently fail. Frame the workaround until family-groups land: each adult registers their own account and you invite them as trip members per-trip (no auto-add).
+- **Implication for product:** This is a meaningful next-milestone candidate, not a quick fix. Likely scope: schema migration (new `households` + `household_members` tables), partner-pairing UI replaced by household-management UI, server changes for trip auto-add, fuzzy-match updates in Smart Import. Realistically a multi-day piece of work. **Not started — flagged for discussion** when the wife (and any other planned travel-companions) have actually used the app and we know which interpretation matters most.
+
+---
+
 ## Meta-observations from this session
 
 Worth noting for guide-writing context:

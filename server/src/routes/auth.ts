@@ -7,7 +7,7 @@ import { authenticate, optionalAuth, demoUploadBlock } from '../middleware/auth'
 import { AuthRequest, OptionalAuthRequest } from '../types';
 import { writeAudit, getClientIp } from '../services/auditLog';
 import { setAuthCookie, clearAuthCookie } from '../services/cookie';
-import * as partnerSvc from '../services/partnerService';
+import { getHouseholdForUser } from '../services/householdService';
 import {
   getAppConfig,
   demoLogin,
@@ -323,87 +323,46 @@ router.post('/resource-token', authenticate, (req: Request, res: Response) => {
   res.json(token);
 });
 
-// ── [460-fork] Partner pairing (Milestone 3) ────────────────────────────────
-// Additive block — keep contiguous to minimise upstream rebase conflicts.
+// ── [460-fork] Partner pairing (Milestone 3) — DEPRECATED, replaced by ──────
+// Households (Milestone 11). Slice 1 stubs these endpoints so the existing
+// client UI (PartnerSection.tsx) degrades gracefully through the deploy
+// window. Slice 2 adds the new /api/household endpoints; slice 3 replaces
+// the client UI and deletes both this block and PartnerSection.tsx.
 
 router.get('/me/partner', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
+  // Derive a backward-compatible "partner" snapshot from the household:
+  // the first OTHER user in the household, if any. Mutations (invite/cancel/
+  // unpair) below return 410 so the UI's empty state shows.
+  const hh = getHouseholdForUser(authReq.user.id);
+  const otherUser = hh?.users.find(u => u.id !== authReq.user.id) ?? null;
   res.json({
-    partner: partnerSvc.getPartner(authReq.user.id),
-    incoming: partnerSvc.listIncomingInvites(authReq.user.id),
-    outgoing: partnerSvc.listOutgoingInvites(authReq.user.id),
-    backfill_done: partnerSvc.hasBackfilledTrips(authReq.user.id),
+    partner: otherUser,
+    incoming: [],
+    outgoing: [],
+    backfill_done: true,
   });
 });
 
-router.post('/me/partner/invites', authenticate, (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const clientMutationId = (req.headers['x-client-mutation-id'] as string | undefined)?.trim() || null;
-  const { identifier, message } = req.body ?? {};
-  if (!identifier || typeof identifier !== 'string') {
-    return res.status(400).json({ error: 'identifier is required', code: 'INVALID_INPUT' });
-  }
-  const result = partnerSvc.sendInvite({
-    inviterId: authReq.user.id,
-    targetIdentifier: identifier,
-    message: typeof message === 'string' ? message : null,
-    clientMutationId,
-  });
-  if ('error' in result) {
-    return res.status(result.status).json({ error: result.error, code: result.code });
-  }
-  writeAudit({
-    userId: authReq.user.id,
-    action: 'user.partner_invite',
-    resource: result.invite.id,
-    ip: getClientIp(req),
-    details: { target_user_id: result.invite.target.id },
-  });
-  res.status(201).json({ invite: result.invite });
+const PARTNER_DEPRECATED = {
+  error: 'Partner pairing has been replaced by Households. Please update the app.',
+  code: 'PARTNER_DEPRECATED',
+};
+
+router.post('/me/partner/invites', authenticate, (_req: Request, res: Response) => {
+  res.status(410).json(PARTNER_DEPRECATED);
 });
 
-router.delete('/me/partner/invites/:inviteId', authenticate, (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const result = partnerSvc.cancelInvite({ userId: authReq.user.id, inviteId: req.params.inviteId });
-  if ('error' in result) {
-    return res.status(result.status).json({ error: result.error, code: result.code });
-  }
-  writeAudit({
-    userId: authReq.user.id,
-    action: 'user.partner_invite_cancel',
-    resource: req.params.inviteId,
-    ip: getClientIp(req),
-  });
-  res.json({ ok: true });
+router.delete('/me/partner/invites/:inviteId', authenticate, (_req: Request, res: Response) => {
+  res.status(410).json(PARTNER_DEPRECATED);
 });
 
-router.delete('/me/partner', authenticate, (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const result = partnerSvc.unpair(authReq.user.id);
-  if ('error' in result) {
-    return res.status(result.status).json({ error: result.error, code: result.code });
-  }
-  writeAudit({
-    userId: authReq.user.id,
-    action: 'user.partner_unpair',
-    ip: getClientIp(req),
-  });
-  res.json({ ok: true });
+router.delete('/me/partner', authenticate, (_req: Request, res: Response) => {
+  res.status(410).json(PARTNER_DEPRECATED);
 });
 
-router.post('/me/partner/backfill-trips', authenticate, (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const result = partnerSvc.backfillTrips(authReq.user.id);
-  if ('error' in result) {
-    return res.status(result.status).json({ error: result.error, code: result.code });
-  }
-  writeAudit({
-    userId: authReq.user.id,
-    action: 'user.partner_backfill_trips',
-    ip: getClientIp(req),
-    details: { added: result.added, skipped: result.skipped },
-  });
-  res.json(result);
+router.post('/me/partner/backfill-trips', authenticate, (_req: Request, res: Response) => {
+  res.json({ added: 0, skipped: 0, trip_ids: [] });
 });
 
 export default router;

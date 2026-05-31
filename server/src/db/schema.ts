@@ -25,31 +25,52 @@ function createTables(db: Database.Database): void {
       synology_password TEXT,
       synology_sid TEXT,
       must_change_password INTEGER DEFAULT 0,
-      partner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      household_id INTEGER REFERENCES households(id) ON DELETE SET NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE INDEX IF NOT EXISTS idx_users_partner ON users(partner_user_id);
-    CREATE TABLE IF NOT EXISTS partner_invites (
+    CREATE INDEX IF NOT EXISTS idx_users_household ON users(household_id);
+    -- [460-fork] Milestone 11 — Household supersedes M3 partner pairing.
+    -- N user accounts + M named non-account members in one group. Replaces
+    -- the 1-to-1 partner_user_id symmetric pair.
+    CREATE TABLE IF NOT EXISTS households (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    );
+    CREATE TABLE IF NOT EXISTS household_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      dob TEXT,
+      relationship TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_household_members_household ON household_members(household_id);
+    CREATE TABLE IF NOT EXISTS household_invites (
       id TEXT PRIMARY KEY,
-      inviter_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+      invitee_email TEXT NOT NULL,
+      invited_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT NOT NULL UNIQUE,
       status TEXT NOT NULL DEFAULT 'pending',
       message TEXT,
       expires_at DATETIME NOT NULL,
       responded_at DATETIME,
       client_mutation_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE INDEX IF NOT EXISTS idx_partner_invites_target ON partner_invites(target_user_id, status);
-    CREATE INDEX IF NOT EXISTS idx_partner_invites_inviter ON partner_invites(inviter_user_id, status);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_partner_invites_cmid
-      ON partner_invites(client_mutation_id) WHERE client_mutation_id IS NOT NULL;
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_partner_invites_pending_pair
-      ON partner_invites(inviter_user_id, target_user_id) WHERE status = 'pending';
+    CREATE INDEX IF NOT EXISTS idx_household_invites_household ON household_invites(household_id, status);
+    CREATE INDEX IF NOT EXISTS idx_household_invites_email ON household_invites(LOWER(invitee_email), status);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_household_invites_cmid
+      ON household_invites(client_mutation_id) WHERE client_mutation_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS settings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

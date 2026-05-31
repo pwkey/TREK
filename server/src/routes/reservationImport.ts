@@ -71,16 +71,25 @@ function cleanupTmp(filePath: string | undefined) {
   fs.unlink(filePath, () => undefined);
 }
 
-// [460-fork] slice 5 — build the user+partner candidate list from the DB so the
-// matcher stays pure. Candidates are aliased on username, email local-part,
-// and the full email so the matcher can score token splits.
+// [460-fork] M3 slice 5 / M11 slice 1 — build the candidate list for the
+// passenger matcher. M3 included the user + their partner. M11 generalises
+// to user + every other household user. Named household_members (no
+// account) get folded in by M11 slice 5; until then the candidate set is
+// account-only.
+//
+// Candidates are aliased on username, email local-part, and full email so
+// the matcher can score token splits.
 function buildMatchCandidates(userId: number): PassengerMatchCandidate[] {
-  const user = db.prepare('SELECT id, username, email, partner_user_id FROM users WHERE id = ?').get(userId) as { id: number; username: string; email: string; partner_user_id: number | null } | undefined;
+  const user = db.prepare('SELECT id, username, email, household_id FROM users WHERE id = ?').get(userId) as { id: number; username: string; email: string; household_id: number | null } | undefined;
   if (!user) return [];
   const candidates: PassengerMatchCandidate[] = [aliasesFor(user.id, user.username, user.email)];
-  if (user.partner_user_id) {
-    const partner = db.prepare('SELECT id, username, email FROM users WHERE id = ?').get(user.partner_user_id) as { id: number; username: string; email: string } | undefined;
-    if (partner) candidates.push(aliasesFor(partner.id, partner.username, partner.email));
+  if (user.household_id) {
+    const others = db
+      .prepare('SELECT id, username, email FROM users WHERE household_id = ? AND id != ?')
+      .all(user.household_id, user.id) as Array<{ id: number; username: string; email: string }>;
+    for (const peer of others) {
+      candidates.push(aliasesFor(peer.id, peer.username, peer.email));
+    }
   }
   return candidates;
 }

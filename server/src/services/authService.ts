@@ -8,7 +8,7 @@ import QRCode from 'qrcode';
 import { randomBytes, createHash } from 'crypto';
 import { db } from '../db/database';
 import { JWT_SECRET } from '../config';
-import { getPartner } from './partnerService';
+import { getHouseholdForUser } from './householdService';
 import { validatePassword } from './passwordPolicy';
 import { encryptMfaSecret, decryptMfaSecret } from './mfaCrypto';
 import { getAllPermissions } from './permissions';
@@ -395,9 +395,15 @@ export function getCurrentUser(userId: number) {
   ).get(userId) as User | undefined;
   if (!user) return null;
   const base = stripUserForClient(user as User) as Record<string, unknown>;
-  // [460-fork] Include partner snapshot so the client can show "You + Partner"
-  // chips and render the Partner Section state without an extra roundtrip.
-  return { ...base, avatar_url: avatarUrl(user), partner: getPartner(userId) };
+  // [460-fork] M11 — include the household snapshot (users + named members)
+  // so the client can render Settings → Household, chip-decorate the user's
+  // identity ("You + 3"), and feed Smart Import's passenger matcher.
+  // The legacy `partner` field is preserved as the first OTHER household
+  // user (if any) for backwards-compatibility with the M3-era PartnerSection
+  // UI that ships in this slice; slice 3 removes both fields together.
+  const household = getHouseholdForUser(userId);
+  const partner = household?.users.find(u => u.id !== userId) ?? null;
+  return { ...base, avatar_url: avatarUrl(user), household, partner };
 }
 
 // ---------------------------------------------------------------------------

@@ -19,22 +19,12 @@ registerAction('test_deny', async () => {
   console.log('[notifications] Test deny action executed');
 });
 
-// [460-fork] Partner pairing (Milestone 3) — boolean notification callbacks.
-// Dynamic import (not require) so Vitest's ESM resolver finds it the same
-// way production tsx does. Breaks the partnerService ↔ notificationService
-// import cycle.
-registerAction('partner_invite_accept', async (payload, respondingUserId) => {
-  const inviteId = typeof payload.inviteId === 'string' ? payload.inviteId : null;
-  if (!inviteId) return;
-  const mod = await import('./partnerService');
-  mod.acceptInvite({ userId: respondingUserId, inviteId });
-});
-
-registerAction('partner_invite_decline', async (payload, respondingUserId) => {
-  const inviteId = typeof payload.inviteId === 'string' ? payload.inviteId : null;
-  if (!inviteId) return;
-  const mod = await import('./partnerService');
-  mod.declineInvite({ userId: respondingUserId, inviteId });
-});
+// [460-fork] Milestone 11 — M3 partner_invite_accept/decline actions were
+// removed when partnerService was deleted. Household invite/accept boolean
+// notification actions will be wired up in M11 slice 2 alongside the new
+// REST endpoints. Until then, in-flight partner_invite notifications from
+// pre-M11 deploys are no-ops (the underlying invite tables are dropped).
+registerAction('partner_invite_accept', async () => { /* M11: superseded */ });
+registerAction('partner_invite_decline', async () => { /* M11: superseded */ });
 
 export { registerAction, getAction };

@@ -3,7 +3,7 @@ import fs from 'fs';
 import { db, canAccessTrip, isOwner } from '../db/database';
 import { Trip, User } from '../types';
 import { listDays, listAccommodations } from './dayService';
-import { autoAddPartnerToTrip as partnerAutoAdd } from './partnerService';
+import { autoAddHouseholdToTrip } from './householdService';
 import { listBudgetItems } from './budgetService';
 import { listItems as listPackingItems } from './packingService';
 import { listReservations } from './reservationService';
@@ -157,14 +157,17 @@ export function createTrip(userId: number, data: CreateTripData, maxDays?: numbe
   const tripId = result.lastInsertRowid;
   generateDays(tripId, data.start_date || null, data.end_date || null, maxDays, data.day_count);
 
-  // [460-fork] partner auto-add — BEGIN
-  // If the creator has a paired partner, auto-add them as a trip_member.
+  // [460-fork] M11 household auto-add — BEGIN
+  // If the creator is in a household, auto-add every other household user
+  // as a trip_member. Replaces M3's 1-to-1 partner auto-add. Named members
+  // (no-account kids etc) are not added — they aren't trip_members in the
+  // schema, only in Smart Import passenger matching (M11 slice 5).
   try {
-    partnerAutoAdd(userId, Number(tripId), data.title);
+    autoAddHouseholdToTrip(userId, Number(tripId));
   } catch (err) {
-    console.error('[tripService] partner auto-add failed:', err);
+    console.error('[tripService] household auto-add failed:', err);
   }
-  // [460-fork] partner auto-add — END
+  // [460-fork] M11 household auto-add — END
 
   const trip = db.prepare(`${TRIP_SELECT} WHERE t.id = :tripId`).get({ userId, tripId });
   return { trip, tripId: Number(tripId), reminderDays: rd };

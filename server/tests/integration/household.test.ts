@@ -153,13 +153,53 @@ describe('POST /api/household/invites', () => {
     expect(res.body.code).toBe('NOT_IN_HOUSEHOLD');
   });
 
-  it('rejects duplicate pending invite for the same email', async () => {
+  it('rejects duplicate pending invite for an email with NO account', async () => {
+    // When the invitee still has no account, a re-send has no one to notify —
+    // keep returning 409 (the pending invite already covers them; it surfaces
+    // the moment they register, matched by email).
     const { user } = createUser(testDb);
     await request(app).post('/api/household').set('Cookie', authCookie(user.id)).send({});
     await request(app).post('/api/household/invites').set('Cookie', authCookie(user.id)).send({ email: 'x@example.com' });
     const dup = await request(app).post('/api/household/invites').set('Cookie', authCookie(user.id)).send({ email: 'x@example.com' });
     expect(dup.status).toBe(409);
     expect(dup.body.code).toBe('PENDING_INVITE_EXISTS');
+  });
+
+  it('re-sends (re-notifies) instead of 409 once the invitee has registered', async () => {
+    // [460-fork] Regression for the exact real-world flow that broke for the
+    // first companion: an email is invited BEFORE that person registers (so
+    // the original invite can't notify anyone), they then register, and the
+    // inviter re-sends. The re-send must NOT be silently rejected as a
+    // duplicate — it has to succeed so the notification finally fires for the
+    // now-existing account. It must reuse the SAME pending invite (no dup row).
+    const { user: alice } = createUser(testDb);
+    await request(app).post('/api/household').set('Cookie', authCookie(alice.id)).send({ name: 'Keys' });
+
+    // 1) Invite an email that has no account yet → pending invite, no notify.
+    const first = await request(app).post('/api/household/invites')
+      .set('Cookie', authCookie(alice.id)).send({ email: 'late@example.com' });
+    expect(first.status).toBe(201);
+    const token = first.body.invite.token as string;
+
+    // 2) That person registers with the same email.
+    const { user: bob } = createUser(testDb, { email: 'late@example.com' });
+
+    // 3) Inviter re-sends → must succeed (201), reference the SAME invite, and
+    //    not create a second row.
+    const resend = await request(app).post('/api/household/invites')
+      .set('Cookie', authCookie(alice.id)).send({ email: 'late@example.com' });
+    expect(resend.status).toBe(201);
+    expect(resend.body.invite.token).toBe(token);
+    const count = testDb
+      .prepare("SELECT COUNT(*) AS c FROM household_invites WHERE LOWER(invitee_email) = 'late@example.com'")
+      .get() as { c: number };
+    expect(count.c).toBe(1);
+
+    // 4) And the invite is discoverable by the invitee — this is exactly what
+    //    the home-screen invite banner reads (GET /api/household → incoming).
+    const bobView = await request(app).get('/api/household').set('Cookie', authCookie(bob.id));
+    expect(bobView.status).toBe(200);
+    expect(bobView.body.incoming.map((i: { token: string }) => i.token)).toContain(token);
   });
 });
 

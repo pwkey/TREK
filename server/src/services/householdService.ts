@@ -404,6 +404,21 @@ export function sendInvite(params: {
     }
   }
 
+  // [460-fork] Notify dispatch, shared by the fresh-insert path AND the
+  // re-send path below. Real-time WS ping + a persisted in-app (bell)
+  // notification with accept/decline callbacks. Only meaningful when the
+  // invitee already has an account — otherwise there is no one to notify.
+  const notifyInvitee = (inviteeUserId: number, theInviteId: string, theToken: string): void => {
+    wsBroadcast(inviteeUserId, { type: 'household:invite', from: inviter, inviteId: theInviteId, token: theToken, householdName: snap.name });
+    dispatchNotification('household_invite', userId, inviteeUserId,
+      { actor: inviter?.username ?? 'A household', household: snap.name ?? 'household' },
+      {
+        type: 'boolean',
+        positiveCallback: { action: 'household_invite_accept', payload: { token: theToken } },
+        negativeCallback: { action: 'household_invite_decline', payload: { token: theToken } },
+      });
+  };
+
   // Idempotency: replaying with the same client_mutation_id returns the
   // already-stored invite.
   if (clientMutationId) {
@@ -418,12 +433,25 @@ export function sendInvite(params: {
   // No more than one outstanding pending invite for the same (household, email).
   const pending = db
     .prepare(`
-      SELECT id FROM household_invites
+      SELECT * FROM household_invites
       WHERE household_id = ? AND LOWER(invitee_email) = ?
         AND status = 'pending' AND expires_at > CURRENT_TIMESTAMP
     `)
-    .get(snap.id, email.toLowerCase()) as { id: string } | undefined;
+    .get(snap.id, email.toLowerCase()) as InviteRow | undefined;
   if (pending) {
+    // [460-fork] A pending invite already exists. The common real-world case
+    // is "invited before they had an account, then they registered, then I
+    // re-sent": the original invite never produced a notification (there was
+    // no account to notify at the time). So on a re-send, if the invitee NOW
+    // has an account, re-fire the notification against the existing invite
+    // rather than erroring — that's exactly what the user expects a re-send to
+    // do. If they still have no account there's no one to ping; the pending
+    // invite will surface in their Household settings + home-screen banner the
+    // moment they register (matched by email).
+    if (existingUser) {
+      notifyInvitee(existingUser.id, pending.id, pending.token);
+      return { invite: inviteRowToView(pending) };
+    }
     return { error: 'A pending invite already exists for that email', code: 'PENDING_INVITE_EXISTS', status: 409 };
   }
 
@@ -446,14 +474,7 @@ export function sendInvite(params: {
 
   // Notify the invitee if they already have an account.
   if (existingUser) {
-    wsBroadcast(existingUser.id, { type: 'household:invite', from: inviter, inviteId, token, householdName: snap.name });
-    dispatchNotification('household_invite', userId, existingUser.id,
-      { actor: inviter?.username ?? 'A household', household: snap.name ?? 'household' },
-      {
-        type: 'boolean',
-        positiveCallback: { action: 'household_invite_accept', payload: { token } },
-        negativeCallback: { action: 'household_invite_decline', payload: { token } },
-      });
+    notifyInvitee(existingUser.id, inviteId, token);
   }
 
   return { invite: view };

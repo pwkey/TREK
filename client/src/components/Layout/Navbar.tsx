@@ -180,9 +180,12 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
       {/* [460-fork] Milestone 5 — sync indicator (online/offline dot) */}
       {user && <SyncIndicator />}
 
-      {/* Notification bell — only in trip view on mobile, everywhere on desktop */}
-      {user && tripId && <InAppNotificationBell />}
-      {user && !tripId && <span className="hidden sm:block"><InAppNotificationBell /></span>}
+      {/* [460-fork] Notification bell — always visible when logged in, including
+          the home screen on mobile. (Previously hidden on the home screen below
+          the `sm` breakpoint via `hidden sm:block`, which meant household invites
+          and other alerts were invisible on a phone unless you were inside a
+          trip — see the home-screen invite banner on the dashboard too.) */}
+      {user && <InAppNotificationBell />}
 
       {/* User menu */}
       {user && (

@@ -10,6 +10,7 @@ import DemoBanner from '../components/Layout/DemoBanner'
 import InstallPwaHint from '../components/Layout/InstallPwaHint'
 import CurrencyWidget from '../components/Dashboard/CurrencyWidget'
 import TimezoneWidget from '../components/Dashboard/TimezoneWidget'
+import IncomingInviteBanner from '../components/Dashboard/IncomingInviteBanner' // [460-fork] home-screen household-invite banner
 import TripFormModal from '../components/Trips/TripFormModal'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
 import { useToast } from '../components/shared/Toast'
@@ -727,6 +728,10 @@ export default function DashboardPage(): React.ReactElement {
       <InstallPwaHint />
       <div style={{ flex: 1, overflow: 'auto', overscrollBehavior: 'contain', marginTop: 'var(--nav-h)' }}>
         <div style={{ maxWidth: 1300, margin: '0 auto', padding: '32px 20px 60px' }}>
+
+          {/* [460-fork] Pending household invites — surfaced prominently on the
+              home screen so they can't be missed (renders nothing when none). */}
+          <IncomingInviteBanner />
 
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>

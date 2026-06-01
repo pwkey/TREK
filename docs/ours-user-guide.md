@@ -82,14 +82,32 @@ installing it is worthwhile.
 
 ### On an iPhone or iPad
 
-1. Open the link in **Safari** (it must be Safari — Chrome on iPhone can't
-   install apps).
-2. Tap the **Share** button (the square with an upward arrow, at the bottom
-   of the screen).
+iPhones don't show an automatic "Install" button — Apple only allows it
+through Safari's **Share** menu, by hand. It takes about 20 seconds:
+
+1. **Open the link in Safari** — the blue compass icon. *This is the step most
+   people get wrong:* if you tap the link straight from a text message, email,
+   or WhatsApp, it often opens in a **mini-browser inside that app**, not
+   Safari — and **"Add to Home Screen" won't be there.** If in doubt, open
+   Safari yourself and type the address into the bar:
+   **460planner.pwkconsulting.org**
+2. Tap the **Share** button — the square with an upward arrow, at the
+   **bottom-centre** of the screen.
 3. Scroll down the list and tap **Add to Home Screen**.
-4. Tap **Add** (top right).
-5. The 460 icon now sits on your home screen. Open it from there — it runs
-   full-screen like a normal app.
+4. Tap **Add** (top right). You'll see the name **460 Trip Planner** and its
+   icon.
+5. A **460** icon now sits on your home screen. Open it from there — it runs
+   full-screen like a normal app (no address bar), and it's this installed
+   version that keeps working **offline** while you travel.
+
+> When you open the site in Safari, a small banner may appear at the bottom
+> reminding you to "tap Share → Add to Home Screen". That's just a hint for the
+> same steps above.
+
+> **Can't find "Add to Home Screen" in the Share menu?** You're almost
+> certainly not in Safari — you're in the mini-browser that opened from a
+> message. Close it, open Safari directly (step 1), type the address in
+> yourself, and the option will appear.
 
 ### On an Android phone (Samsung, Pixel, etc.)
 

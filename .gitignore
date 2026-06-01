@@ -66,3 +66,10 @@ test-data
 # Per-developer local launch scripts
 start.bat
 stop.bat
+
+# [460-fork] Local backup-pull script — contains the server IP, root SSH
+# target and internal Docker volume path. MUST NOT be committed to this
+# public repo. The generic, secret-free runbook lives in
+# docs/ours-backup-and-restore.md instead.
+Backup Pull script/
+460tp-backup-pull.ps1

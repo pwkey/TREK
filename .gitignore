@@ -73,3 +73,10 @@ stop.bat
 # docs/ours-backup-and-restore.md instead.
 Backup Pull script/
 460tp-backup-pull.ps1
+
+# [460-fork] Generated user-guide .docx — build artefact. The markdown
+# source of truth is docs/ours-user-guide.md; regenerate the .docx with
+# "Backup Pull script/build-user-guide.cjs". Keeping the binary out of git
+# avoids noisy diffs and merge conflicts on a rendered file.
+460 Trip Planner - User Guide.docx
+*.docx

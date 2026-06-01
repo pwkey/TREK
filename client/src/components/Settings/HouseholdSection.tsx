@@ -244,7 +244,7 @@ function NoHouseholdPanel({ onCreate, busy }: { onCreate: (name: string | null) 
         style={inputStyle}
       />
       <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-        You can rename it later. After creating, invite your partner or other adult travel-companions by email, and add named members for kids or anyone who doesn't use the app.
+        You can rename it later. After creating, invite your partner or other adult travel-companions who already have an account (they accept on their in-app notification bell — no email is sent), and add named members for kids or anyone who doesn't use the app.
       </p>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
         <button
@@ -342,10 +342,10 @@ function HouseholdPanel(props: {
         </div>
       )}
 
-      {/* Invite by email */}
+      {/* Invite an account-holder (in-app, not email) */}
       {!showInvite ? (
         <button onClick={() => setShowInvite(true)} style={addRowButtonStyle}>
-          <UserPlus size={14} /> Invite by email
+          <UserPlus size={14} /> Invite someone with an account
         </button>
       ) : (
         <InviteForm
@@ -483,16 +483,18 @@ function InviteForm({ onSubmit, onCancel, busy }: { onSubmit: (email: string, me
   const [message, setMessage] = useState('')
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}>
-      <label style={inputLabelStyle}>Email</label>
+      <label style={inputLabelStyle}>Their account email</label>
       <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="partner@example.com" style={inputStyle} />
       <label style={{ ...inputLabelStyle, marginTop: 4 }}>Optional message ({message.length}/{MAX_INVITE_MESSAGE})</label>
       <textarea value={message} onChange={e => setMessage(e.target.value.slice(0, MAX_INVITE_MESSAGE))} placeholder="Join our household on 460 Trip Planner!" rows={2} style={{ ...inputStyle, resize: 'vertical' as const }} />
       <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-        They need an account on this instance to accept. They'll see your invite on their notification bell.
+        <strong>No email is sent.</strong> The person must already have an account here, and your
+        invite appears on their in-app notification bell (not their inbox). Enter the email address
+        they registered with.
       </p>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
         <button onClick={() => onSubmit(email.trim(), message.trim())} disabled={!email.trim() || busy} style={primaryButtonStyle(busy)}>
-          {busy ? 'Sending…' : 'Send invite'}
+          {busy ? 'Adding…' : 'Send invite'}
         </button>
         <button onClick={onCancel} style={secondaryButtonStyle}>Cancel</button>
       </div>

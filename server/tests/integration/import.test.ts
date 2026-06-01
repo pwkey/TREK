@@ -288,3 +288,130 @@ describe('Import apply', () => {
     expect(res.body.report.errors.length).toBeGreaterThan(0);
   });
 });
+
+// [460-fork] M12 slices 2+3 — faithful off-boarding round-trip.
+describe('M12 — faithful off-boarding round-trip', () => {
+  it('IMPORT-012 — a segment-linked trip re-imports with a STANDALONE segment + re-associated days', async () => {
+    const { user } = createUser(testDb);
+    // Source trip with 3 dated days; days 2 and 3 belong to a segment.
+    const trip = createTrip(testDb, user.id, { title: 'Segment source', start_date: '2027-06-10', end_date: '2027-06-12' });
+    const days = testDb.prepare('SELECT id, date FROM days WHERE trip_id = ? ORDER BY date').all(trip.id) as Array<{ id: number; date: string }>;
+    const segId = 'seg-src-0001';
+    testDb.prepare(`INSERT INTO segments (id, title, start_date, end_date, created_by, updated_by) VALUES (?, 'Shared with Smiths', '2027-06-11', '2027-06-12', ?, ?)`).run(segId, user.id, user.id);
+    testDb.prepare(`INSERT INTO trip_segments (trip_id, segment_id, is_home, joined_by) VALUES (?, ?, 1, ?)`).run(trip.id, segId, user.id);
+    testDb.prepare('UPDATE days SET segment_id = ? WHERE id IN (?, ?)').run(segId, days[1].id, days[2].id);
+
+    // Export → import.
+    const exportRes = await request(app)
+      .get(`/api/trips/${trip.id}/export`)
+      .set('Cookie', authCookie(user.id))
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (c: Buffer) => chunks.push(c));
+        response.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+    const importRes = await request(app)
+      .post('/api/trips/import?dry_run=false')
+      .set('Cookie', authCookie(user.id))
+      .attach('file', exportRes.body as Buffer, 'seg.json');
+    expect(importRes.status).toBe(201);
+    const newTripId = importRes.body.result.trip_id;
+
+    // A fresh standalone segment exists, linked is_home=1 to the new trip,
+    // and exactly the two member days carry its id.
+    const link = testDb.prepare('SELECT segment_id, is_home FROM trip_segments WHERE trip_id = ?').get(newTripId) as { segment_id: string; is_home: number };
+    expect(link).toBeTruthy();
+    expect(link.is_home).toBe(1);
+    expect(link.segment_id).not.toBe(segId); // fresh UUID, not the source id
+
+    const seg = testDb.prepare('SELECT title, start_date, end_date FROM segments WHERE id = ?').get(link.segment_id) as { title: string; start_date: string; end_date: string };
+    expect(seg.title).toBe('Shared with Smiths');
+    // Dates RECOMPUTED from the member days (11th–12th), not blindly copied.
+    expect(seg.start_date).toBe('2027-06-11');
+    expect(seg.end_date).toBe('2027-06-12');
+
+    const taggedDays = testDb.prepare('SELECT date FROM days WHERE trip_id = ? AND segment_id = ? ORDER BY date').all(newTripId, link.segment_id) as Array<{ date: string }>;
+    expect(taggedDays.map(d => d.date)).toEqual(['2027-06-11', '2027-06-12']);
+  });
+
+  it('IMPORT-013 — budget split re-links by email; unmatched email is skipped (no crash)', async () => {
+    const { user: owner } = createUser(testDb, { email: 'owner@example.com', username: 'owner' });
+    const trip = createTrip(testDb, owner.id, { title: 'Budget source' });
+    const item = testDb.prepare(`INSERT INTO budget_items (trip_id, name, category, total_price) VALUES (?, 'Hotel', 'Lodging', 300)`).run(trip.id);
+    const itemId = Number(item.lastInsertRowid);
+    // Owner (will match by email on import) + a member who WON'T exist on import.
+    testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid) VALUES (?, ?, 1)').run(itemId, owner.id);
+    const ghost = createUser(testDb, { email: 'ghost@example.com', username: 'ghost' });
+    testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid) VALUES (?, ?, 0)').run(itemId, ghost.user.id);
+
+    const exportRes = await request(app)
+      .get(`/api/trips/${trip.id}/export`)
+      .set('Cookie', authCookie(owner.id))
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (c: Buffer) => chunks.push(c));
+        response.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+
+    // Simulate the "moved to another instance" case: the ghost user does
+    // NOT exist when we import. Delete them before importing.
+    testDb.prepare('DELETE FROM budget_item_members WHERE user_id = ?').run(ghost.user.id);
+    testDb.prepare('DELETE FROM users WHERE id = ?').run(ghost.user.id);
+
+    const importRes = await request(app)
+      .post('/api/trips/import?dry_run=false')
+      .set('Cookie', authCookie(owner.id))
+      .attach('file', exportRes.body as Buffer, 'budget.json');
+    expect(importRes.status).toBe(201);
+    const newTripId = importRes.body.result.trip_id;
+
+    const newItem = testDb.prepare('SELECT id FROM budget_items WHERE trip_id = ?').get(newTripId) as { id: number };
+    const members = testDb.prepare('SELECT user_id, paid FROM budget_item_members WHERE budget_item_id = ?').all(newItem.id) as Array<{ user_id: number; paid: number }>;
+    // Owner re-linked by email (paid=1); ghost silently dropped (no account).
+    expect(members).toHaveLength(1);
+    expect(members[0].user_id).toBe(owner.id);
+    expect(members[0].paid).toBe(1);
+  });
+
+  it('IMPORT-014 — bundle re-links a reservation-attached file to the imported reservation', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Resv bundle' });
+    const resv = testDb.prepare(`INSERT INTO reservations (trip_id, title, type, status) VALUES (?, 'QF1', 'flight', 'pending')`).run(trip.id);
+    const reservationId = Number(resv.lastInsertRowid);
+    const realName = `imp-resv-${Date.now()}.pdf`;
+    const bytes = Buffer.from('%PDF-1.4 round-trip');
+    fs.writeFileSync(path.join(filesDir, realName), bytes);
+    testDb.prepare(`INSERT INTO trip_files (trip_id, filename, original_name, file_size, mime_type, uploaded_by, reservation_id) VALUES (?, ?, 'booking.pdf', ?, 'application/pdf', ?, ?)`).run(trip.id, realName, bytes.length, user.id, reservationId);
+
+    const exportRes = await request(app)
+      .get(`/api/trips/${trip.id}/export/bundle`)
+      .set('Cookie', authCookie(user.id))
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (c: Buffer) => chunks.push(c));
+        response.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+
+    const importRes = await request(app)
+      .post('/api/trips/import?dry_run=false')
+      .set('Cookie', authCookie(user.id))
+      .attach('file', exportRes.body as Buffer, 'resv.zip');
+    expect(importRes.status).toBe(201);
+    const newTripId = importRes.body.result.trip_id;
+
+    const newResv = testDb.prepare('SELECT id FROM reservations WHERE trip_id = ?').get(newTripId) as { id: number };
+    const linkedFile = testDb.prepare('SELECT filename, original_name, reservation_id FROM trip_files WHERE trip_id = ? AND reservation_id IS NOT NULL').get(newTripId) as { filename: string; original_name: string; reservation_id: number };
+    expect(linkedFile).toBeTruthy();
+    expect(linkedFile.reservation_id).toBe(newResv.id);
+    expect(linkedFile.original_name).toBe('booking.pdf');
+    expect(linkedFile.filename).not.toBe(realName); // fresh UUID
+    const written = fs.readFileSync(path.join(filesDir, linkedFile.filename));
+    expect(written.equals(bytes)).toBe(true);
+
+    try { fs.unlinkSync(path.join(filesDir, realName)); } catch { /* ignore */ }
+    try { fs.unlinkSync(path.join(filesDir, linkedFile.filename)); } catch { /* ignore */ }
+  });
+});

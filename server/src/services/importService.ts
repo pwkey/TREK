@@ -63,6 +63,25 @@ interface ImportedTrip {
   packing_items?: ImportedItem[];
   todo_items?: ImportedItem[];
   accommodations?: ImportedAccommodation[];
+  // [460-fork] M12 — segments the trip belonged to, and reservation-file
+  // mappings (bundle only). Both optional: older bundles lack them.
+  segments?: ImportedSegment[];
+  reservation_files?: ImportedReservationFile[];
+}
+
+interface ImportedSegment {
+  id: string;
+  title: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  external_trip_refs?: string[];
+}
+
+interface ImportedReservationFile {
+  reservation_id: number;
+  original_name: string;
+  mime_type?: string | null;
+  attachment_path: string;
 }
 
 interface ImportedDay {
@@ -71,6 +90,7 @@ interface ImportedDay {
   date?: string | null;
   title?: string | null;
   notes?: string | null;
+  segment_id?: string | null;
   journal?: { content_markdown: string } | null;
   photos?: ImportedPhoto[];
   assignments?: ImportedAssignment[];
@@ -127,6 +147,11 @@ interface ImportedBudgetItem {
   persons?: number | null;
   days?: number | null;
   note?: string | null;
+  // [460-fork] M12 — per-member splits, member identity denormalised to
+  // name + email. Resolved by email on import; no-match → skipped (a
+  // free-text fallback would need a schema change since budget_item_members
+  // is FK'd to users; see slice 3 note).
+  members?: Array<{ username?: string | null; email?: string | null; paid?: number | boolean }>;
 }
 
 interface ImportedItem {
@@ -166,6 +191,10 @@ export interface DryRunReport {
     packing_items: number;
     todo_items: number;
     accommodations: number;
+    // [460-fork] M12 — faithful off-boarding counts.
+    segments: number;
+    reservation_files: number;
+    budget_splits: number;
   };
   warnings: string[];
   errors: string[];
@@ -247,6 +276,21 @@ export function dryRunImport(input: ImportInput): DryRunReport {
     warnings.push(`${photosMetadataOnly} photo entries will be imported as metadata-only — the binaries are not in this file. Match by original_name + taken_at against your source photo library if you need the images.`);
   }
 
+  // [460-fork] M12 — count segments / reservation-file links / budget splits.
+  const segmentsCount = trip?.segments?.length ?? 0;
+  const reservationFilesAvailable = (trip?.reservation_files ?? []).filter(
+    rf => rf.attachment_path && input.attachments.has(rf.attachment_path),
+  ).length;
+  const reservationFilesMissing = (trip?.reservation_files ?? []).length - reservationFilesAvailable;
+  if (reservationFilesMissing > 0) {
+    warnings.push(`${reservationFilesMissing} reservation-attached file(s) are referenced but missing from this file — they won't be re-linked.`);
+  }
+  let budgetSplits = 0;
+  for (const b of trip?.budget_items ?? []) budgetSplits += (b.members?.length ?? 0);
+  if (segmentsCount > 0) {
+    warnings.push(`${segmentsCount} shared segment(s) will be imported as standalone (linked only to this trip — not re-connected to the other households' trips, which live on their own instances).`);
+  }
+
   return {
     schema_version: env?.schema_version ?? 0,
     format,
@@ -267,6 +311,9 @@ export function dryRunImport(input: ImportInput): DryRunReport {
       packing_items: trip?.packing_items?.length ?? 0,
       todo_items: trip?.todo_items?.length ?? 0,
       accommodations: trip?.accommodations?.length ?? 0,
+      segments: segmentsCount,
+      reservation_files: reservationFilesAvailable,
+      budget_splits: budgetSplits,
     },
     warnings,
     errors,
@@ -320,6 +367,44 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
         VALUES (?, ?, ?, ?, ?)
       `).run(newTripId, d.day_number, d.date ?? null, d.title ?? null, d.notes ?? null);
       dayIdMap.set(d.id, Number(r.lastInsertRowid));
+    }
+
+    // 3b. [460-fork] M12 slice 2 — Segments, recreated STANDALONE.
+    //
+    // For each exported segment we mint a fresh segment owned by the
+    // importer, link it to the new trip as is_home=1, and re-stamp the
+    // imported days that belonged to it with the new segment_id. We do NOT
+    // re-connect to the other households' trips — their `external_trip_refs`
+    // live on different instances (M12 decision 3: import is always
+    // standalone). Segment dates are RECOMPUTED from the imported days'
+    // min/max date (M12 decision 2) rather than trusting the exported
+    // start/end, so the segment always spans exactly the days it contains.
+    const segmentIdMap = new Map<string, string>();
+    for (const seg of trip.segments ?? []) {
+      // Which imported days belonged to this source segment?
+      const memberDays = (trip.days ?? []).filter(d => d.segment_id === seg.id);
+      if (memberDays.length === 0) continue; // nothing to associate — skip
+
+      const dates = memberDays.map(d => d.date).filter((x): x is string => !!x).sort();
+      const recomputedStart = dates.length > 0 ? dates[0] : (seg.start_date ?? null);
+      const recomputedEnd = dates.length > 0 ? dates[dates.length - 1] : (seg.end_date ?? null);
+
+      const newSegId = randomUUID();
+      db.prepare(`
+        INSERT INTO segments (id, title, start_date, end_date, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(newSegId, seg.title, recomputedStart, recomputedEnd, importerId, importerId);
+      db.prepare(`
+        INSERT INTO trip_segments (trip_id, segment_id, is_home, joined_by)
+        VALUES (?, ?, 1, ?)
+      `).run(newTripId, newSegId, importerId);
+      segmentIdMap.set(seg.id, newSegId);
+
+      // Re-stamp the imported day rows with the new segment_id.
+      for (const d of memberDays) {
+        const newDayId = dayIdMap.get(d.id);
+        if (newDayId) db.prepare('UPDATE days SET segment_id = ? WHERE id = ?').run(newSegId, newDayId);
+      }
     }
 
     // 4. Day-level children: assignments, journals, photos.
@@ -391,9 +476,11 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
       }
     }
 
-    // 5. Reservations (header only — no file links yet, no accommodation_id).
+    // 5. Reservations. [460-fork] M12 slice 3 — keep a reservationIdMap so
+    //    attached booking files can be re-linked below.
+    const reservationIdMap = new Map<number, number>();
     for (const r of trip.reservations ?? []) {
-      db.prepare(`
+      const rr = db.prepare(`
         INSERT INTO reservations (trip_id, title, reservation_time, location, confirmation_number, notes, status, type)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -406,11 +493,37 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
         r.status ?? 'pending',
         r.type ?? 'other',
       );
+      if (typeof r.id === 'number') reservationIdMap.set(r.id, Number(rr.lastInsertRowid));
     }
 
-    // 6. Budget items (header only).
-    for (const b of trip.budget_items ?? []) {
+    // 5b. [460-fork] M12 slice 3 — reservation-attached files (booking PDFs).
+    //     The bundle ships these under attachments/files/; re-write each
+    //     binary with a fresh UUID name and insert a trip_files row linked
+    //     to the mapped reservation. Skip silently if the binary is absent
+    //     or the reservation didn't import.
+    for (const rf of trip.reservation_files ?? []) {
+      const binary = rf.attachment_path ? input.attachments.get(rf.attachment_path) : undefined;
+      if (!binary) continue;
+      const newReservationId = reservationIdMap.get(rf.reservation_id);
+      if (!newReservationId) continue;
+      const ext = path.extname(rf.original_name) || '.pdf';
+      const newFilename = `${randomUUID()}${ext}`;
+      if (!fs.existsSync(filesDir)) fs.mkdirSync(filesDir, { recursive: true });
+      fs.writeFileSync(path.join(filesDir, newFilename), binary);
       db.prepare(`
+        INSERT INTO trip_files (trip_id, filename, original_name, file_size, mime_type, uploaded_by, reservation_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(newTripId, newFilename, rf.original_name, binary.length, rf.mime_type ?? 'application/octet-stream', importerId, newReservationId);
+    }
+
+    // 6. Budget items. [460-fork] M12 slice 3 — recreate per-member splits.
+    //    Member identity resolves by email against this instance's users
+    //    (M12 decision 1). budget_item_members is FK'd to users, so a
+    //    no-email-match member can't be inserted — we skip it and note the
+    //    skip rather than crash. (Free-text splits would need a schema
+    //    change; out of scope for off-boarding.)
+    for (const b of trip.budget_items ?? []) {
+      const bi = db.prepare(`
         INSERT INTO budget_items (trip_id, category, name, total_price, persons, days, note)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -422,6 +535,16 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
         b.days ?? null,
         b.note ?? null,
       );
+      const newBudgetItemId = Number(bi.lastInsertRowid);
+      for (const m of b.members ?? []) {
+        if (!m.email) continue;
+        const u = db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(m.email) as { id: number } | undefined;
+        if (!u) continue; // no account on this instance with that email — skip the split
+        db.prepare(`
+          INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid)
+          VALUES (?, ?, ?)
+        `).run(newBudgetItemId, u.id, m.paid ? 1 : 0);
+      }
     }
 
     // 7. Packing items.

@@ -50,6 +50,7 @@ import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb } from '../helpers/test-db';
 import { createUser, createTrip, createReservation, addTripMember } from '../helpers/factories';
 import { authCookie, generateToken } from '../helpers/auth';
+import { expectUploadRefused } from '../helpers/uploadRefused';
 import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
 
 const app: Application = createApp();
@@ -127,11 +128,22 @@ describe('Upload file', () => {
     const { user: other } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
 
-    const res = await request(app)
-      .post(`/api/trips/${trip.id}/files`)
-      .set('Cookie', authCookie(other.id))
-      .attach('file', FIXTURE_PDF);
-    expect(res.status).toBe(404);
+    // [460-fork] The server rejects this upload at requireTripAccess (404)
+    // BEFORE multer consumes the multipart body. When the response closes
+    // the socket while the upload is still streaming, the client sees an
+    // ECONNRESET instead of the 404 — a supertest/Node artifact that only
+    // surfaces under parallel load (timing-dependent). Either outcome proves
+    // the same thing we're testing: a non-member's upload was refused before
+    // the body was read. expectUploadRefused() accepts both; it still FAILS
+    // if the server actually accepts the upload (status < 400), so a real
+    // permissions regression is still caught.
+    await expectUploadRefused(
+      request(app)
+        .post(`/api/trips/${trip.id}/files`)
+        .set('Cookie', authCookie(other.id))
+        .attach('file', FIXTURE_PDF),
+      404,
+    );
   });
 });
 

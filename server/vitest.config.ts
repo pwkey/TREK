@@ -14,15 +14,15 @@ export default defineConfig({
     testTimeout: 15000,
     hookTimeout: 15000,
     pool: 'forks',
-    // [460-fork] A couple of upload/demo integration tests (FILE-021,
-    // PROFILE-015) are reliable in isolation but flake under full parallel
-    // load — they contend on the shared physical uploads/ + data/ dirs and
-    // demo-mode state across forked workers. retry re-runs only FAILED tests
-    // (green tests pay nothing): a transient contention flake clears on the
-    // next attempt, while a genuinely broken test still fails all 3 attempts,
-    // so this does not mask real regressions. Proper fix (per-test temp dirs
-    // / DEMO_MODE isolation) is logged as a follow-up in docs.
-    retry: 2,
+    // [460-fork] retry removed (was retry: 2). The two tests that flaked
+    // under parallel load — FILE-021 and PROFILE-015 — are upload-refusal
+    // tests: the server closes the socket rejecting the upload before multer
+    // reads the body, so the client intermittently saw ECONNRESET instead of
+    // the HTTP status. Fixed at source: tests/helpers/uploadRefused.ts treats
+    // status-or-reset as "refused" (still fails if the upload is ACCEPTED),
+    // and PROFILE-015 now uses vi.stubEnv for DEMO_MODE so it can't leak
+    // across forked workers. With the real cause fixed, blanket retry is gone
+    // — a genuine future flake will surface instead of being silently masked.
     silent: false,
     reporters: ['verbose'],
     coverage: {

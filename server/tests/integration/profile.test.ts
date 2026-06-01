@@ -44,6 +44,7 @@ import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb } from '../helpers/test-db';
 import { createUser, createAdmin, createTrip } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { expectUploadRefused } from '../helpers/uploadRefused';
 import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
 
 const app: Application = createApp();
@@ -287,16 +288,25 @@ describe('Demo mode protections', () => {
       "INSERT INTO users (username, email, password_hash, role) VALUES ('demo', 'demo@nomad.app', 'x', 'user')"
     ).run();
     const demoUser = testDb.prepare('SELECT id FROM users WHERE email = ?').get('demo@nomad.app') as { id: number };
-    process.env.DEMO_MODE = 'true';
 
+    // [460-fork] vi.stubEnv scopes DEMO_MODE to this test and auto-restores
+    // it (vitest unstubs after the test), instead of mutating the global
+    // process.env — which, under pool:forks parallelism, could leak into
+    // other tests sharing the worker while this request was in flight.
+    vi.stubEnv('DEMO_MODE', 'true');
     try {
-      const res = await request(app)
-        .post('/api/auth/avatar')
-        .set('Cookie', authCookie(demoUser.id))
-        .attach('avatar', FIXTURE_JPEG);
-      expect(res.status).toBe(403);
+      // demoUploadBlock rejects with 403 before multer reads the body; like
+      // FILE-021 that can surface as ECONNRESET under load. Either proves the
+      // demo upload was refused. (Still fails if the upload is ACCEPTED.)
+      await expectUploadRefused(
+        request(app)
+          .post('/api/auth/avatar')
+          .set('Cookie', authCookie(demoUser.id))
+          .attach('avatar', FIXTURE_JPEG),
+        403,
+      );
     } finally {
-      delete process.env.DEMO_MODE;
+      vi.unstubAllEnvs();
     }
   });
 });

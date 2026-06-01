@@ -14,6 +14,15 @@ export default defineConfig({
     testTimeout: 15000,
     hookTimeout: 15000,
     pool: 'forks',
+    // [460-fork] A couple of upload/demo integration tests (FILE-021,
+    // PROFILE-015) are reliable in isolation but flake under full parallel
+    // load — they contend on the shared physical uploads/ + data/ dirs and
+    // demo-mode state across forked workers. retry re-runs only FAILED tests
+    // (green tests pay nothing): a transient contention flake clears on the
+    // next attempt, while a genuinely broken test still fails all 3 attempts,
+    // so this does not mask real regressions. Proper fix (per-test temp dirs
+    // / DEMO_MODE isolation) is logged as a follow-up in docs.
+    retry: 2,
     silent: false,
     reporters: ['verbose'],
     coverage: {

@@ -80,3 +80,20 @@ Backup Pull script/
 # avoids noisy diffs and merge conflicts on a rendered file.
 460 Trip Planner - User Guide.docx
 *.docx
+
+# [460-fork] Local manual-test data — real trip photos + exported JSON used
+# when exercising import/export and the journal by hand. Large binaries
+# (hundreds of MB); never belongs in the repo. (Was swept in once by an
+# accidental `git add -A`; ignored here so it cannot recur.)
+/Testing/
+
+# [460-fork] Package lockfiles are intentionally UNTRACKED. They were
+# generated on Windows and lack Linux-platform optional deps (rollup/sharp
+# bindings), so the Dockerfile and CI use `npm install`, not `npm ci`.
+# Ignoring them by path enforces that decision and stops an accidental add
+# from silently breaking the Linux build. Full rationale in ci.yml.
+/client/package-lock.json
+/server/package-lock.json
+
+# [460-fork] Throwaway local diagnostic scripts (e.g. PWA-install probe).
+/probe-install.mjs

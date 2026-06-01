@@ -117,8 +117,15 @@ installing it is worthwhile.
 ### Logging in
 
 You'll receive a link (and either an invitation or a starter password) from
-Peter. Open the app, sign in with your email and password, and **change your
-password** the first time from **Settings → Account**.
+Peter, sent to you directly (e.g. by message) — **not** by an automated email
+from the app. Open the app, register your own account if you haven't already,
+sign in with your email and password, and **change your password** the first
+time from **Settings → Account**.
+
+> **A note on invitations generally:** 460 Trip Planner does not send emails.
+> Anything that "invites" you — joining a household, sharing a trip — shows up
+> **inside the app on your notification bell** (top of the screen), not in your
+> inbox. So always check the bell, not your email.
 
 ---
 
@@ -254,18 +261,38 @@ Find it under **Settings → Account → Household**. A household can contain:
   with you but doesn't use the app) — they're just names, used so that
   bookings and photo lists know who's on the trip. They never log in.
 
+> **Important — invitations are not sent by email.** This is a private app
+> and it does not send emails. Invitations appear inside the app, on the
+> recipient's **notification bell** (the bell icon at the top of the
+> screen). So before you can add someone to your household, **they must
+> already have created their own account** — send them the link
+> (https://460planner.pwkconsulting.org) and ask them to sign up first.
+> Once they have an account, your invite shows up on their bell to accept.
+
 ### Setting up your household
 
-1. Go to **Settings → Account → Household**.
-2. If you don't have one yet, tap **Create household** (you can name it,
+1. Make sure the person you want to add **has already registered** (has
+   their own account and can log in). Send them the link and ask them to
+   sign up if they haven't.
+2. Go to **Settings → Account → Household**.
+3. If you don't have one yet, tap **Create household** (you can name it,
    e.g. "The Keys").
-3. **Invite by email** — enter the email of another adult who has an account;
-   they'll get an invitation to accept.
-4. **Add member** — for kids/others, enter a name (and optionally a birth
-   date and relationship). No account needed.
+4. **Invite by email address** — type the email the person registered with.
+   This does **not** send them an email; it places an invitation on their
+   in-app notification bell.
+5. **They accept it** by opening the app, tapping the **notification bell**
+   at the top, and choosing **Accept**. (It also appears under their own
+   **Settings → Account → Household** as a pending invite.)
+6. **Add member** — for kids/others without accounts, enter a name (and
+   optionally a birth date and relationship). No account needed; nothing is
+   sent.
 
 Once you're in a household together, every new trip one of you creates
 automatically includes the rest — no per-trip invitations.
+
+> **Didn't see the invite?** Check the notification bell inside the app —
+> not your email inbox. If it's not there, confirm the email address you
+> typed matches the one they registered with, exactly.
 
 ---
 

@@ -167,6 +167,11 @@ function PreviewPhase({
           <Stat label="packing" value={wc.packing_items} />
           <Stat label="todo" value={wc.todo_items} />
           <Stat label="accommodations" value={wc.accommodations} />
+          {/* [460-fork] M12 — faithful off-boarding counts. Only render when
+              the server reported them (older servers omit the fields). */}
+          {wc.segments !== undefined && <Stat label="shared segments" value={wc.segments} />}
+          {wc.reservation_files !== undefined && <Stat label="reservation files" value={wc.reservation_files} />}
+          {wc.budget_splits !== undefined && <Stat label="budget splits" value={wc.budget_splits} />}
         </div>
       </div>
 

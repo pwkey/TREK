@@ -177,6 +177,11 @@ export interface ImportReport {
     packing_items: number
     todo_items: number
     accommodations: number
+    // [460-fork] M12 — faithful off-boarding counts. Optional so an older
+    // server (pre-M12) that doesn't send them doesn't break the typing.
+    segments?: number
+    reservation_files?: number
+    budget_splits?: number
   }
   warnings: string[]
   errors: string[]

@@ -40,7 +40,7 @@ import { createApp } from '../../src/app';
 import { createTables } from '../../src/db/schema';
 import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb } from '../helpers/test-db';
-import { createUser, createTrip, createDay, addTripMember } from '../helpers/factories';
+import { createUser, createTrip, createDay, addTripMember, createBudgetItem } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
 
@@ -308,6 +308,72 @@ describe('Bundle (.zip with attachments)', () => {
     });
 
     // Cleanup so we don't leave test files in the dev uploads dir.
+    try { fs.unlinkSync(path.join(filesDir, realName)); } catch { /* ignore */ }
+  });
+});
+
+// [460-fork] M12 slice 1 — export completeness for clean off-boarding.
+describe('M12 — budget splits + reservation-file mapping', () => {
+  it('EXPORT-014 — budget items carry per-member splits denormalised to name + email + paid', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: clare } = createUser(testDb, { email: 'clare@example.com', username: 'clare' });
+    const trip = createTrip(testDb, owner.id, { title: 'Split Trip' });
+    addTripMember(testDb, trip.id, clare.id);
+    const item = createBudgetItem(testDb, trip.id, { name: 'Hotel', total_price: 200 });
+    // owner paid, clare not.
+    testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid) VALUES (?, ?, 1)').run(item.id, owner.id);
+    testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid) VALUES (?, ?, 0)').run(item.id, clare.id);
+
+    const { exportTrip } = await import('../../src/services/exportService');
+    const env = exportTrip(trip.id, { id: owner.id, username: owner.username, email: owner.email });
+    const budget = env.trip.budget_items as Array<{ name: string; members: Array<{ username: string | null; email: string | null; paid: number }> }>;
+    const hotel = budget.find(b => b.name === 'Hotel')!;
+    expect(hotel.members).toHaveLength(2);
+    const clareSplit = hotel.members.find(m => m.email === 'clare@example.com')!;
+    expect(clareSplit).toBeTruthy();
+    expect(clareSplit.paid).toBe(0);
+    const ownerSplit = hotel.members.find(m => m.email === owner.email)!;
+    expect(ownerSplit.paid).toBe(1);
+    // Every split must carry an email (the import match key) — null only if
+    // the user was deleted, which these aren't.
+    for (const m of hotel.members) expect(m.email).toBeTruthy();
+  });
+
+  it('EXPORT-015 — bundle envelope maps reservation-attached files back to their reservation', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Resv Trip' });
+
+    // A reservation + an attached booking PDF on disk linked to it.
+    const resv = testDb.prepare(
+      "INSERT INTO reservations (trip_id, title, type, status) VALUES (?, 'QF1 SYD-LHR', 'flight', 'pending')"
+    ).run(trip.id);
+    const reservationId = Number(resv.lastInsertRowid);
+
+    const { filesDir } = await import('../../src/services/fileService');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    if (!fs.existsSync(filesDir)) fs.mkdirSync(filesDir, { recursive: true });
+    const realName = `test-resv-${Date.now()}.pdf`;
+    fs.writeFileSync(path.join(filesDir, realName), Buffer.from('%PDF-1.4 test'));
+    const fileRes = testDb.prepare(`
+      INSERT INTO trip_files (trip_id, filename, original_name, file_size, mime_type, uploaded_by, reservation_id)
+      VALUES (?, ?, 'booking.pdf', 13, 'application/pdf', ?, ?)
+    `).run(trip.id, realName, user.id, reservationId);
+    const fileId = Number(fileRes.lastInsertRowid);
+
+    const { planTripBundle } = await import('../../src/services/exportService');
+    const plan = planTripBundle(trip.id, { id: user.id, username: user.username, email: user.email });
+
+    const resFiles = plan.envelope.trip.reservation_files ?? [];
+    expect(resFiles).toHaveLength(1);
+    expect(resFiles[0].reservation_id).toBe(reservationId);
+    expect(resFiles[0].attachment_path).toBe(`attachments/files/${fileId}-${realName}`);
+    // The binary must also be queued for the zip.
+    expect(plan.attachments).toContainEqual({
+      diskPath: path.join(filesDir, realName),
+      archivePath: `attachments/files/${fileId}-${realName}`,
+    });
+
     try { fs.unlinkSync(path.join(filesDir, realName)); } catch { /* ignore */ }
   });
 });

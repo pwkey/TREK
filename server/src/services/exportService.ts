@@ -75,6 +75,19 @@ interface ExportedTrip {
   todo_items: unknown[];
   accommodations: unknown[];
   segments: ExportedSegment[];
+  /** [460-fork] M12 — bundle-only: maps each reservation-attached file in
+   *  the zip back to its reservation, so import can re-link the booking
+   *  PDF. Keyed by the SOURCE reservation id (remapped on import). Absent
+   *  in metadata-only exports. */
+  reservation_files?: ExportedReservationFile[];
+}
+
+interface ExportedReservationFile {
+  reservation_id: number;
+  original_name: string;
+  mime_type: string | null;
+  /** Relative path inside the zip where the binary lives. */
+  attachment_path: string;
 }
 
 interface ExportedDay {
@@ -186,10 +199,27 @@ export function exportTrip(
 
   const places = listPlaces(String(tripId), {});
   const reservations = listReservations(tripId);
-  const budgetItems = listBudgetItems(tripId);
   const packingItems = listPackingItems(tripId);
   const todoItems = listTodoItems(tripId);
   const accommodations = listAccommodations(tripId);
+
+  // [460-fork] M12 slice 1 — budget items WITH per-member splits, member
+  // identity denormalised to name + email so the split survives a
+  // cross-instance move (where user ids differ). listBudgetItems attaches
+  // members with user_id + username + paid but no email; we join email on
+  // here. Email is the import-side match key (M12 decision 1).
+  const rawBudgetItems = listBudgetItems(tripId) as Array<Record<string, unknown> & { id: number; members?: Array<{ user_id: number; paid: number; username?: string }> }>;
+  const budgetItems = rawBudgetItems.map((item) => {
+    const members = (item.members ?? []).map((m) => {
+      const u = db.prepare('SELECT username, email FROM users WHERE id = ?').get(m.user_id) as { username: string; email: string } | undefined;
+      return {
+        username: u?.username ?? m.username ?? null,
+        email: u?.email ?? null,
+        paid: m.paid ? 1 : 0,
+      };
+    });
+    return { ...item, members };
+  });
 
   // Segments the trip is part of (own + via trip_segments). For each, list
   // the OTHER trips it links to as external refs only — we never embed
@@ -268,18 +298,28 @@ export function planTripBundle(tripId: number, exporter: { id: number; username:
   // Reservation-linked files (booking PDFs etc). trip_files surfaces
   // these via the reservations sub-objects already; we just walk the
   // raw rows to find any with a reservation_id matching this trip.
-  type ResFile = { id: number; filename: string; reservation_id: number };
+  // [460-fork] M12 — also record each file's reservation mapping on the
+  // envelope so import can re-link the PDF to its reservation.
+  type ResFile = { id: number; filename: string; original_name: string | null; mime_type: string | null; reservation_id: number };
   const resFiles = db.prepare(`
-    SELECT id, filename, reservation_id FROM trip_files
+    SELECT id, filename, original_name, mime_type, reservation_id FROM trip_files
     WHERE trip_id = ? AND reservation_id IS NOT NULL AND deleted_at IS NULL
   `).all(tripId) as ResFile[];
+  const reservationFiles: ExportedReservationFile[] = [];
   for (const f of resFiles) {
     const diskPath = path.join(filesDir, f.filename);
     if (!fs.existsSync(diskPath)) continue;
-    attachments.push({
-      diskPath,
-      archivePath: `attachments/files/${f.id}-${f.filename}`,
+    const archivePath = `attachments/files/${f.id}-${f.filename}`;
+    attachments.push({ diskPath, archivePath });
+    reservationFiles.push({
+      reservation_id: f.reservation_id,
+      original_name: f.original_name ?? f.filename,
+      mime_type: f.mime_type ?? null,
+      attachment_path: archivePath,
     });
+  }
+  if (reservationFiles.length > 0) {
+    envelope.trip.reservation_files = reservationFiles;
   }
 
   return { envelope, attachments };

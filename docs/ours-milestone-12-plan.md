@@ -145,17 +145,23 @@ envelope fields). All land behind the existing CI gate, watched green.
 
 ---
 
-## Open questions to resolve before coding
-1. **Budget split member resolution:** match by email only, or email-or-
-   username? (Email is safer cross-instance. Lean email-only.)
-2. **Segment dates on import:** trust the exported segment start/end, or
-   recompute from the imported days' min/max date? (Recompute is more robust
-   if days were edited post-export. Lean recompute.)
-3. **Re-import onto the SAME instance** (companion didn't actually leave, just
-   wanted a restore): this creates a *duplicate* standalone segment. Is that
-   acceptable, or do we need restore-by-UUID (match existing segment, update
-   in place)? Restore-by-UUID is the deferred M7.4 "Restore mode" — probably
-   keep it deferred and document that import always creates fresh.
+## Design decisions (resolved 2026-06-01)
+1. **Budget split member resolution: email-only.** Each split denormalises
+   the member's email; on import we match by email against the importing
+   instance's users. No match → import as a free-text / name-only split (no
+   crash). Rationale: a *wrong* match silently corrupts settle-up math;
+   username matching collides too easily across instances. Under-match
+   beats mis-match.
+2. **Segment dates on import: recompute** from the min/max `date` of the days
+   actually imported into the segment (ignore the exported start/end).
+   Self-correcting — the segment always spans exactly the days it contains,
+   even if days drifted after export.
+3. **Re-import behaviour: always fresh-create** a new trip + new standalone
+   segment (new IDs). Documented as "import always creates a new copy."
+   Re-importing on the same instance therefore produces a duplicate — an
+   accepted mild annoyance, NOT a data risk (the whole-instance auto-backup
+   is the proper same-server restore path). Restore-by-UUID stays the
+   deferred M7.4 "Restore mode" with its own overwrite safety rails.
 
 ---
 

@@ -78,7 +78,7 @@ jobs:
     needs: [server, client]
     if: github.event_name == 'push' && github.ref == 'refs/heads/personal'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Trigger 460tp deploy
@@ -90,3 +90,29 @@ jobs:
           curl --fail-with-body -sS -X GET \
             "$BASE_URL/api/v1/deploy?uuid=$UUID&force=false" \
             -H "Authorization: Bearer $TOKEN"
+
+      # [460-fork] VERIFY the deploy actually went live. The trigger above
+      # only confirms Coolify ACCEPTED the webhook — it returns 200 even if
+      # the subsequent build fails its healthcheck and Coolify rolls back to
+      # the old container (which is exactly what silently happened for ~30
+      # deploys: a boot-time SQLite error -> unhealthy -> rollback, while CI
+      # stayed green). /api/health now reports the build commit; poll it
+      # until it matches THIS commit, and FAIL the job if it never does.
+      - name: Verify new build is actually serving
+        env:
+          APP_URL: https://460planner.pwkconsulting.org
+          EXPECTED: ${{ github.sha }}
+        run: |
+          echo "Waiting for $APP_URL to report commit $EXPECTED ..."
+          for i in $(seq 1 40); do
+            LIVE=$(curl -fsS --max-time 10 "$APP_URL/api/health" | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' || echo "")
+            if [ "$LIVE" = "$EXPECTED" ]; then
+              echo "✓ Live build is $LIVE — deploy verified."
+              exit 0
+            fi
+            echo "  attempt $i/40: live=[$LIVE] expected=[$EXPECTED] — waiting 15s"
+            sleep 15
+          done
+          echo "::error::Deploy NOT verified after ~10min. Live /api/health did not report $EXPECTED."
+          echo "::error::Coolify likely built but rolled back (unhealthy container). Check Coolify → 460tp → Deployments."
+          exit 1

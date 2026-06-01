@@ -36,6 +36,13 @@ RUN mkdir -p /app/data/logs /app/uploads/files /app/uploads/covers /app/uploads/
 ENV NODE_ENV=production
 ENV PORT=3000
 
+# [460-fork] Bake the build commit SHA into the image so /api/health can
+# report which build is live, and CI can VERIFY a deploy actually swapped
+# (not just that the webhook was accepted). Coolify passes SOURCE_COMMIT as
+# a build arg automatically; default keeps local `docker build` working.
+ARG SOURCE_COMMIT=unknown
+ENV SOURCE_COMMIT=${SOURCE_COMMIT}
+
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

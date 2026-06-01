@@ -232,7 +232,15 @@ export function createApp(): express.Application {
   app.use('/api/trips/:tripId/gpx-tracks', gpxTracksRoutes); // [460-fork] M6 follow-up
   app.use('/api/trips', exportRoutes); // [460-fork] Milestone 7 slice 1 — exposes /:tripId/export
   app.use('/api/polls', pollsRoutes); // [460-fork] Milestone 9
-  app.get('/api/health', (_req: Request, res: Response) => res.json({ status: 'ok' }));
+  // [460-fork] Health endpoint reports the build commit so a deploy can be
+  // VERIFIED to be live (not just "webhook accepted"). SOURCE_COMMIT is
+  // baked in at Docker build time (ARG -> ENV); falls back to 'unknown'
+  // for local/dev runs where it isn't set. The CI post-deploy step polls
+  // this until it sees the SHA it pushed — see .github/workflows/ci.yml.
+  app.get('/api/health', (_req: Request, res: Response) => res.json({
+    status: 'ok',
+    commit: process.env.SOURCE_COMMIT || 'unknown',
+  }));
   app.use('/api', assignmentsRoutes);
   app.use('/api/segments', segmentsRoutes); // [460-fork] Milestone 4
   app.use('/api/conflicts', conflictsRoutes); // [460-fork] Milestone 5

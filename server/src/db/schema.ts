@@ -29,7 +29,14 @@ function createTables(db: Database.Database): void {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE INDEX IF NOT EXISTS idx_users_household ON users(household_id);
+    -- [460-fork] Milestone 11: index on users.household_id lives in the
+    -- migration ONLY (same reasoning as days.segment_id at line ~109).
+    -- On a fresh install the CREATE TABLE above creates the column and the
+    -- migration's CREATE INDEX IF NOT EXISTS is a harmless no-op. On an
+    -- EXISTING install the CREATE TABLE IF NOT EXISTS is a no-op (the column
+    -- doesn't exist yet — it's added by the M11 migration), so indexing it
+    -- HERE crashes boot with "no such column: household_id". The migration
+    -- adds the column first, THEN the index. Do NOT re-add an index line here.
     -- [460-fork] Milestone 11 — Household supersedes M3 partner pairing.
     -- N user accounts + M named non-account members in one group. Replaces
     -- the 1-to-1 partner_user_id symmetric pair.

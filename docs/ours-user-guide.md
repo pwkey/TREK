@@ -467,6 +467,36 @@ are shared.
 > that's exactly what the "Create a new trip from this segment" option is
 > for. You don't need to prepare anything in advance.
 
+### What's shared on a shared segment — and what stays private
+
+Sharing days does **not** mean sharing everything. The **plan** is shared; each
+family's private things stay private:
+
+| Shared with the other family | Stays private to each family |
+|---|---|
+| The itinerary for the shared days — the places, their order, times and notes | Your **bookings** (flights, hotels, car hire) and their **documents** |
+| The day's title | Your **journal entries** and **photos** — even on the shared days |
+
+So you build the shared days' plan together, but each family keeps its **own**
+flight bookings, its **own** journal and its **own** photos. Your memoir of the
+shared days is yours — the other family writes their own.
+
+### Deliberately sharing one booking or document
+
+Sometimes you *do* want the other family to see one of your bookings — the
+holiday house you all booked together, a group tour, a dinner for everyone. You
+can share an individual item into the segment on purpose:
+
+1. On the **Reservations** tab (for a booking) or the **Files** tab (for a
+   document), find the item and tap its **share icon**.
+2. Choose the shared trip to share it into. The other family now sees the item
+   **and its attached PDF**, and for a booking they can even help fill in the
+   details.
+
+It's **off by default** — nothing is shared until you choose to — and only the
+family that owns an item can stop sharing it or delete it. Anything the other
+family has shared with you shows a small green **Shared** tag.
+
 ---
 
 ## 13. Quick reference — "how do I…?"
@@ -486,6 +516,7 @@ are shared.
 | Keep my own copy | Archive button on the trip → save the `.zip` |
 | Get my copy back | My Trips → Import → pick the `.zip` |
 | Share days with another family | Owner makes a segment + invite link → you attach it (or create a trip from it) |
+| Share one booking/document with the other family | Reservations or Files tab → the **share icon** on the item → pick the shared trip |
 | Agree dates first | Polls |
 | Recover a lost/damaged trip | Tell the host — restored from server backup |
 

@@ -505,7 +505,7 @@ export function registerTools(server: McpServer, userId: number): void {
         type: current.type,
         status: current.status as string,
         create_accommodation: { place_id, start_day_id, end_day_id, check_in: check_in || undefined, check_out: check_out || undefined },
-      }, current);
+      }, current, userId);
 
       broadcast(tripId, isNewAccommodation ? 'accommodation:created' : 'accommodation:updated', {});
       broadcast(tripId, 'reservation:updated', { reservation });
@@ -597,7 +597,7 @@ export function registerTools(server: McpServer, userId: number): void {
         title, type, reservation_time, location, confirmation_number, notes, status,
         place_id: place_id !== undefined ? place_id ?? undefined : undefined,
         assignment_id: assignment_id !== undefined ? assignment_id ?? undefined : undefined,
-      }, existing);
+      }, existing, userId);
       broadcast(tripId, 'reservation:updated', { reservation });
       return ok({ reservation });
     }

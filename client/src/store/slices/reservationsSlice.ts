@@ -13,6 +13,8 @@ export interface ReservationsSlice {
   updateReservation: (tripId: number | string, id: number, data: Partial<Reservation>) => Promise<Reservation>
   toggleReservationStatus: (tripId: number | string, id: number) => Promise<void>
   deleteReservation: (tripId: number | string, id: number) => Promise<void>
+  shareReservation: (tripId: number | string, id: number, segmentId: string) => Promise<void>
+  unshareReservation: (tripId: number | string, id: number, segmentId: string) => Promise<void>
 }
 
 export const createReservationsSlice = (set: SetState, get: GetState): ReservationsSlice => ({
@@ -68,6 +70,37 @@ export const createReservationsSlice = (set: SetState, get: GetState): Reservati
       set(state => ({ reservations: state.reservations.filter(r => r.id !== id) }))
     } catch (err: unknown) {
       throw new Error(getApiErrorMessage(err, 'Error deleting reservation'))
+    }
+  },
+
+  // [460-fork] Milestone 13 — optimistically toggle a booking's share into a
+  // segment, then sync. The mutation flows through the axios interceptor's
+  // offline queue automatically; on failure we roll the local flag back.
+  shareReservation: async (tripId, id, segmentId) => {
+    const prev = get().reservations
+    set(state => ({
+      reservations: state.reservations.map(r =>
+        r.id === id ? { ...r, shared_segment_ids: [...new Set([...(r.shared_segment_ids || []), segmentId])] } : r)
+    }))
+    try {
+      await reservationsApi.share(tripId, id, segmentId)
+    } catch (err: unknown) {
+      set({ reservations: prev })
+      throw new Error(getApiErrorMessage(err, 'Error sharing reservation'))
+    }
+  },
+
+  unshareReservation: async (tripId, id, segmentId) => {
+    const prev = get().reservations
+    set(state => ({
+      reservations: state.reservations.map(r =>
+        r.id === id ? { ...r, shared_segment_ids: (r.shared_segment_ids || []).filter(s => s !== segmentId) } : r)
+    }))
+    try {
+      await reservationsApi.unshare(tripId, id, segmentId)
+    } catch (err: unknown) {
+      set({ reservations: prev })
+      throw new Error(getApiErrorMessage(err, 'Error unsharing reservation'))
     }
   },
 })

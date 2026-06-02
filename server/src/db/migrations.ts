@@ -1361,6 +1361,57 @@ function runMigrations(db: Database.Database): void {
         db.exec('ALTER TABLE users DROP COLUMN partner_user_id;');
       }
     },
+    // [460-fork] Milestone 13 — reservations gains updated_at/updated_by so a
+    // co-edited shared booking gets the same M5 stale-write conflict handling
+    // as days and journals. SQLite forbids a CURRENT_TIMESTAMP default in
+    // ALTER ADD COLUMN, so add bare + backfill (days.updated_at pattern).
+    // schema.ts keeps the DEFAULT on CREATE TABLE for fresh installs.
+    () => {
+      try {
+        db.exec('ALTER TABLE reservations ADD COLUMN updated_at DATETIME');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE reservations ADD COLUMN updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      db.exec('UPDATE reservations SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL');
+    },
+    // [460-fork] Milestone 13 — opt-in document sharing. A reservation/file
+    // explicitly shared into a segment becomes visible to every trip linked to
+    // that segment (read/write widening lands in slice 2). Default stays
+    // private; these junctions are the deliberate bridge. UNIQUE guards
+    // duplicate shares; ON DELETE CASCADE cleans up on segment/record removal.
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS segment_shared_reservations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+          reservation_id INTEGER NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
+          shared_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(segment_id, reservation_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ssr_segment ON segment_shared_reservations(segment_id);
+        CREATE INDEX IF NOT EXISTS idx_ssr_reservation ON segment_shared_reservations(reservation_id);
+      `);
+    },
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS segment_shared_files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+          file_id INTEGER NOT NULL REFERENCES trip_files(id) ON DELETE CASCADE,
+          shared_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(segment_id, file_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ssf_segment ON segment_shared_files(segment_id);
+        CREATE INDEX IF NOT EXISTS idx_ssf_file ON segment_shared_files(file_id);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

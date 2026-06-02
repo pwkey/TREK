@@ -37,6 +37,28 @@ const FILE_SELECT = `
   LEFT JOIN users u ON f.uploaded_by = u.id
 `;
 
+// [460-fork] Milestone 13 — the set of file ids visible to a trip via segment
+// sharing: files shared directly into a segment the trip is linked to, PLUS
+// files attached (directly or via file_links) to a reservation shared into such
+// a segment. Three `?` params, each the requesting trip id. Used to widen the
+// file list and the download-auth gate — and nothing else widens.
+const SHARED_FILE_IDS_SQL = `
+  SELECT ssf.file_id FROM segment_shared_files ssf
+   WHERE ssf.segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+  UNION
+  SELECT tf.id FROM trip_files tf
+   WHERE tf.reservation_id IN (
+     SELECT ssr.reservation_id FROM segment_shared_reservations ssr
+      WHERE ssr.segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+   )
+  UNION
+  SELECT fl.file_id FROM file_links fl
+   WHERE fl.reservation_id IN (
+     SELECT ssr.reservation_id FROM segment_shared_reservations ssr
+      WHERE ssr.segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+   )
+`;
+
 export function formatFile(file: TripFile & { trip_id?: number }) {
   const tripId = file.trip_id;
   return {
@@ -95,6 +117,24 @@ export function getFileById(id: string | number, tripId: string | number): TripF
   return db.prepare('SELECT * FROM trip_files WHERE id = ? AND trip_id = ?').get(id, tripId) as TripFile | undefined;
 }
 
+// [460-fork] Milestone 13 — download-auth gate that also honours segment shares.
+// A file is downloadable by `tripId` if the trip owns it, OR it's shared into a
+// segment the trip is linked to (directly, or via an attached shared
+// reservation). Owned files keep their original semantics (any state); shared
+// files must be non-deleted. Anything else → undefined → 404. Used ONLY by the
+// download route; edit/star/delete keep using getFileById (owner-only), so the
+// other household can view/download a shared file but not mutate the record.
+export function getDownloadableFile(id: string | number, tripId: string | number): TripFile | undefined {
+  return db.prepare(`
+    SELECT * FROM trip_files
+     WHERE id = ?
+       AND (
+         trip_id = ?
+         OR (deleted_at IS NULL AND id IN (${SHARED_FILE_IDS_SQL}))
+       )
+  `).get(id, tripId, tripId, tripId, tripId) as TripFile | undefined;
+}
+
 export function getFileByIdFull(id: string | number): TripFile {
   return db.prepare(`${FILE_SELECT} WHERE f.id = ?`).get(id) as TripFile;
 }
@@ -104,8 +144,16 @@ export function getDeletedFile(id: string | number, tripId: string | number): Tr
 }
 
 export function listFiles(tripId: string | number, showTrash: boolean) {
-  const where = showTrash ? 'f.trip_id = ? AND f.deleted_at IS NOT NULL' : 'f.trip_id = ? AND f.deleted_at IS NULL';
-  const files = db.prepare(`${FILE_SELECT} WHERE ${where} ORDER BY f.starred DESC, f.created_at DESC`).all(tripId) as TripFile[];
+  // [460-fork] M13 — trash is owner-scoped; only the active list widens to
+  // segment-shared files (shared directly, or attached to a shared reservation).
+  const files = showTrash
+    ? db.prepare(`${FILE_SELECT} WHERE f.trip_id = ? AND f.deleted_at IS NOT NULL ORDER BY f.starred DESC, f.created_at DESC`).all(tripId) as TripFile[]
+    : db.prepare(`
+        ${FILE_SELECT}
+        WHERE f.deleted_at IS NULL
+          AND (f.trip_id = ? OR f.id IN (${SHARED_FILE_IDS_SQL}))
+        ORDER BY f.starred DESC, f.created_at DESC
+      `).all(tripId, tripId, tripId, tripId) as TripFile[];
 
   const fileIds = files.map(f => f.id);
   let linksMap: Record<number, FileLink[]> = {};
@@ -118,10 +166,30 @@ export function listFiles(tripId: string | number, showTrash: boolean) {
     }
   }
 
+  // [460-fork] M13 — segments each file is directly shared into (toggle state).
+  const fileShareMap: Record<number, string[]> = {};
+  if (fileIds.length > 0) {
+    const ph = fileIds.map(() => '?').join(',');
+    const shares = db.prepare(`SELECT file_id, segment_id FROM segment_shared_files WHERE file_id IN (${ph})`).all(...fileIds) as { file_id: number; segment_id: string }[];
+    for (const s of shares) {
+      if (!fileShareMap[s.file_id]) fileShareMap[s.file_id] = [];
+      fileShareMap[s.file_id].push(s.segment_id);
+    }
+  }
+
   return files.map(f => {
     const fileLinks = linksMap[f.id] || [];
+    // [460-fork] M13 — a shared-in file's native download URL points at the
+    // owner's trip, which the requester can't access; rewrite it to the
+    // requesting trip so the download route resolves it via getDownloadableFile.
+    // Owned files are unaffected (requesting trip === owner trip).
+    const owned = Number((f as TripFile & { trip_id?: number }).trip_id) === Number(tripId);
     return {
       ...formatFile(f),
+      url: `/api/trips/${tripId}/files/${f.id}/download`,
+      owned_by_this_trip: owned ? 1 : 0,
+      shared_into_segment: owned ? 0 : 1,
+      shared_segment_ids: fileShareMap[f.id] || [],
       linked_reservation_ids: fileLinks.filter(l => l.reservation_id).map(l => l.reservation_id),
       linked_place_ids: fileLinks.filter(l => l.place_id).map(l => l.place_id),
     };

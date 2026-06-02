@@ -157,6 +157,10 @@ export interface Reservation {
   day_plan_position?: number | null
   metadata?: Record<string, string> | string | null
   created_at: string
+  // [460-fork] Milestone 13 — segment document-sharing flags (server-computed).
+  owned_by_this_trip?: number       // 1 = this trip owns it; 0 = shared in by another household
+  shared_into_segment?: number      // 1 = shared in from another household; 0 = owned
+  shared_segment_ids?: string[]     // segments this (owned) reservation has been shared into
 }
 
 export interface TripFile {
@@ -178,7 +182,12 @@ export interface TripFile {
   created_at: string
   reservation_title?: string
   linked_reservation_ids?: number[]
+  linked_place_ids?: number[]
   url?: string
+  // [460-fork] Milestone 13 — segment document-sharing flags (server-computed).
+  owned_by_this_trip?: number
+  shared_into_segment?: number
+  shared_segment_ids?: string[]
 }
 
 export interface Settings {

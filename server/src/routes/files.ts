@@ -19,6 +19,7 @@ import {
   authenticateDownload,
   listFiles,
   getFileById,
+  getDownloadableFile,
   getFileByIdFull,
   getDeletedFile,
   createFile,
@@ -32,6 +33,7 @@ import {
   deleteFileLink,
   getFileLinks,
 } from '../services/fileService';
+import { isTripInSegment, shareFile, unshareFile } from '../services/segmentShareService';
 
 const router = express.Router({ mergeParams: true });
 
@@ -91,7 +93,10 @@ router.get('/:id/download', (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, auth.userId);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  const file = getFileById(id, tripId);
+  // [460-fork] M13 — honours segment shares: a sibling household can download a
+  // file shared into a segment their trip is linked to (directly or via a shared
+  // reservation). Non-shared files stay private (resolves to undefined → 404).
+  const file = getDownloadableFile(id, tripId);
   if (!file) return res.status(404).json({ error: 'File not found' });
 
   const { resolved, safe } = resolveFilePath(file.filename);
@@ -276,6 +281,54 @@ router.get('/:id/links', authenticate, (req: Request, res: Response) => {
 
   const links = getFileLinks(id);
   res.json({ links });
+});
+
+// [460-fork] Milestone 13 — opt-in: share a standalone file into a segment so
+// every trip linked to the segment can view/download it. Owner-only: the file
+// must belong to :tripId, the caller needs file_edit, and :tripId must be part
+// of the segment. Idempotency via the global X-Client-Mutation-Id middleware +
+// the UNIQUE(segment_id, file_id) constraint.
+router.post('/:id/share', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId, id } = req.params;
+  const { segment_id } = req.body;
+
+  const trip = verifyTripAccess(tripId, authReq.user.id);
+  if (!trip) return res.status(404).json({ error: 'Trip not found' });
+  if (!checkPermission('file_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+
+  if (!segment_id) return res.status(400).json({ error: 'segment_id is required' });
+
+  const file = getFileById(id, tripId);
+  if (!file) return res.status(404).json({ error: 'File not found' });
+
+  if (!isTripInSegment(tripId, segment_id)) return res.status(403).json({ error: 'Trip is not part of this segment' });
+
+  shareFile(segment_id, id, authReq.user.id);
+  res.json({ success: true, segment_id, file_id: Number(id) });
+  broadcast(tripId, 'file:shared', { fileId: Number(id), segmentId: segment_id }, req.headers['x-socket-id'] as string);
+});
+
+// [460-fork] Milestone 13 — un-share (owner-only, same checks as share).
+router.delete('/:id/share', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId, id } = req.params;
+  const { segment_id } = req.body;
+
+  const trip = verifyTripAccess(tripId, authReq.user.id);
+  if (!trip) return res.status(404).json({ error: 'Trip not found' });
+  if (!checkPermission('file_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+
+  if (!segment_id) return res.status(400).json({ error: 'segment_id is required' });
+
+  const file = getFileById(id, tripId);
+  if (!file) return res.status(404).json({ error: 'File not found' });
+
+  unshareFile(segment_id, id);
+  res.json({ success: true });
+  broadcast(tripId, 'file:unshared', { fileId: Number(id), segmentId: segment_id }, req.headers['x-socket-id'] as string);
 });
 
 export default router;

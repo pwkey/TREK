@@ -946,6 +946,14 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'reservations.confirm.delete': 'Are you sure you want to delete the reservation "{name}"?',
   'reservations.confirm.deleteTitle': 'Delete booking?',
   'reservations.confirm.deleteBody': '"{name}" will be permanently deleted.',
+
+  // [460-fork] Milestone 13 — segment document-sharing
+  'share.shareTooltip': 'Share with another household',
+  'share.menuTitle': 'Share into segment',
+  'share.sharedBadge': 'Shared',
+  'share.sharedBadgeTip': 'Shared with you by another household in this segment',
+  'share.toast.error': 'Could not update sharing',
+
   'reservations.toast.updated': 'Reservation updated',
   'reservations.toast.removed': 'Reservation deleted',
   'reservations.toast.fileUploaded': 'File uploaded',

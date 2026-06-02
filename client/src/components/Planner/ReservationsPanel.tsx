@@ -12,6 +12,9 @@ import {
 } from 'lucide-react'
 import { getAuthUrl } from '../../api/authUrl'
 import type { Reservation, Day, TripFile, AssignmentsMap } from '../../types'
+import { ShareControl, SharedInBadge } from '../Segments/ShareControl'
+import { useTripSegments } from '../Segments/useTripSegments'
+import type { SegmentSummaryForTrip } from '../../api/segments'
 
 interface AssignmentLookupEntry {
   dayNumber: number
@@ -59,10 +62,11 @@ interface ReservationCardProps {
   onNavigateToFiles: () => void
   assignmentLookup: Record<number, AssignmentLookupEntry>
   canEdit: boolean
+  segments: SegmentSummaryForTrip[]
 }
 
-function ReservationCard({ r, tripId, onEdit, onDelete, files = [], onNavigateToFiles, assignmentLookup, canEdit }: ReservationCardProps) {
-  const { toggleReservationStatus } = useTripStore()
+function ReservationCard({ r, tripId, onEdit, onDelete, files = [], onNavigateToFiles, assignmentLookup, canEdit, segments }: ReservationCardProps) {
+  const { toggleReservationStatus, shareReservation, unshareReservation } = useTripStore()
   const toast = useToast()
   const { t, locale } = useTranslation()
   const timeFormat = useSettingsStore(s => s.settings.time_format) || '24h'
@@ -82,6 +86,12 @@ function ReservationCard({ r, tripId, onEdit, onDelete, files = [], onNavigateTo
   const handleDelete = async () => {
     setShowDeleteConfirm(false)
     try { await onDelete(r.id) } catch { toast.error(t('reservations.toast.deleteError')) }
+  }
+  const handleShareToggle = async (segmentId: string, share: boolean) => {
+    try {
+      if (share) await shareReservation(tripId, r.id, segmentId)
+      else await unshareReservation(tripId, r.id, segmentId)
+    } catch { toast.error(t('share.toast.error')) }
   }
 
   const fmtDate = (str) => {
@@ -110,8 +120,12 @@ function ReservationCard({ r, tripId, onEdit, onDelete, files = [], onNavigateTo
         <div style={{ width: 1, height: 10, background: 'var(--border-faint)' }} />
         <TypeIcon size={11} style={{ color: typeInfo.color, flexShrink: 0 }} />
         <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>{t(typeInfo.labelKey)}</span>
+        {r.shared_into_segment ? <SharedInBadge label={t('share.sharedBadge')} tooltip={t('share.sharedBadgeTip')} /> : null}
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</span>
+        {canEdit && !r.shared_into_segment && (
+          <ShareControl segments={segments} sharedSegmentIds={r.shared_segment_ids || []} onToggle={handleShareToggle} />
+        )}
         {canEdit && (
           <button onClick={() => onEdit(r)} title={t('common.edit')} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', display: 'flex', flexShrink: 0 }}
             onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
@@ -354,6 +368,7 @@ export default function ReservationsPanel({ tripId, reservations, days, assignme
   const [showHint, setShowHint] = useState(() => !localStorage.getItem('hideReservationHint'))
 
   const assignmentLookup = useMemo(() => buildAssignmentLookup(days, assignments), [days, assignments])
+  const segments = useTripSegments(tripId)
 
   const allPending = reservations.filter(r => r.status !== 'confirmed')
   const allConfirmed = reservations.filter(r => r.status === 'confirmed')
@@ -393,14 +408,14 @@ export default function ReservationsPanel({ tripId, reservations, days, assignme
             {allPending.length > 0 && (
               <Section title={t('reservations.pending')} count={allPending.length} accent="gray">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  {allPending.map(r => <ReservationCard key={r.id} r={r} tripId={tripId} onEdit={onEdit} onDelete={onDelete} files={files} onNavigateToFiles={onNavigateToFiles} assignmentLookup={assignmentLookup} canEdit={canEdit} />)}
+                  {allPending.map(r => <ReservationCard key={r.id} r={r} tripId={tripId} onEdit={onEdit} onDelete={onDelete} files={files} onNavigateToFiles={onNavigateToFiles} assignmentLookup={assignmentLookup} canEdit={canEdit} segments={segments} />)}
                 </div>
               </Section>
             )}
             {allConfirmed.length > 0 && (
               <Section title={t('reservations.confirmed')} count={allConfirmed.length} accent="green">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  {allConfirmed.map(r => <ReservationCard key={r.id} r={r} tripId={tripId} onEdit={onEdit} onDelete={onDelete} files={files} onNavigateToFiles={onNavigateToFiles} assignmentLookup={assignmentLookup} canEdit={canEdit} />)}
+                  {allConfirmed.map(r => <ReservationCard key={r.id} r={r} tripId={tripId} onEdit={onEdit} onDelete={onDelete} files={files} onNavigateToFiles={onNavigateToFiles} assignmentLookup={assignmentLookup} canEdit={canEdit} segments={segments} />)}
                 </div>
               </Section>
             )}

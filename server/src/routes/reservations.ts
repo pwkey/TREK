@@ -10,9 +10,11 @@ import {
   createReservation,
   updatePositions,
   getReservation,
+  getReservationForEdit,
   updateReservation,
   deleteReservation,
 } from '../services/reservationService';
+import { isTripInSegment, shareReservation, unshareReservation } from '../services/segmentShareService';
 
 const router = express.Router({ mergeParams: true });
 
@@ -109,21 +111,35 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
   if (!checkPermission('reservation_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
     return res.status(403).json({ error: 'No permission' });
 
-  const current = getReservation(id, tripId);
+  // [460-fork] Milestone 13 — resolve the reservation as owned OR shared into a
+  // segment this trip is linked to (co-edit). ownerTripId is its real home; all
+  // side-effects (accommodation, budget) stay scoped there, never the editor's
+  // trip. A non-shared foreign reservation resolves to undefined → 404 (the
+  // write-side leak guard). Delete stays owner-only (uses getReservation).
+  const current = getReservationForEdit(id, tripId);
   if (!current) return res.status(404).json({ error: 'Reservation not found' });
+  const ownerTripId = (current as unknown as { trip_id: number }).trip_id;
+  const isOwnerTrip = String(ownerTripId) === String(tripId);
 
-  const { reservation, accommodationChanged } = updateReservation(id, tripId, {
+  const { reservation, accommodationChanged } = updateReservation(id, ownerTripId, {
     title, reservation_time, reservation_end_time, location,
     confirmation_number, notes, day_id, place_id, assignment_id,
-    status, type, accommodation_id, metadata, create_accommodation
-  }, current);
+    status, type, metadata,
+    // [460-fork] M13 — accommodation side-effects are owner-scoped (same fence as
+    // the budget side-effects below). A sibling co-editor edits the booking's own
+    // fields but must NOT create or relink day_accommodations rows in the owner's
+    // trip, so these are stripped for non-owner edits.
+    accommodation_id: isOwnerTrip ? accommodation_id : undefined,
+    create_accommodation: isOwnerTrip ? create_accommodation : undefined,
+  }, current, authReq.user.id);
 
   if (accommodationChanged) {
-    broadcast(tripId, 'accommodation:updated', {}, req.headers['x-socket-id'] as string);
+    broadcast(ownerTripId, 'accommodation:updated', {}, req.headers['x-socket-id'] as string);
   }
 
-  // Remove linked budget entry if price was cleared
-  if (!create_budget_entry || !create_budget_entry.total_price) {
+  // Remove linked budget entry if price was cleared (owner trip only — budget
+  // lives with the owning household; a sibling co-edit never touches it).
+  if (isOwnerTrip && (!create_budget_entry || !create_budget_entry.total_price)) {
     const linked = db.prepare('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?').get(tripId, id) as { id: number } | undefined;
     if (linked) {
       const { deleteBudgetItem } = require('../services/budgetService');
@@ -132,8 +148,8 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
     }
   }
 
-  // Auto-create or update budget entry if price was provided
-  if (create_budget_entry && create_budget_entry.total_price > 0) {
+  // Auto-create or update budget entry if price was provided (owner trip only)
+  if (isOwnerTrip && create_budget_entry && create_budget_entry.total_price > 0) {
     try {
       const { createBudgetItem, updateBudgetItem } = require('../services/budgetService');
       const itemName = title || current.title;
@@ -161,11 +177,13 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
   }
 
   res.json({ reservation });
-  broadcast(tripId, 'reservation:updated', { reservation }, req.headers['x-socket-id'] as string);
+  // Notify the owning trip's room, and (for a sibling co-edit) the editor's too.
+  broadcast(ownerTripId, 'reservation:updated', { reservation }, req.headers['x-socket-id'] as string);
+  if (!isOwnerTrip) broadcast(tripId, 'reservation:updated', { reservation }, req.headers['x-socket-id'] as string);
 
   import('../services/notificationService').then(({ send }) => {
-    const tripInfo = db.prepare('SELECT title FROM trips WHERE id = ?').get(tripId) as { title: string } | undefined;
-    send({ event: 'booking_change', actorId: authReq.user.id, scope: 'trip', targetId: Number(tripId), params: { trip: tripInfo?.title || 'Untitled', actor: authReq.user.email, booking: title || current.title, type: type || current.type || 'booking', tripId: String(tripId) } }).catch(() => {});
+    const tripInfo = db.prepare('SELECT title FROM trips WHERE id = ?').get(ownerTripId) as { title: string } | undefined;
+    send({ event: 'booking_change', actorId: authReq.user.id, scope: 'trip', targetId: Number(ownerTripId), params: { trip: tripInfo?.title || 'Untitled', actor: authReq.user.email, booking: title || current.title, type: type || current.type || 'booking', tripId: String(ownerTripId) } }).catch(() => {});
   });
 });
 
@@ -193,6 +211,56 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
     const tripInfo = db.prepare('SELECT title FROM trips WHERE id = ?').get(tripId) as { title: string } | undefined;
     send({ event: 'booking_change', actorId: authReq.user.id, scope: 'trip', targetId: Number(tripId), params: { trip: tripInfo?.title || 'Untitled', actor: authReq.user.email, booking: reservation.title, type: reservation.type || 'booking', tripId: String(tripId) } }).catch(() => {});
   });
+});
+
+// [460-fork] Milestone 13 — opt-in: share this booking into a segment so every
+// trip linked to the segment can see (and, from slice 2, co-edit) it. Owner-only:
+// the reservation must belong to :tripId, the caller needs reservation_edit, and
+// :tripId must actually be part of the segment. Idempotency is handled by the
+// global X-Client-Mutation-Id middleware + the UNIQUE(segment_id, reservation_id).
+router.post('/:id/share', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId, id } = req.params;
+  const { segment_id } = req.body;
+
+  const trip = verifyTripAccess(tripId, authReq.user.id);
+  if (!trip) return res.status(404).json({ error: 'Trip not found' });
+  if (!checkPermission('reservation_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+
+  if (!segment_id) return res.status(400).json({ error: 'segment_id is required' });
+
+  // Owner-only: the reservation must live in this trip.
+  const reservation = getReservation(id, tripId);
+  if (!reservation) return res.status(404).json({ error: 'Reservation not found' });
+
+  // ...and this trip must be part of the segment it's being shared into.
+  if (!isTripInSegment(tripId, segment_id)) return res.status(403).json({ error: 'Trip is not part of this segment' });
+
+  shareReservation(segment_id, id, authReq.user.id);
+  res.json({ success: true, segment_id, reservation_id: Number(id) });
+  broadcast(tripId, 'reservation:shared', { reservationId: Number(id), segmentId: segment_id }, req.headers['x-socket-id'] as string);
+});
+
+// [460-fork] Milestone 13 — un-share (owner-only, same checks as share).
+router.delete('/:id/share', authenticate, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const { tripId, id } = req.params;
+  const { segment_id } = req.body;
+
+  const trip = verifyTripAccess(tripId, authReq.user.id);
+  if (!trip) return res.status(404).json({ error: 'Trip not found' });
+  if (!checkPermission('reservation_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+
+  if (!segment_id) return res.status(400).json({ error: 'segment_id is required' });
+
+  const reservation = getReservation(id, tripId);
+  if (!reservation) return res.status(404).json({ error: 'Reservation not found' });
+
+  unshareReservation(segment_id, id);
+  res.json({ success: true });
+  broadcast(tripId, 'reservation:unshared', { reservationId: Number(id), segmentId: segment_id }, req.headers['x-socket-id'] as string);
 });
 
 export default router;

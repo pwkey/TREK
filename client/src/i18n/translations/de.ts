@@ -927,6 +927,14 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'reservations.confirm.delete': 'Möchtest du die Reservierung "{name}" wirklich löschen?',
   'reservations.confirm.deleteTitle': 'Buchung löschen?',
   'reservations.confirm.deleteBody': '"{name}" wird unwiderruflich gelöscht.',
+
+  // [460-fork] Milestone 13 — Dokumente im Segment teilen
+  'share.shareTooltip': 'Mit anderem Haushalt teilen',
+  'share.menuTitle': 'In Segment teilen',
+  'share.sharedBadge': 'Geteilt',
+  'share.sharedBadgeTip': 'Von einem anderen Haushalt in diesem Segment mit dir geteilt',
+  'share.toast.error': 'Teilen konnte nicht aktualisiert werden',
+
   'reservations.toast.updated': 'Reservierung aktualisiert',
   'reservations.toast.removed': 'Reservierung gelöscht',
   'reservations.toast.saveError': 'Fehler beim Speichern',

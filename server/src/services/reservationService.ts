@@ -6,17 +6,28 @@ export function verifyTripAccess(tripId: string | number, userId: number) {
 }
 
 export function listReservations(tripId: string | number) {
+  // [460-fork] Milestone 13 — a trip sees its own reservations PLUS any
+  // reservation explicitly shared into a segment it's linked to. The two flags
+  // let the client mark shared-in rows and decide edit affordance:
+  //   owned_by_this_trip = 1  → this trip owns it (full control incl. delete)
+  //   shared_into_segment = 1 → it belongs to another household, co-editable
   const reservations = db.prepare(`
     SELECT r.*, d.day_number, p.name as place_name, r.assignment_id,
-      ap.place_id as accommodation_place_id, acc_p.name as accommodation_name
+      ap.place_id as accommodation_place_id, acc_p.name as accommodation_name,
+      CASE WHEN r.trip_id = ? THEN 1 ELSE 0 END AS owned_by_this_trip,
+      CASE WHEN r.trip_id = ? THEN 0 ELSE 1 END AS shared_into_segment
     FROM reservations r
     LEFT JOIN days d ON r.day_id = d.id
     LEFT JOIN places p ON r.place_id = p.id
     LEFT JOIN day_accommodations ap ON r.accommodation_id = ap.id
     LEFT JOIN places acc_p ON ap.place_id = acc_p.id
     WHERE r.trip_id = ?
+       OR r.id IN (
+         SELECT reservation_id FROM segment_shared_reservations
+          WHERE segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+       )
     ORDER BY r.reservation_time ASC, r.created_at ASC
-  `).all(tripId) as any[];
+  `).all(tripId, tripId, tripId, tripId) as any[];
 
   // Attach per-day positions for multi-day reservations
   const dayPositions = db.prepare(`
@@ -34,6 +45,20 @@ export function listReservations(tripId: string | number) {
 
   for (const r of reservations) {
     r.day_positions = posMap.get(r.id) || null;
+  }
+
+  // [460-fork] M13 — attach the segment ids each reservation is shared into, so
+  // the client can render the share-toggle state (on/off per segment).
+  if (reservations.length > 0) {
+    const ids = reservations.map((r) => r.id);
+    const ph = ids.map(() => '?').join(',');
+    const shares = db.prepare(`SELECT reservation_id, segment_id FROM segment_shared_reservations WHERE reservation_id IN (${ph})`).all(...ids) as { reservation_id: number; segment_id: string }[];
+    const shareMap = new Map<number, string[]>();
+    for (const s of shares) {
+      if (!shareMap.has(s.reservation_id)) shareMap.set(s.reservation_id, []);
+      shareMap.get(s.reservation_id)!.push(s.segment_id);
+    }
+    for (const r of reservations) r.shared_segment_ids = shareMap.get(r.id) || [];
   }
 
   return reservations;
@@ -172,6 +197,27 @@ export function getReservation(id: string | number, tripId: string | number) {
   return db.prepare('SELECT * FROM reservations WHERE id = ? AND trip_id = ?').get(id, tripId) as Reservation | undefined;
 }
 
+// [460-fork] Milestone 13 — resolve a reservation a trip is allowed to EDIT:
+// either it owns the reservation, or the reservation is shared into a segment
+// the trip is linked to (co-edit). Returns the row with its real trip_id so the
+// caller scopes side-effects (accommodation/budget) to the OWNING trip, never
+// the editor's. Delete is intentionally NOT widened — it stays owner-only via
+// getReservation. Returns undefined for a non-shared foreign reservation, which
+// the route turns into 404 (the leak guard).
+export function getReservationForEdit(id: string | number, tripId: string | number) {
+  return db.prepare(`
+    SELECT * FROM reservations
+     WHERE id = ?
+       AND (
+         trip_id = ?
+         OR id IN (
+           SELECT reservation_id FROM segment_shared_reservations
+            WHERE segment_id IN (SELECT segment_id FROM trip_segments WHERE trip_id = ?)
+         )
+       )
+  `).get(id, tripId, tripId) as Reservation | undefined;
+}
+
 interface UpdateReservationData {
   title?: string;
   reservation_time?: string;
@@ -189,7 +235,7 @@ interface UpdateReservationData {
   create_accommodation?: CreateAccommodation;
 }
 
-export function updateReservation(id: string | number, tripId: string | number, data: UpdateReservationData, current: Reservation): { reservation: any; accommodationChanged: boolean } {
+export function updateReservation(id: string | number, tripId: string | number, data: UpdateReservationData, current: Reservation, userId: number): { reservation: any; accommodationChanged: boolean } {
   const {
     title, reservation_time, reservation_end_time, location,
     confirmation_number, notes, day_id, place_id, assignment_id,
@@ -230,7 +276,9 @@ export function updateReservation(id: string | number, tripId: string | number, 
       status = COALESCE(?, status),
       type = COALESCE(?, type),
       accommodation_id = ?,
-      metadata = ?
+      metadata = ?,
+      updated_at = CURRENT_TIMESTAMP,
+      updated_by = ?
     WHERE id = ?
   `).run(
     title || null,
@@ -246,6 +294,7 @@ export function updateReservation(id: string | number, tripId: string | number, 
     type || null,
     resolvedAccId,
     metadata !== undefined ? (metadata ? JSON.stringify(metadata) : null) : current.metadata,
+    userId,
     id
   );
 

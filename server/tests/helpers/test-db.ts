@@ -22,6 +22,14 @@ import { runMigrations } from '../../src/db/migrations';
 
 // Tables to clear on reset, ordered to avoid FK violations
 const RESET_TABLES = [
+  // [460-fork] Milestone 13 + Milestone 4 — segment sharing junctions and the
+  // segment tables themselves (M4 shipped without adding these to the reset
+  // list). FKs are OFF during reset, so child-before-parent order is moot.
+  'segment_shared_files',
+  'segment_shared_reservations',
+  'segment_invites',
+  'trip_segments',
+  'segments',
   'file_links',
   'collab_poll_votes',
   'collab_messages',

@@ -234,7 +234,9 @@ function createTables(db: Database.Database): void {
       notes TEXT,
       status TEXT DEFAULT 'pending',
       type TEXT DEFAULT 'other',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- [460-fork] Milestone 13: co-edit stale-write precondition
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL -- [460-fork] Milestone 13
     );
 
     CREATE TABLE IF NOT EXISTS trip_members (
@@ -554,6 +556,35 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_segment_invites_segment ON segment_invites(segment_id);
     -- [460-fork] Shared segments (Milestone 4) — END
+
+    -- [460-fork] Segment document-sharing (Milestone 13) — BEGIN
+    -- Opt-in bridge: a reservation/file is private to its trip by default; the
+    -- owner may explicitly share it into a segment, making it visible (and, for
+    -- reservations, co-editable) to every trip linked to that segment. UNIQUE
+    -- guards duplicate shares; ON DELETE CASCADE cleans up when the segment,
+    -- reservation, or file goes away.
+    CREATE TABLE IF NOT EXISTS segment_shared_reservations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+      reservation_id INTEGER NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
+      shared_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(segment_id, reservation_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ssr_segment ON segment_shared_reservations(segment_id);
+    CREATE INDEX IF NOT EXISTS idx_ssr_reservation ON segment_shared_reservations(reservation_id);
+
+    CREATE TABLE IF NOT EXISTS segment_shared_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+      file_id INTEGER NOT NULL REFERENCES trip_files(id) ON DELETE CASCADE,
+      shared_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(segment_id, file_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ssf_segment ON segment_shared_files(segment_id);
+    CREATE INDEX IF NOT EXISTS idx_ssf_file ON segment_shared_files(file_id);
+    -- [460-fork] Segment document-sharing (Milestone 13) — END
 
     -- [460-fork] Offline-first idempotency (Milestone 5) — BEGIN
     CREATE TABLE IF NOT EXISTS client_mutations (

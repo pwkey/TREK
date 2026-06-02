@@ -455,6 +455,9 @@ export const filesApi = {
   addLink: (tripId: number | string, fileId: number, data: { reservation_id?: number; assignment_id?: number }) => apiClient.post(`/trips/${tripId}/files/${fileId}/link`, data).then(r => r.data),
   removeLink: (tripId: number | string, fileId: number, linkId: number) => apiClient.delete(`/trips/${tripId}/files/${fileId}/link/${linkId}`).then(r => r.data),
   getLinks: (tripId: number | string, fileId: number) => apiClient.get(`/trips/${tripId}/files/${fileId}/links`).then(r => r.data),
+  // [460-fork] Milestone 13 — share/un-share a standalone file into a segment.
+  share: (tripId: number | string, id: number, segment_id: string) => apiClient.post(`/trips/${tripId}/files/${id}/share`, { segment_id }).then(r => r.data),
+  unshare: (tripId: number | string, id: number, segment_id: string) => apiClient.delete(`/trips/${tripId}/files/${id}/share`, { data: { segment_id } }).then(r => r.data),
 }
 
 export const reservationsApi = {
@@ -463,6 +466,9 @@ export const reservationsApi = {
   update: (tripId: number | string, id: number, data: Record<string, unknown>) => apiClient.put(`/trips/${tripId}/reservations/${id}`, data).then(r => r.data),
   delete: (tripId: number | string, id: number) => apiClient.delete(`/trips/${tripId}/reservations/${id}`).then(r => r.data),
   updatePositions: (tripId: number | string, positions: { id: number; day_plan_position: number }[], dayId?: number) => apiClient.put(`/trips/${tripId}/reservations/positions`, { positions, day_id: dayId }).then(r => r.data),
+  // [460-fork] Milestone 13 — share/un-share a booking into a segment.
+  share: (tripId: number | string, id: number, segment_id: string) => apiClient.post(`/trips/${tripId}/reservations/${id}/share`, { segment_id }).then(r => r.data),
+  unshare: (tripId: number | string, id: number, segment_id: string) => apiClient.delete(`/trips/${tripId}/reservations/${id}/share`, { data: { segment_id } }).then(r => r.data),
 }
 
 // [460-fork] Smart Import (Milestone 2 slice 3)

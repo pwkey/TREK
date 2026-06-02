@@ -8,6 +8,8 @@ import { filesApi } from '../../api/client'
 import type { Place, Reservation, TripFile, Day, AssignmentsMap } from '../../types'
 import { useCanDo } from '../../store/permissionsStore'
 import { useTripStore } from '../../store/tripStore'
+import { ShareControl, SharedInBadge } from '../Segments/ShareControl'
+import { useTripSegments } from '../Segments/useTripSegments'
 
 import { getAuthUrl } from '../../api/authUrl'
 
@@ -249,6 +251,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
   const can = useCanDo()
   const trip = useTripStore((s) => s.trip)
   const { t, locale } = useTranslation()
+  const segments = useTripSegments(tripId)
 
   const loadTrash = useCallback(async () => {
     setLoadingTrash(true)
@@ -273,6 +276,15 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
       await filesApi.toggleStar(tripId, fileId)
       refreshFiles()
     } catch { /* */ }
+  }
+
+  // [460-fork] Milestone 13 — share/un-share a standalone file into a segment.
+  const handleShareFile = async (fileId: number, segmentId: string, share: boolean) => {
+    try {
+      if (share) await filesApi.share(tripId, fileId, segmentId)
+      else await filesApi.unshare(tripId, fileId, segmentId)
+      refreshFiles()
+    } catch { toast.error(t('share.toast.error')) }
   }
 
   const handleRestore = async (fileId: number) => {
@@ -484,6 +496,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
             {file.note_id && (
               <SourceBadge icon={StickyNote} label={t('files.sourceCollab') || 'Collab Notes'} />
             )}
+            {file.shared_into_segment ? <SharedInBadge label={t('share.sharedBadge')} tooltip={t('share.sharedBadgeTip')} /> : null}
           </div>
         </div>
 
@@ -510,6 +523,9 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
                 onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}>
                 <Pencil size={14} />
               </button>}
+              {can('file_edit', trip) && segments.length > 0 && !file.shared_into_segment && (
+                <ShareControl segments={segments} sharedSegmentIds={file.shared_segment_ids || []} onToggle={(segId, share) => handleShareFile(file.id, segId, share)} size={14} />
+              )}
               <button onClick={() => openFile(file)} title={t('common.open')} style={{ padding: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', borderRadius: 6, display: 'flex' }}
                 onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}>
                 <ExternalLink size={14} />

@@ -195,6 +195,26 @@ Keep this map up to date as you learn more. It's the highest-leverage artefact i
 
 Build order is deliberate. Each item should be shippable on its own and usable on a real trip before the next starts. Do not start N+1 until N is in use.
 
+> **Status — 2026-06-02.** Most of this roadmap is built. Quick status:
+>
+> | M | Feature | Status |
+> |---|---|---|
+> | 0 | Baseline trial | Process item — ongoing pain-point capture |
+> | 1 | Branding + PWA polish | ✅ Shipped |
+> | 2 | Smart import | ✅ Shipped |
+> | 3 | Partner pairing | ⤳ Superseded by M11 (Household) |
+> | 4 | Shared segments | ✅ Shipped (sharing protocol decided 2026-06-02 — see below) |
+> | 5 | Offline-first writes | ✅ Shipped |
+> | 6 | Journal + photos | ✅ Shipped |
+> | 7 | JSON export/import | ✅ Shipped |
+> | 8 | Settle-up | ✅ Shipped |
+> | 9 | Availability poll | ✅ Shipped |
+> | 11 | Household | ✅ Shipped (replaces M3) |
+> | 12 | Clean off-boarding | 🔧 In progress |
+> | 13 | Segment doc-sharing protocol + per-household journals | ⏳ Next (planned) |
+>
+> The "don't start N+1 until N is in use" rule above is historical; milestones now run as real trips surface needs. M11–M13 are detailed at the end of this section.
+
 ### Milestone 0 — Baseline
 
 Deploy upstream TREK unmodified via Docker Compose. Install as PWA on all our devices. Use it for one real trip. Capture pain points in `docs/ours-trial-notes.md`. Only then proceed.
@@ -256,6 +276,8 @@ Why this is first after baseline: branding affects every screen; install UX affe
 
 ### Milestone 3 — Partner pairing
 
+> **⤳ Superseded by Milestone 11 (Household).** Built as `partner_user_id`, then replaced: the partner schema was dropped and existing pairs migrated into 2-person households. See M11 at the end of this section. The sketch below is kept for historical context only.
+
 **Problem:** Trip membership is per-trip and manual. For spouses / lifelong travel partners who are on every trip together, being invited to each new trip is friction. And when a reservation PDF lists both names, the system treats them as two free-text strings rather than two real user accounts — observed 2026-04-20 after Peter imported a flight booking for himself and his partner and noted the missing link.
 
 **Design sketch:**
@@ -300,6 +322,20 @@ Why this is first after baseline: branding affects every screen; install UX affe
 - What happens if the two trips have different timezones or currency defaults for a shared day?
 - If one party leaves the segment, does their copy of those days remain as a snapshot or get deleted?
 - How do per-person expenses on a shared day allocate between households?
+
+**Status & decisions (2026-06-02):**
+
+Shipped, but the implementation differs from the sketch above. A segment has one **"home" trip** (`trip_segments.is_home=1`) that owns the **canonical day rows**; sibling trips don't get copies — on invite-accept their own days on those dates are deleted and replaced by a *read* of the home trip's days via a `days.segment_id` UNION (`server/src/services/dayService.ts`). The join table is `trip_segments(trip_id, segment_id, is_home, ...)`, not `(…, role)`.
+
+What a shared segment shares, decided with Peter:
+
+- **Shared:** the itinerary/plan for the shared days (place assignments + place notes) and the day title/notes. Works today.
+- **Private to each household (verified enforced):** bookings (`reservations`) and their documents (`trip_files`). Every read is hard-scoped `WHERE trip_id = ?` with no segment join; file download auth gates on `id + trip_id`. **No cross-household leak today** — segments are safe to use on a real trip as-is.
+- **Decided but NOT yet built (→ M13):**
+  - An **opt-in** per-reservation "share with this segment" toggle for genuinely-joint bookings (shared rental house, group tour), PDF included. Off by default.
+  - **Journals & photos should be per-household**, but are currently **shared** (one `day_journals`/`day_photos` set per shared day, keyed by `day_id`). This contradicts the decision and is the other half of M13.
+
+Sketch open questions still unresolved: timezone/currency on a shared day; snapshot-vs-delete when a party leaves; cross-household expense allocation.
 
 ### Milestone 5 — Offline-first writes (cross-cutting)
 
@@ -351,6 +387,23 @@ Specified in §8. Build after offline + journal so exports include journal conte
 - Public shareable trip guide (read-only view of a completed trip).
 - iCal feed export for calendar integration.
 - Push notifications (flight-day reminders, sync-completed confirmations).
+
+### Milestone 11 — Household (replaces M3 partner pairing) — ✅ Shipped
+
+**What & why:** M3's single `partner_user_id` link was too narrow — couldn't represent kids or a named travel companion who isn't a user account. Replaced with a **household**: `households`, `household_members` (named people, with dob/relationship), `household_invites`. `users.household_id` is a nullable single-household FK. Existing M3 partner pairs were auto-migrated to 2-person households. Trip auto-add and the Smart-Import passenger matcher (M2) now key off household membership + named members. Plan: `docs/ours-milestone-11-plan.md`.
+
+### Milestone 12 — Clean companion off-boarding (faithful export/import) — 🔧 In progress
+
+**What & why:** Extends M7 so a household leaving a shared trip/segment gets a faithful, self-contained copy. Round-trips budget splits, reservation↔file mappings, segments, and files through export/import, with an import preview showing what will be created. Slices 1–4 committed; manual round-trip validation pending. Plan: `docs/ours-milestone-12-plan.md`.
+
+### Milestone 13 — Segment document-sharing protocol + per-household journals — ⏳ Next (planned)
+
+The two gaps surfaced when auditing M4 against the sharing decisions (2026-06-02). Build the document protocol **first** — it's the prerequisite for sharing a real multi-week trip with another household.
+
+- **Opt-in document sharing.** Let an individual reservation (and its attached PDF) be explicitly shared into a segment so both households see it; default private. Additive — a `segment_shared_reservations` junction (or a nullable `segment_id` on the record), with the reservation/file read + download-auth paths widened to follow shared records. The owning household keeps edit rights; the other sees it read-only.
+- **Per-household journals & photos on shared days.** Today these are one shared set per shared day. Make them per-household by adding a trip/household discriminator to `day_journals`/`day_photos` (precedent: `day_notes` is already trip-scoped per day) while keeping the plan shared. No need to re-architect days into per-household rows.
+
+Resolve in plan phase: junction-table vs nullable-column for the opt-in; whether sharing a reservation auto-shares its linked files; un-share semantics; how this interacts with M12 export (does a shared booking export into both households' bundles?).
 
 ### Explicitly out of scope
 

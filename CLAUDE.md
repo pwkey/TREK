@@ -211,7 +211,7 @@ Build order is deliberate. Each item should be shippable on its own and usable o
 > | 9 | Availability poll | ✅ Shipped |
 > | 11 | Household | ✅ Shipped (replaces M3) |
 > | 12 | Clean off-boarding | 🔧 In progress |
-> | 13 | Segment doc-sharing protocol + per-household journals | ⏳ Next (planned) |
+> | 13 | Segment doc-sharing protocol + per-household journals | ✅ Shipped |
 >
 > The "don't start N+1 until N is in use" rule above is historical; milestones now run as real trips surface needs. M11–M13 are detailed at the end of this section.
 
@@ -396,14 +396,14 @@ Specified in §8. Build after offline + journal so exports include journal conte
 
 **What & why:** Extends M7 so a household leaving a shared trip/segment gets a faithful, self-contained copy. Round-trips budget splits, reservation↔file mappings, segments, and files through export/import, with an import preview showing what will be created. Slices 1–4 committed; manual round-trip validation pending. Plan: `docs/ours-milestone-12-plan.md`.
 
-### Milestone 13 — Segment document-sharing protocol + per-household journals — ⏳ Next (planned)
+### Milestone 13 — Segment document-sharing protocol + per-household journals — ✅ Shipped
 
-The two gaps surfaced when auditing M4 against the sharing decisions (2026-06-02). Build the document protocol **first** — it's the prerequisite for sharing a real multi-week trip with another household.
+Closed the two gaps the 2026-06-02 segment audit found: bookings/files were private with no way to deliberately share, and journals/photos were stuck-shared on segment days. Shipped in two parts (plan: `docs/ours-milestone-13-plan.md`).
 
-- **Opt-in document sharing.** Let an individual reservation (and its attached PDF) be explicitly shared into a segment so both households see it; default private. Additive — a `segment_shared_reservations` junction (or a nullable `segment_id` on the record), with the reservation/file read + download-auth paths widened to follow shared records. The owning household keeps edit rights; the other sees it read-only.
-- **Per-household journals & photos on shared days.** Today these are one shared set per shared day. Make them per-household by adding a trip/household discriminator to `day_journals`/`day_photos` (precedent: `day_notes` is already trip-scoped per day) while keeping the plan shared. No need to re-architect days into per-household rows.
+- **Opt-in document sharing** (slices 1–3, commit `a4acc42e`). A booking or standalone file is private to its trip by default; the owner can explicitly share specific ones into a segment via the `segment_shared_reservations` / `segment_shared_files` junctions. Shared bookings are **co-editable** by the other household (not read-only) and their attached PDF rides along; **delete and un-share stay owner-only**. Read / write / download auth was widened to follow shared records via segment membership, and non-shared items stay invisible and immutable to the other household (leak-guard tests at every layer). Idempotent via the global `X-Client-Mutation-Id` middleware. A `/security-review` pass caught and fixed one issue (a sibling co-editor could inject a `day_accommodations` row into the owner's trip — now fenced to the owner, like the budget side-effects).
+- **Per-household journals & photos** (slice 4, commit `1db2b786`). `day_journals` rebuilt to PK `(day_id, trip_id)`; `day_photos` and `client_mutation_conflicts` gained `trip_id` / `record_trip_id`. On a shared day each household keeps its **own** journal and photos (and sees only its own) while the plan stays shared. The route paths already carried `tripId`, so this was server-only. Existing shared-day content was migrated to the segment's home trip.
 
-Resolve in plan phase: junction-table vs nullable-column for the opt-in; whether sharing a reservation auto-shares its linked files; un-share semantics; how this interacts with M12 export (does a shared booking export into both households' bundles?).
+**Deferred follow-up (no regression):** when a household *leaves or dissolves* a segment, the day-cloning copies day structure but **not** journals/photos — so a household's per-day memoir on those days isn't carried onto its cloned trip-local days (unchanged from before M13). Preserving it means copying journal text + photo binaries on leave/dissolve, which overlaps M12 off-boarding; revisit there.
 
 ### Explicitly out of scope
 

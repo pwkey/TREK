@@ -74,15 +74,16 @@ router.post('/:id/resolve', authenticate, (req: Request, res: Response) => {
   // [460-fork] Milestone 6 slice 1 — journal record dispatch.
   if (conflict.record_type === 'journal') {
     const content = typeof payload.content_markdown === 'string' ? payload.content_markdown as string : '';
-    const journal = journalService.upsertJournal(conflict.record_id, content, authReq.user.id);
+    // [460-fork] M13 slice 4 — journals are per (day, trip). The parked conflict
+    // carries record_trip_id; fall back to the day's owning trip for any
+    // pre-slice-4 conflict parked before the column existed.
+    const day = db.prepare('SELECT id, trip_id FROM days WHERE id = ?').get(conflict.record_id) as { id: number; trip_id: number } | undefined;
+    const journalTripId = conflict.record_trip_id ?? day?.trip_id;
+    if (!journalTripId) return res.status(404).json({ error: 'Underlying day no longer exists', code: 'RECORD_GONE' });
+    const journal = journalService.upsertJournal(conflict.record_id, journalTripId, content, authReq.user.id);
     markResolved(conflict.id, choice);
     writeAudit({ userId: authReq.user.id, action: 'conflict.resolve', ip: getClientIp(req), details: { conflictId: conflict.id, choice } });
-    // Find the day's trip so the broadcast goes to the right room. The
-    // journal row's day_id is conflict.record_id; pull trip_id off the day.
-    const day = db.prepare('SELECT id, trip_id FROM days WHERE id = ?').get(conflict.record_id) as { id: number; trip_id: number } | undefined;
-    if (day) {
-      broadcast(day.trip_id, 'dayJournal:updated', { dayId: day.id, journal }, req.headers['x-socket-id'] as string);
-    }
+    broadcast(journalTripId, 'dayJournal:updated', { dayId: conflict.record_id, journal }, req.headers['x-socket-id'] as string);
     return res.json({ ok: true, choice, journal });
   }
 

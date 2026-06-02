@@ -30,6 +30,8 @@ const RESET_TABLES = [
   'segment_invites',
   'trip_segments',
   'segments',
+  'day_photos',
+  'day_journals',
   'file_links',
   'collab_poll_votes',
   'collab_messages',

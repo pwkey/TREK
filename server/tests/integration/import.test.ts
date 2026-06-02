@@ -74,7 +74,7 @@ async function buildAndExport(userId: number, tripTitle: string, opts: { format:
   const trip = createTrip(testDb, userId, { title: tripTitle });
   const day = createDay(testDb, trip.id, { date: '2026-05-01', title: 'First day' });
   testDb.prepare(`INSERT INTO places (trip_id, name) VALUES (?, ?)`).run(trip.id, 'Eiffel Tower');
-  testDb.prepare(`INSERT INTO day_journals (day_id, content_markdown, updated_by) VALUES (?, ?, ?)`).run(day.id, '# Day one\nThe markets.', userId);
+  testDb.prepare(`INSERT INTO day_journals (day_id, trip_id, content_markdown, updated_by) VALUES (?, ?, ?, ?)`).run(day.id, trip.id, '# Day one\nThe markets.', userId);
   const cookie = authCookie(userId);
   const res = await request(app)
     .get(opts.format === 'bundle' ? `/api/trips/${trip.id}/export/bundle` : `/api/trips/${trip.id}/export`)
@@ -119,7 +119,7 @@ describe('Import dry run', () => {
     const realName = `imp-test-${Date.now()}.jpg`;
     fs.writeFileSync(path.join(filesDir, realName), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
     const tf = testDb.prepare(`INSERT INTO trip_files (trip_id, filename, original_name, file_size, mime_type, uploaded_by) VALUES (?, ?, 'IMG.jpg', 4, 'image/jpeg', ?)`).run(trip.id, realName, user.id);
-    testDb.prepare(`INSERT INTO day_photos (day_id, upload_id, position) VALUES (?, ?, 0)`).run(day.id, tf.lastInsertRowid);
+    testDb.prepare(`INSERT INTO day_photos (day_id, trip_id, upload_id, position) VALUES (?, ?, ?, 0)`).run(day.id, trip.id, tf.lastInsertRowid);
 
     const exportRes = await request(app)
       .get(`/api/trips/${trip.id}/export/bundle`)
@@ -192,7 +192,7 @@ describe('Import apply', () => {
     const sDay = createDay(testDb, sTrip.id, { date: '2026-06-01', title: 'D1' });
     const placeRes = testDb.prepare(`INSERT INTO places (trip_id, name) VALUES (?, ?)`).run(sTrip.id, 'Cathedral');
     testDb.prepare(`INSERT INTO day_assignments (day_id, place_id, order_index) VALUES (?, ?, 0)`).run(sDay.id, placeRes.lastInsertRowid);
-    testDb.prepare(`INSERT INTO day_journals (day_id, content_markdown, updated_by) VALUES (?, 'Hello', ?)`).run(sDay.id, user.id);
+    testDb.prepare(`INSERT INTO day_journals (day_id, trip_id, content_markdown, updated_by) VALUES (?, ?, 'Hello', ?)`).run(sDay.id, sTrip.id, user.id);
 
     // Export.
     const exportRes = await request(app)
@@ -239,7 +239,7 @@ describe('Import apply', () => {
     const expectedBytes = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
     fs.writeFileSync(path.join(filesDir, realName), expectedBytes);
     const tf = testDb.prepare(`INSERT INTO trip_files (trip_id, filename, original_name, file_size, mime_type, uploaded_by) VALUES (?, ?, 'IMG.jpg', 4, 'image/jpeg', ?)`).run(trip.id, realName, user.id);
-    testDb.prepare(`INSERT INTO day_photos (day_id, upload_id, caption, position) VALUES (?, ?, 'Sunset', 0)`).run(day.id, tf.lastInsertRowid);
+    testDb.prepare(`INSERT INTO day_photos (day_id, trip_id, upload_id, caption, position) VALUES (?, ?, ?, 'Sunset', 0)`).run(day.id, trip.id, tf.lastInsertRowid);
 
     const exportRes = await request(app)
       .get(`/api/trips/${trip.id}/export/bundle`)

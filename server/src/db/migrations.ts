@@ -1412,6 +1412,53 @@ function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_ssf_file ON segment_shared_files(file_id);
       `);
     },
+    // [460-fork] Milestone 13 slice 4 — per-household journals. day_journals was
+    // keyed by day_id alone, so a shared-segment day had ONE journal both
+    // households saw. Rebuild to PRIMARY KEY (day_id, trip_id) so each linked
+    // trip keeps its own journal on a shared day; existing rows are attributed to
+    // the day's owning (home) trip. SQLite can't ALTER a PK, hence the
+    // create-copy-drop-rename. Guarded so a re-run is a no-op.
+    () => {
+      const hasTripId = db.prepare("SELECT 1 FROM pragma_table_info('day_journals') WHERE name = 'trip_id'").get();
+      if (hasTripId) return;
+      db.exec(`
+        CREATE TABLE day_journals_new (
+          day_id INTEGER NOT NULL REFERENCES days(id) ON DELETE CASCADE,
+          trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+          content_markdown TEXT NOT NULL DEFAULT '',
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          PRIMARY KEY (day_id, trip_id)
+        );
+        INSERT INTO day_journals_new (day_id, trip_id, content_markdown, updated_at, updated_by)
+          SELECT j.day_id, d.trip_id, j.content_markdown, j.updated_at, j.updated_by
+            FROM day_journals j JOIN days d ON d.id = j.day_id;
+        DROP TABLE day_journals;
+        ALTER TABLE day_journals_new RENAME TO day_journals;
+        CREATE INDEX IF NOT EXISTS idx_day_journals_trip ON day_journals(trip_id);
+      `);
+    },
+    // [460-fork] Milestone 13 slice 4 — per-household photos. Add trip_id so a
+    // shared-segment day's photos are scoped per linked trip; backfill to the
+    // day's owning trip. New uploads always set trip_id (dayPhotoService).
+    () => {
+      try {
+        db.exec('ALTER TABLE day_photos ADD COLUMN trip_id INTEGER REFERENCES trips(id) ON DELETE CASCADE');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      db.exec('UPDATE day_photos SET trip_id = (SELECT trip_id FROM days WHERE days.id = day_photos.day_id) WHERE trip_id IS NULL');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_day_photos_day_trip ON day_photos(day_id, trip_id, position)');
+    },
+    // [460-fork] Milestone 13 slice 4 — journals are now per (day, trip), so a
+    // parked journal conflict must remember which trip's journal to re-apply.
+    () => {
+      try {
+        db.exec('ALTER TABLE client_mutation_conflicts ADD COLUMN record_trip_id INTEGER');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+    },
   ];
 
   if (currentVersion < migrations.length) {

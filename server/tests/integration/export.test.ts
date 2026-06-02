@@ -112,9 +112,9 @@ describe('Trip content', () => {
 
     // Seed a journal directly via the DB.
     testDb.prepare(`
-      INSERT INTO day_journals (day_id, content_markdown, updated_by)
-      VALUES (?, ?, ?)
-    `).run(day.id, '# Hello\n\nFirst entry.', user.id);
+      INSERT INTO day_journals (day_id, trip_id, content_markdown, updated_by)
+      VALUES (?, ?, ?, ?)
+    `).run(day.id, trip.id, '# Hello\n\nFirst entry.', user.id);
 
     // Seed a photo (need a trip_files row + day_photos row).
     const fileResult = testDb.prepare(`
@@ -122,9 +122,9 @@ describe('Trip content', () => {
       VALUES (?, 'test-uuid.jpg', 'IMG_0001.jpg', 12345, 'image/jpeg', ?)
     `).run(trip.id, user.id);
     testDb.prepare(`
-      INSERT INTO day_photos (day_id, upload_id, caption, taken_at, lat, lng, position)
-      VALUES (?, ?, ?, ?, ?, ?, 0)
-    `).run(day.id, fileResult.lastInsertRowid, 'Sunrise', '2026-05-01T05:30:00Z', 48.8566, 2.3522);
+      INSERT INTO day_photos (day_id, trip_id, upload_id, caption, taken_at, lat, lng, position)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+    `).run(day.id, trip.id, fileResult.lastInsertRowid, 'Sunrise', '2026-05-01T05:30:00Z', 48.8566, 2.3522);
 
     const res = await request(app)
       .get(`/api/trips/${trip.id}/export`)
@@ -295,8 +295,8 @@ describe('Bundle (.zip with attachments)', () => {
       VALUES (?, ?, 'IMG.jpg', 4, 'image/jpeg', ?)
     `).run(trip.id, realName, user.id);
     testDb.prepare(`
-      INSERT INTO day_photos (day_id, upload_id, position) VALUES (?, ?, 0)
-    `).run(day.id, fileRes.lastInsertRowid);
+      INSERT INTO day_photos (day_id, trip_id, upload_id, position) VALUES (?, ?, ?, 0)
+    `).run(day.id, trip.id, fileRes.lastInsertRowid);
 
     const { planTripBundle } = await import('../../src/services/exportService');
     const plan = planTripBundle(trip.id, { id: user.id, username: user.username, email: user.email });

@@ -8,6 +8,7 @@ import { db, canAccessTrip } from '../db/database';
 export interface DayPhotoRow {
   id: number;
   day_id: number;
+  trip_id: number;
   upload_id: number;
   caption: string | null;
   taken_at: string | null;
@@ -30,7 +31,7 @@ export interface DayPhoto extends DayPhotoRow {
 
 const PHOTO_SELECT = `
   SELECT
-    dp.id, dp.day_id, dp.upload_id, dp.caption, dp.taken_at,
+    dp.id, dp.day_id, dp.trip_id, dp.upload_id, dp.caption, dp.taken_at,
     dp.lat, dp.lng, dp.altitude, dp.camera,
     dp.position, dp.created_at,
     f.filename, f.original_name, f.mime_type, f.file_size
@@ -56,8 +57,10 @@ export function dayAccessible(dayId: string | number, tripId: string | number) {
   `).get(dayId, tripId, tripId);
 }
 
-export function listPhotos(dayId: number): DayPhoto[] {
-  return db.prepare(`${PHOTO_SELECT} WHERE dp.day_id = ? ORDER BY dp.position ASC, dp.id ASC`).all(dayId) as DayPhoto[];
+// [460-fork] M13 slice 4 — photos are per (day, trip): each linked trip sees
+// only its own photos on a shared-segment day.
+export function listPhotos(dayId: number, tripId: number): DayPhoto[] {
+  return db.prepare(`${PHOTO_SELECT} WHERE dp.day_id = ? AND dp.trip_id = ? ORDER BY dp.position ASC, dp.id ASC`).all(dayId, tripId) as DayPhoto[];
 }
 
 export function getPhoto(id: number): DayPhoto | null {
@@ -69,6 +72,7 @@ export function getPhoto(id: number): DayPhoto | null {
  *  already have inserted the trip_files row and pass its upload_id. */
 export function attachPhoto(input: {
   dayId: number;
+  tripId: number;
   uploadId: number;
   caption?: string | null;
   takenAt?: string | null;
@@ -77,12 +81,12 @@ export function attachPhoto(input: {
   altitude?: number | null;
   camera?: string | null;
 }): DayPhoto {
-  const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM day_photos WHERE day_id = ?').get(input.dayId) as { m: number };
+  const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM day_photos WHERE day_id = ? AND trip_id = ?').get(input.dayId, input.tripId) as { m: number };
   const result = db.prepare(`
-    INSERT INTO day_photos (day_id, upload_id, caption, taken_at, lat, lng, altitude, camera, position)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO day_photos (day_id, trip_id, upload_id, caption, taken_at, lat, lng, altitude, camera, position)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    input.dayId, input.uploadId,
+    input.dayId, input.tripId, input.uploadId,
     input.caption ?? null, input.takenAt ?? null,
     input.lat ?? null, input.lng ?? null,
     input.altitude ?? null, input.camera ?? null,
@@ -122,11 +126,11 @@ export function detachPhoto(photo: DayPhoto): { uploadFilename: string } {
 
 /** Bulk re-set positions in one transaction. orderedIds are the day_photos
  *  ids in their new desired order. Ignores ids not currently in the day. */
-export function reorderPhotos(dayId: number, orderedIds: number[]): DayPhoto[] {
+export function reorderPhotos(dayId: number, tripId: number, orderedIds: number[]): DayPhoto[] {
   const tx = db.transaction((ids: number[]) => {
-    const stmt = db.prepare('UPDATE day_photos SET position = ? WHERE id = ? AND day_id = ?');
-    ids.forEach((id, idx) => stmt.run(idx, id, dayId));
+    const stmt = db.prepare('UPDATE day_photos SET position = ? WHERE id = ? AND day_id = ? AND trip_id = ?');
+    ids.forEach((id, idx) => stmt.run(idx, id, dayId, tripId));
   });
   tx(orderedIds);
-  return listPhotos(dayId);
+  return listPhotos(dayId, tripId);
 }

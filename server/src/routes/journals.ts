@@ -24,7 +24,7 @@ router.get('/', authenticate, (req: Request, res: Response) => {
   const { tripId, dayId } = req.params;
   if (!journalService.verifyTripAccess(tripId, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
   if (!journalService.dayAccessible(dayId, tripId)) return res.status(404).json({ error: 'Day not found' });
-  res.json({ journal: journalService.getJournal(Number(dayId)) });
+  res.json({ journal: journalService.getJournal(Number(dayId), Number(tripId)) });
 });
 
 router.put('/', authenticate, (req: Request, res: Response) => {
@@ -45,7 +45,7 @@ router.put('/', authenticate, (req: Request, res: Response) => {
   // Stale-write precondition (M5 slice 4 pattern). Only fires when the caller
   // sends If-Unmodified-Since AND a row already exists; first-write inserts
   // skip this check entirely.
-  const current = journalService.getJournal(Number(dayId));
+  const current = journalService.getJournal(Number(dayId), Number(tripId));
   const observed = req.header('If-Unmodified-Since')?.trim();
   if (observed && current?.updated_at && observed !== current.updated_at) {
     const mutationId = (req.header('X-Client-Mutation-Id') || '').trim();
@@ -57,6 +57,7 @@ router.put('/', authenticate, (req: Request, res: Response) => {
         method: 'PUT',
         recordType: 'journal',
         recordId: Number(dayId),
+        recordTripId: Number(tripId),
         minePayload: req.body,
         theirsSnapshot: { day_id: current.day_id, content_markdown: current.content_markdown, updated_at: current.updated_at },
         observedUpdatedAt: observed,
@@ -70,7 +71,7 @@ router.put('/', authenticate, (req: Request, res: Response) => {
     }
   }
 
-  const journal = journalService.upsertJournal(Number(dayId), content_markdown, authReq.user.id);
+  const journal = journalService.upsertJournal(Number(dayId), Number(tripId), content_markdown, authReq.user.id);
   res.json({ journal });
   broadcast(tripId, 'dayJournal:updated', { dayId: Number(dayId), journal }, req.headers['x-socket-id'] as string);
 });

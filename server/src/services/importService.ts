@@ -427,9 +427,9 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
       // 4b. Journal
       if (d.journal && d.journal.content_markdown) {
         db.prepare(`
-          INSERT INTO day_journals (day_id, content_markdown, updated_by)
-          VALUES (?, ?, ?)
-        `).run(newDayId, d.journal.content_markdown, importerId);
+          INSERT INTO day_journals (day_id, trip_id, content_markdown, updated_by)
+          VALUES (?, ?, ?, ?)
+        `).run(newDayId, newTripId, d.journal.content_markdown, importerId);
       }
 
       // 4c. Photos
@@ -460,10 +460,11 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
         `).run(newTripId, newFilename, photo.original_name, binary!.length, photo.mime_type, importerId);
 
         db.prepare(`
-          INSERT INTO day_photos (day_id, upload_id, caption, taken_at, lat, lng, altitude, camera, position)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO day_photos (day_id, trip_id, upload_id, caption, taken_at, lat, lng, altitude, camera, position)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           newDayId,
+          newTripId,
           Number(tf.lastInsertRowid),
           photo.caption ?? null,
           photo.taken_at ?? null,

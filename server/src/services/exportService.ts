@@ -159,13 +159,13 @@ export function exportTrip(
   // summary. Layer journal + photos on top per day.
   const { days: rawDays } = listDays(tripId);
   const days: ExportedDay[] = rawDays.map((d) => {
-    const journalRow = getJournal(d.id);
+    const journalRow = getJournal(d.id, Number(tripId)); // [460-fork] M13 s4: this trip's own journal on shared days
     let journalUsername: string | null = null;
     if (journalRow?.updated_by) {
       const u = db.prepare('SELECT username FROM users WHERE id = ?').get(journalRow.updated_by) as { username: string } | undefined;
       journalUsername = u?.username ?? null;
     }
-    const photos: ExportedPhoto[] = listPhotos(d.id).map((p) => ({
+    const photos: ExportedPhoto[] = listPhotos(d.id, Number(tripId)).map((p) => ({
       id: p.id,
       filename: p.filename,
       original_name: p.original_name,

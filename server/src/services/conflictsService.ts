@@ -20,6 +20,7 @@ export interface ConflictRow {
   method: string;
   record_type: string;
   record_id: number;
+  record_trip_id: number | null;
   mine_payload: string;
   theirs_snapshot: string;
   observed_updated_at: string;
@@ -62,6 +63,7 @@ export function parkAsConflict(params: {
   method: string;
   recordType: string;
   recordId: number;
+  recordTripId?: number | null;
   minePayload: unknown;
   theirsSnapshot: unknown;
   observedUpdatedAt: string;
@@ -70,9 +72,9 @@ export function parkAsConflict(params: {
   const id = randomUUID();
   db.prepare(`
     INSERT INTO client_mutation_conflicts (
-      id, user_id, client_mutation_id, endpoint, method, record_type, record_id,
+      id, user_id, client_mutation_id, endpoint, method, record_type, record_id, record_trip_id,
       mine_payload, theirs_snapshot, observed_updated_at, server_updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     params.userId,
@@ -81,6 +83,7 @@ export function parkAsConflict(params: {
     params.method,
     params.recordType,
     params.recordId,
+    params.recordTripId ?? null,
     JSON.stringify(params.minePayload ?? null),
     JSON.stringify(params.theirsSnapshot ?? null),
     params.observedUpdatedAt,

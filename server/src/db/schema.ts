@@ -607,6 +607,7 @@ function createTables(db: Database.Database): void {
       method TEXT NOT NULL,
       record_type TEXT NOT NULL,
       record_id INTEGER NOT NULL,
+      record_trip_id INTEGER, -- [460-fork] M13 slice 4: per-(day,trip) journal conflicts
       mine_payload TEXT NOT NULL,
       theirs_snapshot TEXT NOT NULL,
       observed_updated_at TEXT NOT NULL,

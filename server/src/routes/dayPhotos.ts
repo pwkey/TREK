@@ -75,7 +75,7 @@ router.get('/', authenticate, (req: Request, res: Response) => {
   const { tripId, dayId } = req.params;
   if (!dayPhotoService.verifyTripAccess(tripId, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
   if (!dayPhotoService.dayAccessible(dayId, tripId)) return res.status(404).json({ error: 'Day not found' });
-  res.json({ photos: dayPhotoService.listPhotos(Number(dayId)) });
+  res.json({ photos: dayPhotoService.listPhotos(Number(dayId), Number(tripId)) });
 });
 
 router.post('/', authenticate, demoUploadBlock, upload.single('file'), (req: Request, res: Response) => {
@@ -117,6 +117,7 @@ router.post('/', authenticate, demoUploadBlock, upload.single('file'), (req: Req
 
   const photo = dayPhotoService.attachPhoto({
     dayId: Number(dayId),
+    tripId: Number(tripId),
     uploadId: created.id,
     caption: typeof req.body.caption === 'string' ? req.body.caption : null,
     takenAt: typeof req.body.taken_at === 'string' ? req.body.taken_at : null,
@@ -142,7 +143,7 @@ router.put('/reorder', authenticate, (req: Request, res: Response) => {
   const orderedIds = Array.isArray(req.body?.orderedIds) ? (req.body.orderedIds as unknown[]).map(Number).filter(n => Number.isFinite(n)) : null;
   if (!orderedIds) return res.status(400).json({ error: 'orderedIds must be an array of numbers' });
 
-  const photos = dayPhotoService.reorderPhotos(Number(dayId), orderedIds);
+  const photos = dayPhotoService.reorderPhotos(Number(dayId), Number(tripId), orderedIds);
   res.json({ photos });
   broadcast(tripId, 'dayPhoto:reordered', { dayId: Number(dayId), orderedIds }, req.headers['x-socket-id'] as string);
 });
@@ -156,7 +157,7 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
     return res.status(403).json({ error: 'No permission' });
 
   const current = dayPhotoService.getPhoto(Number(id));
-  if (!current || current.day_id !== Number(dayId)) return res.status(404).json({ error: 'Photo not found' });
+  if (!current || current.day_id !== Number(dayId) || current.trip_id !== Number(tripId)) return res.status(404).json({ error: 'Photo not found' });
 
   const { caption, position, taken_at } = req.body ?? {};
   if (caption !== undefined && caption !== null && typeof caption !== 'string') return res.status(400).json({ error: 'caption must be a string or null' });
@@ -177,7 +178,7 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
     return res.status(403).json({ error: 'No permission' });
 
   const current = dayPhotoService.getPhoto(Number(id));
-  if (!current || current.day_id !== Number(dayId)) return res.status(404).json({ error: 'Photo not found' });
+  if (!current || current.day_id !== Number(dayId) || current.trip_id !== Number(tripId)) return res.status(404).json({ error: 'Photo not found' });
 
   const { uploadFilename } = dayPhotoService.detachPhoto(current);
   // Best-effort disk cleanup. If the file is already gone (e.g. previous

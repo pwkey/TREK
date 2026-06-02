@@ -10,6 +10,7 @@ import { db, canAccessTrip } from '../db/database';
 
 export interface DayJournal {
   day_id: number;
+  trip_id: number;
   content_markdown: string;
   updated_at: string;
   updated_by: number | null;
@@ -34,22 +35,24 @@ export function dayAccessible(dayId: string | number, tripId: string | number) {
   `).get(dayId, tripId, tripId);
 }
 
-export function getJournal(dayId: number): DayJournal | null {
-  const row = db.prepare('SELECT * FROM day_journals WHERE day_id = ?').get(dayId) as DayJournal | undefined;
+// [460-fork] M13 slice 4 — journals are per (day, trip): each linked trip keeps
+// its own journal on a shared-segment day.
+export function getJournal(dayId: number, tripId: number): DayJournal | null {
+  const row = db.prepare('SELECT * FROM day_journals WHERE day_id = ? AND trip_id = ?').get(dayId, tripId) as DayJournal | undefined;
   return row ?? null;
 }
 
 /** Insert or replace the journal row for a day. Bumps updated_at to
  *  CURRENT_TIMESTAMP so the conflict precondition currency moves forward
  *  on every successful write. */
-export function upsertJournal(dayId: number, contentMarkdown: string, updatedBy: number): DayJournal {
+export function upsertJournal(dayId: number, tripId: number, contentMarkdown: string, updatedBy: number): DayJournal {
   db.prepare(`
-    INSERT INTO day_journals (day_id, content_markdown, updated_at, updated_by)
-    VALUES (?, ?, CURRENT_TIMESTAMP, ?)
-    ON CONFLICT(day_id) DO UPDATE SET
+    INSERT INTO day_journals (day_id, trip_id, content_markdown, updated_at, updated_by)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
+    ON CONFLICT(day_id, trip_id) DO UPDATE SET
       content_markdown = excluded.content_markdown,
       updated_at = CURRENT_TIMESTAMP,
       updated_by = excluded.updated_by
-  `).run(dayId, contentMarkdown, updatedBy);
-  return getJournal(dayId)!;
+  `).run(dayId, tripId, contentMarkdown, updatedBy);
+  return getJournal(dayId, tripId)!;
 }

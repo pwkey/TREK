@@ -145,6 +145,15 @@ time from **Settings → Account**.
 > **inside the app on your notification bell** (top of the screen), not in your
 > inbox. So always check the bell, not your email.
 
+> **Everyone needs their own email address.** Each account is tied to a unique
+> email, so two people can't share one — the second sign-up is turned away as
+> "already in use". If you both want the app on your own phones, use an email
+> each. Don't have two between you? The app **never sends email** (your address
+> is only your login, and how household invites find you), so a couple who share
+> one inbox can each sign up with a **"plus" alias** of it — e.g.
+> **yourname+jane@gmail.com** and **yourname+john@gmail.com**. Gmail delivers
+> both to the same inbox, but the app treats them as two separate logins.
+
 ---
 
 ## 4. Finding your way around

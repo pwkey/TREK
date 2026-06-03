@@ -308,6 +308,48 @@ describe('Import apply', () => {
     expect(todo.name).toBe('Cancel the spare night');
     expect(todo.category).toBe('Bookings to sort');
   });
+
+  it('IMPORT-010 — place categories resolve-or-create per user and dedupe by name (regression)', async () => {
+    // The importer used to drop place categories entirely (no category_id in the
+    // INSERT), so imported places were always uncategorised. Categories are
+    // per-user with no trip_id, so two places sharing a name must create ONE
+    // category, and an unnamed/absent category leaves category_id null.
+    const { user } = createUser(testDb);
+    const envelope = {
+      schema_version: 1, app: '460-trip-planner', format: 'metadata-only',
+      trip: {
+        title: 'Category import test', days: [], reservations: [], accommodations: [],
+        places: [
+          { id: 1, name: 'Alhambra', category: { name: 'Sightseeing', color: '#e11d48', icon: '🏛️' } },
+          { id: 2, name: 'Sagrada Família', category: { name: 'Sightseeing', color: '#e11d48', icon: '🏛️' } },
+          { id: 3, name: 'El Celler', category: { name: 'Food & Drink', color: '#f59e0b', icon: '🍽️' } },
+          { id: 4, name: 'Random viewpoint' },
+        ],
+      },
+    };
+    const res = await request(app)
+      .post('/api/trips/import?dry_run=false')
+      .set('Cookie', authCookie(user.id))
+      .attach('file', Buffer.from(JSON.stringify(envelope)), 'export.json');
+    expect(res.status).toBe(201);
+    const tripId = res.body.result.trip_id;
+
+    // Exactly two categories created for this user (Sightseeing deduped).
+    const cats = testDb.prepare('SELECT name, color, icon FROM categories WHERE user_id = ? ORDER BY name').all(user.id) as Array<{ name: string; color: string; icon: string }>;
+    expect(cats.map(c => c.name)).toEqual(['Food & Drink', 'Sightseeing']);
+    const sightseeing = cats.find(c => c.name === 'Sightseeing')!;
+    expect(sightseeing.color).toBe('#e11d48');
+    expect(sightseeing.icon).toBe('🏛️');
+
+    // Both Sightseeing places point at the same category id; the uncategorised
+    // place is null.
+    const places = testDb.prepare('SELECT name, category_id FROM places WHERE trip_id = ? ORDER BY name').all(tripId) as Array<{ name: string; category_id: number | null }>;
+    const byName = Object.fromEntries(places.map(p => [p.name, p.category_id]));
+    expect(byName['Alhambra']).not.toBeNull();
+    expect(byName['Alhambra']).toBe(byName['Sagrada Família']);
+    expect(byName['El Celler']).not.toBe(byName['Alhambra']);
+    expect(byName['Random viewpoint']).toBeNull();
+  });
 });
 
 // [460-fork] M12 slices 2+3 — faithful off-boarding round-trip.

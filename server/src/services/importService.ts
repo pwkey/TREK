@@ -118,6 +118,17 @@ interface ImportedAssignment {
   notes?: string | null;
 }
 
+// [460-fork] Denormalised category carried on each place by the exporter
+// (listPlaces emits `category: {id, name, color, icon}`). On import we match
+// by name within the importing user's categories and create if missing — ids
+// are instance-specific so only the name/color/icon are meaningful here.
+interface ImportedCategory {
+  id?: number;
+  name?: string | null;
+  color?: string | null;
+  icon?: string | null;
+}
+
 interface ImportedPlace {
   id: number;
   name: string;
@@ -126,6 +137,7 @@ interface ImportedPlace {
   lng?: number | null;
   address?: string | null;
   notes?: string | null;
+  category?: ImportedCategory | null;
 }
 
 interface ImportedReservation {
@@ -350,12 +362,37 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
     const newTripId = Number(tripResult.lastInsertRowid);
 
     // 2. Places — preserve old IDs in a map so assignments can be re-linked.
+    // [460-fork] Categories are denormalised on each place (name/color/icon).
+    // Categories are per-user (no trip_id), so we resolve-or-create against the
+    // importing user's own categories, matching by name (case-insensitive),
+    // and cache the resolution so N places sharing a category create it once.
+    const categoryIdByName = new Map<string, number>();
+    const resolveCategoryId = (cat: ImportedCategory | null | undefined): number | null => {
+      const name = cat?.name?.trim();
+      if (!name) return null;
+      const key = name.toLowerCase();
+      const cached = categoryIdByName.get(key);
+      if (cached !== undefined) return cached;
+      const existing = db
+        .prepare('SELECT id FROM categories WHERE user_id = ? AND name = ? COLLATE NOCASE')
+        .get(importerId, name) as { id: number } | undefined;
+      const id = existing
+        ? existing.id
+        : Number(
+            db
+              .prepare('INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)')
+              .run(name, cat?.color ?? '#6366f1', cat?.icon ?? '📍', importerId).lastInsertRowid,
+          );
+      categoryIdByName.set(key, id);
+      return id;
+    };
+
     const placeIdMap = new Map<number, number>();
     for (const p of trip.places ?? []) {
       const r = db.prepare(`
-        INSERT INTO places (trip_id, name, description, lat, lng, address, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(newTripId, p.name, p.description ?? null, p.lat ?? null, p.lng ?? null, p.address ?? null, p.notes ?? null);
+        INSERT INTO places (trip_id, name, description, lat, lng, address, notes, category_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(newTripId, p.name, p.description ?? null, p.lat ?? null, p.lng ?? null, p.address ?? null, p.notes ?? null, resolveCategoryId(p.category));
       placeIdMap.set(p.id, Number(r.lastInsertRowid));
     }
 

@@ -841,6 +841,7 @@ const hu: Record<string, string | { name: string; category: string }[]> = {
   'places.formLng': 'Hosszúsági fok (pl. 2.3522)',
   'places.formCategory': 'Kategória',
   'places.noCategory': 'Nincs kategória',
+  'places.setCategory': 'Kategória beállítása',
   'places.categoryNamePlaceholder': 'Kategória neve',
   'places.formTime': 'Időpont',
   'places.startTime': 'Kezdés',

@@ -825,6 +825,7 @@ const br: Record<string, string | { name: string; category: string }[]> = {
   'places.formLng': 'Longitude (ex.: -46.6333)',
   'places.formCategory': 'Categoria',
   'places.noCategory': 'Sem categoria',
+  'places.setCategory': 'Definir categoria',
   'places.categoryNamePlaceholder': 'Nome da categoria',
   'places.formTime': 'Horário',
   'places.startTime': 'Início',

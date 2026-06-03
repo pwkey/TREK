@@ -840,6 +840,7 @@ const zh: Record<string, string> = {
   'places.formLng': '经度（如 2.3522）',
   'places.formCategory': '分类',
   'places.noCategory': '无分类',
+  'places.setCategory': '设置分类',
   'places.categoryNamePlaceholder': '分类名称',
   'places.formTime': '时间',
   'places.startTime': '开始',

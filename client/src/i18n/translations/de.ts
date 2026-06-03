@@ -841,6 +841,7 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'places.formLng': 'Längengrad (z.B. 2.3522)',
   'places.formCategory': 'Kategorie',
   'places.noCategory': 'Keine Kategorie',
+  'places.setCategory': 'Kategorie festlegen',
   'places.categoryNamePlaceholder': 'Kategoriename',
   'places.formTime': 'Uhrzeit',
   'places.startTime': 'Start',

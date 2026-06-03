@@ -840,6 +840,7 @@ const fr: Record<string, string> = {
   'places.formLng': 'Longitude (ex. 2.3522)',
   'places.formCategory': 'Catégorie',
   'places.noCategory': 'Sans catégorie',
+  'places.setCategory': 'Définir la catégorie',
   'places.categoryNamePlaceholder': 'Nom de la catégorie',
   'places.formTime': 'Heure',
   'places.startTime': 'Début',

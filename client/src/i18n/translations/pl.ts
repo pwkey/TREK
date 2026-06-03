@@ -799,6 +799,7 @@ const pl: Record<string, string | { name: string; category: string }[]> = {
   'places.formLng': 'Długość (np. 2.3522)',
   'places.formCategory': 'Kategoria',
   'places.noCategory': 'Brak kategorii',
+  'places.setCategory': 'Ustaw kategorię',
   'places.categoryNamePlaceholder': 'Nazwa kategorii',
   'places.formTime': 'Godzina',
   'places.startTime': 'Początek',

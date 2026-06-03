@@ -843,6 +843,7 @@ const ar: Record<string, string | { name: string; category: string }[]> = {
   'places.formLng': 'خط الطول (مثال: 2.3522)',
   'places.formCategory': 'الفئة',
   'places.noCategory': 'بلا فئة',
+  'places.setCategory': 'تعيين الفئة',
   'places.categoryNamePlaceholder': 'اسم الفئة',
   'places.formTime': 'الوقت',
   'places.startTime': 'البداية',

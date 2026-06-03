@@ -816,6 +816,7 @@ const es: Record<string, string> = {
   'places.formLng': 'Longitud (p. ej. 2.3522)',
   'places.formCategory': 'Categoría',
   'places.noCategory': 'Sin categoría',
+  'places.setCategory': 'Establecer categoría',
   'places.categoryNamePlaceholder': 'Nombre de la categoría',
   'places.formTime': 'Hora',
   'places.startTime': 'Inicio',

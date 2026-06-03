@@ -840,6 +840,7 @@ const ru: Record<string, string> = {
   'places.formLng': 'Долгота (напр. 2.3522)',
   'places.formCategory': 'Категория',
   'places.noCategory': 'Без категории',
+  'places.setCategory': 'Задать категорию',
   'places.categoryNamePlaceholder': 'Название категории',
   'places.formTime': 'Время',
   'places.startTime': 'Начало',

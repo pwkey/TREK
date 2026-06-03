@@ -820,6 +820,7 @@ const zhTw: Record<string, string> = {
   'places.formLng': '經度（如 2.3522）',
   'places.formCategory': '分類',
   'places.noCategory': '無分類',
+  'places.setCategory': '設定分類',
   'places.categoryNamePlaceholder': '分類名稱',
   'places.formTime': '時間',
   'places.startTime': '開始',

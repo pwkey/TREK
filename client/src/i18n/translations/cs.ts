@@ -841,6 +841,7 @@ const cs: Record<string, string | { name: string; category: string }[]> = {
   'places.formLng': 'Zeměpisná délka',
   'places.formCategory': 'Kategorie',
   'places.noCategory': 'Bez kategorie',
+  'places.setCategory': 'Nastavit kategorii',
   'places.categoryNamePlaceholder': 'Název kategorie',
   'places.formTime': 'Čas',
   'places.startTime': 'Od',

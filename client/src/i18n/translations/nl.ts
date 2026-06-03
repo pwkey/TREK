@@ -840,6 +840,7 @@ const nl: Record<string, string> = {
   'places.formLng': 'Lengtegraad (bijv. 2.3522)',
   'places.formCategory': 'Categorie',
   'places.noCategory': 'Geen categorie',
+  'places.setCategory': 'Categorie instellen',
   'places.categoryNamePlaceholder': 'Categorienaam',
   'places.formTime': 'Tijd',
   'places.startTime': 'Start',

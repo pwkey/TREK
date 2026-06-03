@@ -860,6 +860,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'places.formLng': 'Longitude (e.g. 2.3522)',
   'places.formCategory': 'Category',
   'places.noCategory': 'No Category',
+  'places.setCategory': 'Set category',
   'places.categoryNamePlaceholder': 'Category name',
   'places.formTime': 'Time',
   'places.startTime': 'Start',

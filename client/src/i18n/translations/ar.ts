@@ -789,6 +789,7 @@ const ar: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.noteSubtitle': 'ملاحظة يومية',
   'dayplan.totalCost': 'إجمالي التكلفة',
   'dayplan.days': 'الأيام',
+  'dayplan.today': 'اليوم',
   'dayplan.dayN': 'اليوم {n}',
   'dayplan.calculating': 'جارٍ الحساب...',
   'dayplan.route': 'المسار',

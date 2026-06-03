@@ -762,6 +762,7 @@ const es: Record<string, string> = {
   'dayplan.noteSubtitle': 'Nota diaria',
   'dayplan.totalCost': 'Coste total',
   'dayplan.days': 'Días',
+  'dayplan.today': 'Hoy',
   'dayplan.dayN': 'Día {n}',
   'dayplan.calculating': 'Calculando...',
   'dayplan.route': 'Ruta',

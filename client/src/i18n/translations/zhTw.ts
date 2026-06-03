@@ -766,6 +766,7 @@ const zhTw: Record<string, string> = {
   'dayplan.noteSubtitle': '每日備註',
   'dayplan.totalCost': '總費用',
   'dayplan.days': '天',
+  'dayplan.today': '今天',
   'dayplan.dayN': '第 {n} 天',
   'dayplan.calculating': '計算中...',
   'dayplan.route': '路線',

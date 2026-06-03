@@ -786,6 +786,7 @@ const nl: Record<string, string> = {
   'dayplan.noteSubtitle': 'Dagnotitie',
   'dayplan.totalCost': 'Totale kosten',
   'dayplan.days': 'Dagen',
+  'dayplan.today': 'Vandaag',
   'dayplan.dayN': 'Dag {n}',
   'dayplan.calculating': 'Berekenen...',
   'dayplan.route': 'Route',

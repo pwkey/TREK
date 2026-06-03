@@ -786,6 +786,7 @@ const zh: Record<string, string> = {
   'dayplan.noteSubtitle': '每日备注',
   'dayplan.totalCost': '总费用',
   'dayplan.days': '天',
+  'dayplan.today': '今天',
   'dayplan.dayN': '第 {n} 天',
   'dayplan.calculating': '计算中...',
   'dayplan.route': '路线',

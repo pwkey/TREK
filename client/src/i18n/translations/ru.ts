@@ -786,6 +786,7 @@ const ru: Record<string, string> = {
   'dayplan.noteSubtitle': 'Заметка на день',
   'dayplan.totalCost': 'Общая стоимость',
   'dayplan.days': 'Дни',
+  'dayplan.today': 'Сегодня',
   'dayplan.dayN': 'День {n}',
   'dayplan.calculating': 'Расчёт...',
   'dayplan.route': 'Маршрут',

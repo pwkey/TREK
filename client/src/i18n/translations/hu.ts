@@ -787,6 +787,7 @@ const hu: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.noteSubtitle': 'Napi jegyzet',
   'dayplan.totalCost': 'Összköltség',
   'dayplan.days': 'nap',
+  'dayplan.today': 'Ma',
   'dayplan.dayN': '{n}. nap',
   'dayplan.calculating': 'Számítás...',
   'dayplan.route': 'Útvonal',

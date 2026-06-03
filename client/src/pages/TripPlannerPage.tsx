@@ -259,6 +259,19 @@ export default function TripPlannerPage(): React.ReactElement | null {
     return () => window.removeEventListener('segments:changed', onSegmentsChanged)
   }, [tripId])
 
+  // [460-fork] Default the selected day to *today* when the trip is in progress,
+  // otherwise the first day — rather than opening with nothing selected. Runs
+  // when days (re)load, including on a trip switch; skipped when a valid day is
+  // already selected so it never overrides a deliberate choice.
+  useEffect(() => {
+    if (!days.length) return
+    if (selectedDayId != null && days.some(d => d.id === selectedDayId)) return
+    const n = new Date()
+    const todayIso = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+    const todayDay = days.find(d => d.date === todayIso)
+    tripActions.setSelectedDay((todayDay ?? days[0]).id)
+  }, [days, selectedDayId])
+
   const [mapCategoryFilter, setMapCategoryFilter] = useState<string>('')
 
   const [expandedDayIds, setExpandedDayIds] = useState<Set<number> | null>(null)

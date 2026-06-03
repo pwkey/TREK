@@ -812,6 +812,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.noteSubtitle': 'Daily Note',
   'dayplan.totalCost': 'Total Cost',
   'dayplan.days': 'Days',
+  'dayplan.today': 'Today',
   'dayplan.dayN': 'Day {n}',
   'dayplan.calculating': 'Calculating...',
   'dayplan.route': 'Route',

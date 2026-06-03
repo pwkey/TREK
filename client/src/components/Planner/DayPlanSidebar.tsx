@@ -4,7 +4,7 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download, Archive, FileJson, Images } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download, Archive, FileJson, Images, CalendarDays } from 'lucide-react'
 import BatchPhotoImport from '../Journal/BatchPhotoImport' // [460-fork] M6 follow-up
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
@@ -888,6 +888,27 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const anyGeoAssignment = Object.values(assignments).flatMap(da => da).find(a => a.place?.lat && a.place?.lng)
   const anyGeoPlace = anyGeoAssignment || (places || []).find(p => p.lat && p.lng)
 
+  // [460-fork] "Today" navigation — when the trip is in progress, the day whose
+  // calendar date is today. Local (wall-clock) date, since day.date is a
+  // YYYY-MM-DD string in the trip's own calendar; null when today is outside
+  // the trip, in which case the button is hidden.
+  const todayDay = useMemo(() => {
+    const n = new Date()
+    const iso = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+    return days.find(d => d.date === iso) ?? null
+  }, [days])
+
+  const goToToday = (): void => {
+    if (!todayDay) return
+    onSelectDay(todayDay.id)
+    if (onDayDetail) onDayDetail(todayDay)
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-day-id="${todayDay.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }}>
       {/* Reise-Titel */}
@@ -900,6 +921,24 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                 {[trip.start_date, trip.end_date].filter(Boolean).map(d => new Date(d + 'T00:00:00Z').toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' })).join(' – ')}
                 {days.length > 0 && ` · ${days.length} ${t('dayplan.days')}`}
               </div>
+            )}
+            {/* [460-fork] Jump to the current day — only while the trip is in
+                progress (today within range). */}
+            {todayDay && (
+              <button
+                onClick={goToToday}
+                title={t('dayplan.today') || 'Today'}
+                aria-label={t('dayplan.today') || 'Today'}
+                style={{
+                  marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '4px 10px', borderRadius: 999,
+                  border: '1px solid var(--accent)', background: 'transparent',
+                  color: 'var(--accent)', fontSize: 11, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                <CalendarDays size={12} strokeWidth={2.2} /> {t('dayplan.today') || 'Today'}
+              </button>
             )}
           </div>
           <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -1222,7 +1261,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
           const placeItems = merged.filter(i => i.type === 'place')
 
           return (
-            <div key={day.id} style={{ borderBottom: '1px solid var(--border-faint)' }}>
+            <div key={day.id} data-day-id={day.id} style={{ borderBottom: '1px solid var(--border-faint)' }}>
               {/* Tages-Header — akzeptiert Drops aus der PlacesSidebar */}
               <div
                 onClick={() => { onSelectDay(day.id); if (onDayDetail) onDayDetail(day) }}

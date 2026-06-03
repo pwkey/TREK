@@ -787,6 +787,7 @@ const cs: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.noteSubtitle': 'Poznámka ke dni',
   'dayplan.totalCost': 'Celkové náklady',
   'dayplan.days': 'Dny',
+  'dayplan.today': 'Dnes',
   'dayplan.dayN': 'Den {n}',
   'dayplan.calculating': 'Počítání...',
   'dayplan.route': 'Trasa',

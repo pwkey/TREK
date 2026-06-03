@@ -566,7 +566,7 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
     // 8. Todo items.
     for (const t of trip.todo_items ?? []) {
       db.prepare(`
-        INSERT INTO todo_items (trip_id, text, category, checked, sort_order)
+        INSERT INTO todo_items (trip_id, name, category, checked, sort_order)
         VALUES (?, ?, ?, ?, ?)
       `).run(
         newTripId,

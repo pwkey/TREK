@@ -287,6 +287,27 @@ describe('Import apply', () => {
     expect(res.status).toBe(400);
     expect(res.body.report.errors.length).toBeGreaterThan(0);
   });
+
+  it('IMPORT-009 — to-do items import into the todo_items.name column (regression)', async () => {
+    // Was inserting into a non-existent `text` column, which crashed the whole
+    // apply transaction for any trip that had to-dos. Guards the column name.
+    const { user } = createUser(testDb);
+    const envelope = {
+      schema_version: 1, app: '460-trip-planner', format: 'metadata-only',
+      trip: {
+        title: 'Todo import test', days: [], places: [], reservations: [], accommodations: [],
+        todo_items: [{ name: 'Cancel the spare night', category: 'Bookings to sort', checked: 0, sort_order: 0 }],
+      },
+    };
+    const res = await request(app)
+      .post('/api/trips/import?dry_run=false')
+      .set('Cookie', authCookie(user.id))
+      .attach('file', Buffer.from(JSON.stringify(envelope)), 'export.json');
+    expect(res.status).toBe(201);
+    const todo = testDb.prepare('SELECT name, category FROM todo_items WHERE trip_id = ?').get(res.body.result.trip_id) as { name: string; category: string };
+    expect(todo.name).toBe('Cancel the spare night');
+    expect(todo.category).toBe('Bookings to sort');
+  });
 });
 
 // [460-fork] M12 slices 2+3 — faithful off-boarding round-trip.

@@ -77,8 +77,11 @@ Backup Pull script/
 # [460-fork] Generated user-guide .docx — build artefact. The markdown
 # source of truth is docs/ours-user-guide.md; regenerate the .docx with
 # "Backup Pull script/build-user-guide.cjs". Keeping the binary out of git
-# avoids noisy diffs and merge conflicts on a rendered file.
+# avoids noisy diffs and merge conflicts on a rendered file. The PDF
+# hand-out (exported from the .docx to send to companions) is the same kind
+# of artefact, so it's ignored too.
 460 Trip Planner - User Guide.docx
+460 Trip Planner - User Guide.pdf
 *.docx
 
 # [460-fork] Local manual-test data — real trip photos + exported JSON used

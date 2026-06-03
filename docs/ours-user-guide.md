@@ -467,6 +467,41 @@ are shared.
 > that's exactly what the "Create a new trip from this segment" option is
 > for. You don't need to prepare anything in advance.
 
+### Inviting another family — step by step
+
+Use this when another couple or family is joining you for part of a trip. Two
+things to know up front: each person who wants the app on their own phone must
+**register their own account** (installing alone isn't enough), and the segment
+invite is a **link you send**, not an automatic email.
+
+1. **Ask them to register.** Send them the link
+   (https://460planner.pwkconsulting.org); each person opens it, **creates an
+   account**, and installs it to their home screen (Section 3). Installing is for
+   convenience — the account is what unlocks everything.
+2. **Have them set up their own household.** The other couple links themselves
+   as a household: one invites the other (**Settings → Account → Household** — it
+   appears on the other's notification bell). This is what lets **both** of them
+   see the shared trip, not just the one who accepts.
+3. **They create their trip** for the shared dates the normal way (My Trips → new
+   trip). Because they're a household, the partner is added automatically.
+4. **You create the segment and its invite link.** On your trip, select the
+   shared days, create a **segment**, and generate its **invite link**.
+5. **Send the link to one of them** — the person who owns the trip from step 3.
+   They open it and choose **"Attach to my existing trip."** The shared days now
+   appear for **both** of them.
+
+> **Send the link to one person, not both.** It's a single-use link, and only a
+> trip's owner can accept it — so send it to whoever owns that family's trip.
+
+> **The "Create a new trip from this segment" shortcut — and when *not* to use
+> it.** If the person accepting hasn't made a trip yet, the invite offers to
+> create one on the spot. Handy — but that trip is owned by **that one person
+> only**, so their partner won't see it. For **both** partners to see the shared
+> days, use steps 2–3 (household + a normally-created trip) and **Attach** to it,
+> rather than the create-new shortcut. (If only one of the couple uses the app,
+> the shortcut is perfectly fine — the other can be a name-only member of their
+> household.)
+
 ### What's shared on a shared segment — and what stays private
 
 Sharing days does **not** mean sharing everything. The **plan** is shared; each

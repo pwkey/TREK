@@ -119,9 +119,10 @@ interface ImportedAssignment {
 }
 
 // [460-fork] Denormalised category carried on each place by the exporter
-// (listPlaces emits `category: {id, name, color, icon}`). On import we match
-// by name within the importing user's categories and create if missing — ids
-// are instance-specific so only the name/color/icon are meaningful here.
+// (listPlaces emits `category: {id, name, color, icon}`). On import we match by
+// name across the whole instance (categories are shared, not per-user) and
+// create if missing — ids are instance-specific so only the name/color/icon
+// are meaningful here.
 interface ImportedCategory {
   id?: number;
   name?: string | null;
@@ -363,9 +364,11 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
 
     // 2. Places — preserve old IDs in a map so assignments can be re-linked.
     // [460-fork] Categories are denormalised on each place (name/color/icon).
-    // Categories are per-user (no trip_id), so we resolve-or-create against the
-    // importing user's own categories, matching by name (case-insensitive),
-    // and cache the resolution so N places sharing a category create it once.
+    // The app treats categories as shared instance-wide (categoryService.list
+    // has no user filter), so resolve-or-create matches by name GLOBALLY —
+    // reusing an existing same-named category rather than minting a per-user
+    // duplicate. New categories record the importer as creator. The cache means
+    // N places sharing a category resolve it once.
     const categoryIdByName = new Map<string, number>();
     const resolveCategoryId = (cat: ImportedCategory | null | undefined): number | null => {
       const name = cat?.name?.trim();
@@ -374,8 +377,8 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
       const cached = categoryIdByName.get(key);
       if (cached !== undefined) return cached;
       const existing = db
-        .prepare('SELECT id FROM categories WHERE user_id = ? AND name = ? COLLATE NOCASE')
-        .get(importerId, name) as { id: number } | undefined;
+        .prepare('SELECT id FROM categories WHERE name = ? COLLATE NOCASE ORDER BY id LIMIT 1')
+        .get(name) as { id: number } | undefined;
       const id = existing
         ? existing.id
         : Number(

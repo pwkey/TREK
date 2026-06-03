@@ -309,7 +309,7 @@ describe('Import apply', () => {
     expect(todo.category).toBe('Bookings to sort');
   });
 
-  it('IMPORT-010 — place categories resolve-or-create per user and dedupe by name (regression)', async () => {
+  it('IMPORT-010 — place categories resolve-or-create and dedupe by name (regression)', async () => {
     // The importer used to drop place categories entirely (no category_id in the
     // INSERT), so imported places were always uncategorised. Categories are
     // per-user with no trip_id, so two places sharing a name must create ONE
@@ -349,6 +349,41 @@ describe('Import apply', () => {
     expect(byName['Alhambra']).toBe(byName['Sagrada Família']);
     expect(byName['El Celler']).not.toBe(byName['Alhambra']);
     expect(byName['Random viewpoint']).toBeNull();
+  });
+
+  it('IMPORT-011 — import reuses an existing same-named category instead of duplicating (shared, not per-user)', async () => {
+    // Categories are shared instance-wide, so an import by a different user must
+    // reuse a category that already exists by name (case-insensitively) rather
+    // than mint a duplicate. Assert deltas, not absolute counts: the test DB
+    // keeps seeded/other-test categories across resets, so we only check that
+    // THIS import added no new 'Sightseeing' and linked to a pre-existing one.
+    const sightseeingIds = () =>
+      (testDb.prepare("SELECT id FROM categories WHERE name = 'Sightseeing' COLLATE NOCASE ORDER BY id").all() as Array<{ id: number }>).map(r => r.id);
+
+    const { user: owner } = createUser(testDb);
+    testDb.prepare(
+      "INSERT INTO categories (name, color, icon, user_id) VALUES ('Sightseeing', '#123456', 'Landmark', ?)",
+    ).run(owner.id);
+    const before = sightseeingIds();
+
+    const { user: importer } = createUser(testDb);
+    const envelope = {
+      schema_version: 1, app: '460-trip-planner', format: 'metadata-only',
+      trip: {
+        title: 'Reuse category test', days: [], reservations: [], accommodations: [],
+        places: [{ id: 1, name: 'Alhambra', category: { name: 'sightseeing', color: '#999999', icon: 'Mountain' } }],
+      },
+    };
+    const res = await request(app)
+      .post('/api/trips/import?dry_run=false')
+      .set('Cookie', authCookie(importer.id))
+      .attach('file', Buffer.from(JSON.stringify(envelope)), 'export.json');
+    expect(res.status).toBe(201);
+
+    // No new 'Sightseeing' minted, and the place links to a pre-existing one.
+    expect(sightseeingIds()).toEqual(before);
+    const place = testDb.prepare(`SELECT category_id FROM places WHERE trip_id = ?`).get(res.body.result.trip_id) as { category_id: number };
+    expect(before).toContain(place.category_id);
   });
 });
 

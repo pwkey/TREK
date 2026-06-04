@@ -867,6 +867,7 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'places.formCategory': 'Kategorie',
   'places.noCategory': 'Keine Kategorie',
   'places.setCategory': 'Kategorie festlegen',
+  'places.categoryEmpty': 'Keine Orte in dieser Kategorie',
   'places.categoryNamePlaceholder': 'Kategoriename',
   'places.formTime': 'Uhrzeit',
   'places.startTime': 'Start',

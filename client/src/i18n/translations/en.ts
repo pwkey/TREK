@@ -886,6 +886,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'places.formCategory': 'Category',
   'places.noCategory': 'No Category',
   'places.setCategory': 'Set category',
+  'places.categoryEmpty': 'No places in this category',
   'places.categoryNamePlaceholder': 'Category name',
   'places.formTime': 'Time',
   'places.startTime': 'Start',

@@ -126,6 +126,19 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
     return true
   }), [places, filter, categoryFilters, search, plannedIds])
 
+  // [460-fork] Per-category place counts, so the filter dropdown can show how
+  // many places each category holds (and flag the empty ones).
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const p of places) {
+      if (p.category_id != null) {
+        const k = String(p.category_id)
+        counts[k] = (counts[k] || 0) + 1
+      }
+    }
+    return counts
+  }, [places])
+
   const isAssignedToSelectedDay = (placeId) =>
     selectedDayId && (assignments[String(selectedDayId)] || []).some(a => a.place?.id === placeId)
 
@@ -234,13 +247,15 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
                   {categories.map(c => {
                     const active = categoryFilters.has(String(c.id))
                     const CatIcon = getCategoryIcon(c.icon)
+                    const count = categoryCounts[String(c.id)] || 0
+                    const empty = count === 0
                     return (
-                      <button key={c.id} onClick={() => toggleCategoryFilter(String(c.id))} style={{
+                      <button key={c.id} onClick={() => toggleCategoryFilter(String(c.id))} title={empty ? t('places.categoryEmpty') || 'No places in this category' : undefined} style={{
                         display: 'flex', alignItems: 'center', gap: 8, width: '100%',
                         padding: '6px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
                         background: active ? 'var(--bg-hover)' : 'transparent',
                         fontFamily: 'inherit', fontSize: 12, color: 'var(--text-primary)',
-                        textAlign: 'left',
+                        textAlign: 'left', opacity: empty ? 0.5 : 1,
                       }}>
                         <div style={{
                           width: 16, height: 16, borderRadius: 4, flexShrink: 0,
@@ -251,7 +266,8 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
                           {active && <Check size={10} strokeWidth={3} color="white" />}
                         </div>
                         <CatIcon size={12} strokeWidth={2} color={c.color || 'var(--text-muted)'} />
-                        <span style={{ flex: 1 }}>{c.name}</span>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                        <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'var(--text-faint)', minWidth: 16, textAlign: 'right' }}>{count}</span>
                       </button>
                     )
                   })}

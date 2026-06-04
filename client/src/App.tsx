@@ -20,6 +20,7 @@ import { requestPersistentStorage } from './db/persistentStorage' // [460-fork] 
 import { restoreFromSnapshot } from './db/offlineSnapshot' // [460-fork] M1 follow-up
 import InAppNotificationsPage from './pages/InAppNotificationsPage.tsx'
 import { ToastContainer } from './components/shared/Toast'
+import { DataCostConfirmHost } from './components/shared/DataCostConfirmHost' // [460-fork] Milestone 14
 import SplashScreen from './components/shared/SplashScreen'
 import { TranslationProvider, useTranslation } from './i18n'
 import { authApi } from './api/client'
@@ -197,6 +198,7 @@ export default function App() {
     <TranslationProvider>
       <SplashScreen />
       <ToastContainer />
+      <DataCostConfirmHost />{/* [460-fork] Milestone 14 */}
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />

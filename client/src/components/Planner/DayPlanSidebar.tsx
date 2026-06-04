@@ -14,6 +14,7 @@ import { downloadTripPDF } from '../PDF/TripPDF'
 import { calculateRoute, generateGoogleMapsUrl, optimizeRoute } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import { useContextMenu, ContextMenu } from '../shared/ContextMenu'
+import { confirmDataCost } from '../shared/dataCostConfirm' // [460-fork] Milestone 14
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import WeatherWidget from '../Weather/WeatherWidget'
@@ -1083,6 +1084,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
             <button
               onClick={async () => {
                 if (bundleBusy) return
+                // [460-fork] M14 — the bundle pulls every photo + file as a zip.
+                if (!(await confirmDataCost({ inherentlyLarge: true, opKey: 'exportBundle' }))) return
                 setBundleBusy(true)
                 try {
                   const saved = await tripsApi.exportTripDownload(tripId, 'bundle')
@@ -1114,6 +1117,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
             <button
               onClick={async () => {
                 if (offlineBusy) return
+                // [460-fork] M14 — priming the offline cache pulls trip data + photos.
+                if (!(await confirmDataCost({ inherentlyLarge: true, opKey: 'offlineDownload' }))) return
                 setOfflineBusy(true)
                 try {
                   const bundle = await tripsApi.offlineBundle(tripId)

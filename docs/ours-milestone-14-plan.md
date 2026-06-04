@@ -110,11 +110,15 @@ flush normally.
 Display. `refreshActiveTrip()` wired into app boot. i18n in en + de (others fall
 back to en). No behaviour change yet beyond the indicator + setting.
 
-### Slice 2 — size-aware confirmations
-`confirmDataCost()` helper + wire it into the four heavy ops (photo upload,
-offline download, export bundle, restore-upload). When `dataSaver` on → default
-to "Wait for wifi"; off → default to "Continue". Tests: helper picks the right
-default + estimate; e2e on one op.
+### Slice 2 — size-aware confirmations ✅ shipped
+`confirmDataCost()` (promise-based) + `<DataCostConfirmHost>` at the app root +
+pure, unit-tested `shouldWarnDataCost()` / `formatBytes()`. Thresholds: warn
+≥1 MB on a metered/Data-saver link, ≥25 MB otherwise; inherently-large ops
+(offline download, export bundle) always warn when active. Wired into: photo
+upload (PhotoGrid + BatchPhotoImport, sums file sizes), offline download,
+export bundle, and backup upload-restore (file size). When active the dialog's
+emphasised button is "Wait for Wi-Fi"; otherwise "Continue". Logic split into a
+React-free `dataCostConfirm.ts` so it loads under the node test env. i18n en+de.
 
 ### Slice 3 — hold auto-upload
 Gate the queue flush for photo uploads on `dataSaver`; "waiting for wifi" chip +

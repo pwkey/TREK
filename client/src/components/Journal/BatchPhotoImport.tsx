@@ -23,6 +23,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Upload, X, AlertTriangle, CheckCircle, Image as ImageIcon } from 'lucide-react'
 import { useTripStore } from '../../store/tripStore'
 import { useToast } from '../shared/Toast'
+import { confirmDataCost } from '../shared/dataCostConfirm' // [460-fork] Milestone 14
 import { extractMetadata, isHeic } from '../../lib/imageProcessing'
 import { mapsApi } from '../../api/client'
 import type { Day } from '../../types'
@@ -207,6 +208,12 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
   }
 
   const startUpload = async () => {
+    // [460-fork] M14 — warn before pushing a large batch over a metered link.
+    const uploadBytes = items.reduce(
+      (sum, it) => (!it.unsupported && !it.isDuplicate && it.selectedDayId != null ? sum + (it.file?.size || 0) : sum),
+      0,
+    )
+    if (uploadBytes > 0 && !(await confirmDataCost({ bytes: uploadBytes, opKey: 'photoUpload' }))) return
     setPhase('uploading')
 
     // First sweep: mark every non-uploadable row as skipped up front

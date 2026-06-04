@@ -14,6 +14,7 @@ import { useSettingsStore } from '../../store/settingsStore'
 import { checkPhotoTimestamp } from '../../utils/photoTimestampCheck'
 import PhotoTimestampWarning from '../Photos/PhotoTimestampWarning'
 import PhotoImg from './PhotoImg'
+import { confirmDataCost } from '../shared/dataCostConfirm' // [460-fork] Milestone 14
 import type { Day } from '../../types'
 
 interface PhotoGridProps {
@@ -62,6 +63,10 @@ export default function PhotoGrid({ tripId, dayId }: PhotoGridProps) {
     // and would silently truncate this loop after the first await if we
     // kept iterating against it.
     const list = Array.from(files)
+    // [460-fork] M14 — warn before uploading a lot of photo data on a metered
+    // connection (sizes are pre-downscale, so the real upload is smaller).
+    const totalBytes = list.reduce((sum, f) => sum + (f.size || 0), 0)
+    if (!(await confirmDataCost({ bytes: totalBytes, opKey: 'photoUpload' }))) return
     setBusy(true)
     setError(null)
     const skipped: string[] = []

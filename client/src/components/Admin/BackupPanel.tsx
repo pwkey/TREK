@@ -5,6 +5,7 @@ import { Download, Trash2, Plus, RefreshCw, RotateCcw, Upload, Clock, Check, Har
 import { useTranslation } from '../../i18n'
 import { useSettingsStore } from '../../store/settingsStore'
 import CustomSelect from '../shared/CustomSelect'
+import { confirmDataCost } from '../shared/dataCostConfirm' // [460-fork] Milestone 14
 import { getApiErrorMessage } from '../../types'
 
 const INTERVAL_OPTIONS = [
@@ -92,10 +93,13 @@ export default function BackupPanel() {
     setRestoreConfirm({ type: 'file', filename })
   }
 
-  const handleUploadRestore = (e) => {
+  const handleUploadRestore = async (e) => {
     const file = (e.target as HTMLInputElement).files?.[0]
     if (!file) return
     e.target.value = ''
+    // [460-fork] M14 — uploading a backup zip can be large on a metered link.
+    // (The size check returns immediately for small files off Wi-Fi.)
+    if (!(await confirmDataCost({ bytes: file.size, opKey: 'backupRestore' }))) return
     setRestoreConfirm({ type: 'upload', filename: file.name, file })
   }
 

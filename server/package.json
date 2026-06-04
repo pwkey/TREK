@@ -1,6 +1,6 @@
 {
   "name": "460-trip-planner-server",
-  "version": "2.9.15",
+  "version": "2.9.16",
   "main": "src/index.ts",
   "scripts": {
     "start": "node --import tsx src/index.ts",

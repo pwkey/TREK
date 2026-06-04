@@ -24,6 +24,7 @@ import { Upload, X, AlertTriangle, CheckCircle, Image as ImageIcon } from 'lucid
 import { useTripStore } from '../../store/tripStore'
 import { useToast } from '../shared/Toast'
 import { confirmDataCost } from '../shared/dataCostConfirm' // [460-fork] Milestone 14
+import { isDataSaverActive } from '../../store/dataSaverStore' // [460-fork] Milestone 14
 import { extractMetadata, isHeic } from '../../lib/imageProcessing'
 import { mapsApi } from '../../api/client'
 import type { Day } from '../../types'
@@ -81,6 +82,7 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
   const dayPhotosMap = useTripStore(s => s.dayPhotos)
   const loadDayPhotos = useTripStore(s => s.loadDayPhotos)
   const uploadDayPhoto = useTripStore(s => s.uploadDayPhoto)
+  const holdDayPhoto = useTripStore(s => s.holdDayPhoto) // [460-fork] Milestone 14
 
   const [phase, setPhase] = useState<'pick' | 'preview' | 'uploading' | 'done'>('pick')
   const [items, setItems] = useState<PreparedFile[]>([])
@@ -208,12 +210,16 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
   }
 
   const startUpload = async () => {
-    // [460-fork] M14 — warn before pushing a large batch over a metered link.
-    const uploadBytes = items.reduce(
-      (sum, it) => (!it.unsupported && !it.isDuplicate && it.selectedDayId != null ? sum + (it.file?.size || 0) : sum),
-      0,
-    )
-    if (uploadBytes > 0 && !(await confirmDataCost({ bytes: uploadBytes, opKey: 'photoUpload' }))) return
+    // [460-fork] M14 — when Data-saver is active, hold the batch for Wi-Fi
+    // (no dialog). Otherwise warn before pushing a large batch over a metered link.
+    const active = isDataSaverActive()
+    if (!active) {
+      const uploadBytes = items.reduce(
+        (sum, it) => (!it.unsupported && !it.isDuplicate && it.selectedDayId != null ? sum + (it.file?.size || 0) : sum),
+        0,
+      )
+      if (uploadBytes > 0 && !(await confirmDataCost({ bytes: uploadBytes, opKey: 'photoUpload' }))) return
+    }
     setPhase('uploading')
 
     // First sweep: mark every non-uploadable row as skipped up front
@@ -242,16 +248,23 @@ export default function BatchPhotoImport({ tripId, days, onClose }: BatchPhotoIm
         const item = items[idx]
         updateRow(idx, { status: 'uploading' })
         try {
-          await uploadDayPhoto(tripId, item.selectedDayId as number, item.file, { caption: item.caption.trim() || undefined })
+          if (active) {
+            await holdDayPhoto(tripId, item.selectedDayId as number, item.file, { caption: item.caption.trim() || undefined })
+          } else {
+            await uploadDayPhoto(tripId, item.selectedDayId as number, item.file, { caption: item.caption.trim() || undefined })
+          }
           updateRow(idx, { status: 'done' })
         } catch (err: unknown) {
-          updateRow(idx, { status: 'error', errorMessage: err instanceof Error ? err.message : 'upload failed' })
+          updateRow(idx, { status: 'error', errorMessage: err instanceof Error ? err.message : (active ? 'could not save' : 'upload failed') })
         }
         setCompletedCount(c => c + 1)
       }
     }
     await Promise.all(Array.from({ length: UPLOAD_CONCURRENCY }, worker))
     setPhase('done')
+    if (active && uploadableIdx.length > 0) {
+      toast.success(`${uploadableIdx.length} ${uploadableIdx.length === 1 ? 'photo' : 'photos'} saved — will upload on Wi-Fi`)
+    }
   }
 
   const closeAndCleanup = () => {

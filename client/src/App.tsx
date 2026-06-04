@@ -26,6 +26,7 @@ import { TranslationProvider, useTranslation } from './i18n'
 import { authApi } from './api/client'
 import { usePermissionsStore, PermissionLevel } from './store/permissionsStore'
 import { useInAppNotificationListener } from './hooks/useInAppNotificationListener.ts'
+import { usePhotoQueueSync } from './hooks/usePhotoQueueSync' // [460-fork] Milestone 14
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -128,6 +129,7 @@ export default function App() {
   const { settings } = useSettingsStore()
 
   useInAppNotificationListener()
+  usePhotoQueueSync() // [460-fork] Milestone 14 — drain held photos when safe
 
   useEffect(() => {
     if (isAuthenticated) {

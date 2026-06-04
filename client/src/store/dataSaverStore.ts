@@ -92,3 +92,9 @@ export const useDataSaverStore = create<DataSaverState>((set) => ({
 export function useDataSaverActive(): boolean {
   return useDataSaverStore((s) => computeDataSaverActive(s.mode, s.withinActiveTrip, saveDataHint()))
 }
+
+/** Imperative effective-state for non-component code (upload handlers, flush). */
+export function isDataSaverActive(): boolean {
+  const s = useDataSaverStore.getState()
+  return computeDataSaverActive(s.mode, s.withinActiveTrip, saveDataHint())
+}

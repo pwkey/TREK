@@ -18,7 +18,7 @@ describe('localDb', () => {
   it('opens, creates the expected object stores', async () => {
     const db = await getDb()
     const stores = Array.from(db.objectStoreNames).sort()
-    expect(stores).toEqual(['_meta', 'assignments', 'dayNotes', 'days', 'mutations', 'places', 'reservations', 'trips'])
+    expect(stores).toEqual(['_meta', 'assignments', 'dayNotes', 'days', 'mutations', 'pendingPhotos', 'places', 'reservations', 'trips'])
   })
 
   it('round-trips a trip snapshot', async () => {

@@ -15,6 +15,8 @@ import { checkPhotoTimestamp } from '../../utils/photoTimestampCheck'
 import PhotoTimestampWarning from '../Photos/PhotoTimestampWarning'
 import PhotoImg from './PhotoImg'
 import { confirmDataCost } from '../shared/dataCostConfirm' // [460-fork] Milestone 14
+import { isDataSaverActive } from '../../store/dataSaverStore' // [460-fork] Milestone 14
+import { useToast } from '../shared/Toast' // [460-fork] Milestone 14
 import type { Day } from '../../types'
 
 interface PhotoGridProps {
@@ -27,6 +29,8 @@ export default function PhotoGrid({ tripId, dayId }: PhotoGridProps) {
   const days = useTripStore(s => s.days)
   const loadDayPhotos = useTripStore(s => s.loadDayPhotos)
   const uploadDayPhoto = useTripStore(s => s.uploadDayPhoto)
+  const holdDayPhoto = useTripStore(s => s.holdDayPhoto) // [460-fork] Milestone 14
+  const toast = useToast() // [460-fork] Milestone 14
   const updateDayPhoto = useTripStore(s => s.updateDayPhoto)
   const deleteDayPhoto = useTripStore(s => s.deleteDayPhoto)
   // [460-fork] Q6 — read the EXIF-check toggle; default true if unset.
@@ -63,14 +67,19 @@ export default function PhotoGrid({ tripId, dayId }: PhotoGridProps) {
     // and would silently truncate this loop after the first await if we
     // kept iterating against it.
     const list = Array.from(files)
-    // [460-fork] M14 — warn before uploading a lot of photo data on a metered
-    // connection (sizes are pre-downscale, so the real upload is smaller).
-    const totalBytes = list.reduce((sum, f) => sum + (f.size || 0), 0)
-    if (!(await confirmDataCost({ bytes: totalBytes, opKey: 'photoUpload' }))) return
+    // [460-fork] M14 — when Data-saver is active, hold photos for Wi-Fi instead
+    // of uploading now (no dialog — passive). Off Data-saver, just warn before a
+    // genuinely large upload (sizes are pre-downscale, so the real upload is smaller).
+    const active = isDataSaverActive()
+    if (!active) {
+      const totalBytes = list.reduce((sum, f) => sum + (f.size || 0), 0)
+      if (!(await confirmDataCost({ bytes: totalBytes, opKey: 'photoUpload' }))) return
+    }
     setBusy(true)
     setError(null)
     const skipped: string[] = []
     let succeeded = 0
+    let held = 0
     let lastError: string | null = null
 
     // [460-fork] Q6 — for single-file uploads, run the EXIF-timestamp
@@ -118,15 +127,24 @@ export default function PhotoGrid({ tripId, dayId }: PhotoGridProps) {
         continue
       }
       try {
-        await uploadDayPhoto(tripId, targetDayId, f)
-        succeeded++
+        if (active) {
+          await holdDayPhoto(tripId, targetDayId, f)
+          held++
+        } else {
+          await uploadDayPhoto(tripId, targetDayId, f)
+          succeeded++
+        }
       } catch (err: unknown) {
-        lastError = err instanceof Error ? err.message : 'Upload failed'
+        lastError = err instanceof Error ? err.message : (active ? 'Could not save photo' : 'Upload failed')
         skipped.push(`${f.name} (${lastError})`)
       }
     }
+    if (held > 0) {
+      toast.success(`${held} ${held === 1 ? 'photo' : 'photos'} saved — will upload on Wi-Fi`)
+    }
     if (skipped.length > 0) {
-      setError(`${succeeded} uploaded, ${skipped.length} skipped: ${skipped.join('; ')}`)
+      const ok = active ? `${held} held` : `${succeeded} uploaded`
+      setError(`${ok}, ${skipped.length} skipped: ${skipped.join('; ')}`)
     }
     setBusy(false)
   }

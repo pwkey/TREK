@@ -9,6 +9,7 @@ import { dayPhotosApi } from '../../api/client'
 import type { StoreApi } from 'zustand'
 import type { TripStoreState } from '../tripStore'
 import { prepareForUpload, isHeic } from '../../lib/imageProcessing'
+import { enqueuePhoto } from '../../db/photoUploadQueue' // [460-fork] Milestone 14
 
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
@@ -37,6 +38,10 @@ export interface DayPhotosSlice {
   dayPhotos: DayPhotosMap
   loadDayPhotos: (tripId: number | string, dayId: number | string) => Promise<void>
   uploadDayPhoto: (tripId: number | string, dayId: number | string, file: File, opts?: { caption?: string }) => Promise<DayPhoto>
+  /** [460-fork] M14 — downscale + stash the photo for later upload (Data-saver "wait for Wi-Fi"). */
+  holdDayPhoto: (tripId: number | string, dayId: number | string, file: File, opts?: { caption?: string }) => Promise<void>
+  /** [460-fork] M14 — append a photo that finished uploading from the hold-queue. */
+  ingestDayPhoto: (dayId: number | string, photo: DayPhoto) => void
   updateDayPhoto: (tripId: number | string, dayId: number | string, id: number, data: { caption?: string | null; position?: number; taken_at?: string | null }) => Promise<void>
   reorderDayPhotos: (tripId: number | string, dayId: number | string, orderedIds: number[]) => Promise<void>
   deleteDayPhoto: (tripId: number | string, dayId: number | string, id: number) => Promise<void>
@@ -86,6 +91,34 @@ export const createDayPhotosSlice = (set: SetState, get: GetState): DayPhotosSli
       },
     }))
     return photo
+  },
+
+  // [460-fork] M14 — Data-saver hold: downscale now (so the stored blob is the
+  // same JPEG we'd have uploaded) and stash it in IndexedDB to replay on Wi-Fi.
+  holdDayPhoto: async (tripId, dayId, file, opts) => {
+    const meta = await prepareForUpload(file)
+    const filename = isHeic(file) ? file.name.replace(/\.hei[cf]$/i, '.jpg') : file.name
+    await enqueuePhoto({
+      trip_id: Number(tripId),
+      day_id: Number(dayId),
+      blob: meta.blob,
+      filename,
+      caption: opts?.caption,
+      taken_at: meta.takenAt ?? null,
+      lat: meta.lat,
+      lng: meta.lng,
+      altitude: meta.altitude,
+      camera: meta.camera,
+    })
+  },
+
+  ingestDayPhoto: (dayId, photo) => {
+    const key = String(dayId)
+    set(state => {
+      const existing = state.dayPhotos[key] || []
+      if (existing.some(p => p.id === photo.id)) return {}
+      return { dayPhotos: { ...state.dayPhotos, [key]: [...existing, photo] } }
+    })
   },
 
   updateDayPhoto: async (tripId, dayId, id, data) => {

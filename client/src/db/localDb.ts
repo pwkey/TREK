@@ -11,7 +11,7 @@
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 
 export const DB_NAME = '460tp-local'
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 
 interface TripRecord {
   id: number
@@ -50,6 +50,24 @@ interface MetaRecord {
   value: unknown
 }
 
+// [460-fork] M14 slice 3 — photos held back from upload while Data-saver is on.
+// The downscaled JPEG blob is stored so the upload can replay later from disk,
+// surviving reloads and PWA restarts. Keyed by a client UUID.
+export interface PendingPhotoRecord {
+  id: string
+  trip_id: number
+  day_id: number
+  blob: Blob
+  filename: string
+  caption?: string
+  taken_at?: string | null
+  lat?: number | null
+  lng?: number | null
+  altitude?: number | null
+  camera?: string | null
+  created_at: number
+}
+
 export interface QueuedMutationRecord {
   id: string
   endpoint: string
@@ -76,6 +94,7 @@ interface LocalDb extends DBSchema {
   dayNotes: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
   reservations: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
   mutations: { key: string; value: QueuedMutationRecord }
+  pendingPhotos: { key: string; value: PendingPhotoRecord; indexes: { 'by-trip': number } }
   _meta: { key: string; value: MetaRecord }
 }
 
@@ -102,6 +121,10 @@ export function getDb(): Promise<LocalDbHandle> {
         if (oldVersion < 2) {
           // Slice 2 — persistent mutation queue.
           db.createObjectStore('mutations', { keyPath: 'id' })
+        }
+        if (oldVersion < 3) {
+          // [460-fork] M14 slice 3 — photo uploads held for Wi-Fi.
+          db.createObjectStore('pendingPhotos', { keyPath: 'id' }).createIndex('by-trip', 'trip_id')
         }
       },
     })

@@ -10,6 +10,7 @@ import type { LucideIcon } from 'lucide-react'
 import InAppNotificationBell from './InAppNotificationBell.tsx'
 import SyncIndicator from '../Sync/SyncIndicator' // [460-fork] Milestone 5
 import DataSaverIndicator from '../Sync/DataSaverIndicator' // [460-fork] Milestone 14
+import PhotoQueueIndicator from '../Sync/PhotoQueueIndicator' // [460-fork] Milestone 14
 
 const ADDON_ICONS: Record<string, LucideIcon> = { CalendarDays, Briefcase, Globe }
 
@@ -183,6 +184,9 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
 
       {/* [460-fork] Milestone 14 — data-saver chip (shown only when active) */}
       {user && <DataSaverIndicator />}
+
+      {/* [460-fork] Milestone 14 — photos waiting for Wi-Fi (shown when queued) */}
+      {user && <PhotoQueueIndicator />}
 
       {/* [460-fork] Notification bell — always visible when logged in, including
           the home screen on mobile. (Previously hidden on the home screen below

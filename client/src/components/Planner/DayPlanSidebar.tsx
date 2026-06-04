@@ -146,6 +146,22 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const [exportBusy, setExportBusy] = useState(false) // [460-fork] Milestone 7 slice 1
   const [bundleBusy, setBundleBusy] = useState(false) // [460-fork] Milestone 7 slice 2
   const [showBatchImport, setShowBatchImport] = useState(false) // [460-fork] M6 follow-up
+  const [insertHoverIdx, setInsertHoverIdx] = useState<number | null>(null) // [460-fork] insert-day handle
+
+  // [460-fork] Insert a day after `afterDayId`, pushing later days back one day.
+  const handleInsertDay = async (afterDayId: number) => {
+    try {
+      await daysApi.insertAfter(tripId, afterDayId)
+      await tripActions.refreshDays(tripId)
+    } catch (err: unknown) {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
+      if (code === 'SEGMENT_BLOCKS_INSERT') {
+        toast.error(t('dayplan.insertBlockedSegment') || 'Can’t insert here — later days are part of a shared segment.')
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Could not insert day')
+      }
+    }
+  }
   const [dropTargetKey, _setDropTargetKey] = useState(null)
   const dropTargetRef = useRef(null)
   const setDropTargetKey = (key) => { dropTargetRef.current = key; _setDropTargetKey(key) }
@@ -1267,6 +1283,29 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
 
           return (
             <div key={day.id} data-day-id={day.id} style={{ borderBottom: '1px solid var(--border-faint)' }}>
+              {/* [460-fork] Insert-day handle — sits between this day and the one
+                  above; inserts a day after the previous day, pushing the rest back. */}
+              {canEditDays && index > 0 && (
+                <div
+                  role="button"
+                  aria-label={t('dayplan.insertDayHere') || 'Insert a day here'}
+                  title={t('dayplan.insertDayHere') || 'Insert a day here'}
+                  onClick={(e) => { e.stopPropagation(); void handleInsertDay(days[index - 1].id) }}
+                  onMouseEnter={() => setInsertHoverIdx(index)}
+                  onMouseLeave={() => setInsertHoverIdx(null)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 14, cursor: 'pointer', position: 'relative' }}
+                >
+                  <span style={{ position: 'absolute', left: 16, right: 16, top: '50%', height: 1, background: insertHoverIdx === index ? 'var(--accent)' : 'transparent' }} />
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: 999, zIndex: 1,
+                    background: insertHoverIdx === index ? 'var(--accent)' : 'var(--bg-tertiary)',
+                    color: insertHoverIdx === index ? 'var(--accent-text)' : 'var(--text-faint)',
+                    border: '1px solid var(--border-faint)',
+                  }}>
+                    <Plus size={10} strokeWidth={2.6} />
+                  </span>
+                </div>
+              )}
               {/* Tages-Header — akzeptiert Drops aus der PlacesSidebar */}
               <div
                 onClick={() => { onSelectDay(day.id); if (onDayDetail) onDayDetail(day) }}

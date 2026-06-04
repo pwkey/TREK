@@ -303,6 +303,7 @@ export const daysApi = {
   // [460-fork] Q11 — at-start / at-end "+ Add day" affordances.
   addAtStart: (tripId: number | string) => apiClient.post(`/trips/${tripId}/days/at-start`, {}).then(r => r.data),
   addAtEnd: (tripId: number | string) => apiClient.post(`/trips/${tripId}/days/at-end`, {}).then(r => r.data),
+  insertAfter: (tripId: number | string, dayId: number | string) => apiClient.post(`/trips/${tripId}/days/${dayId}/insert-after`, {}).then(r => r.data),
 }
 
 export const placesApi = {

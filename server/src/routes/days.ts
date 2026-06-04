@@ -57,6 +57,23 @@ router.post('/at-start', authenticate, requireTripAccess, (req: Request, res: Re
   broadcast(tripId, 'day:created', { day }, req.headers['x-socket-id'] as string);
 });
 
+// [460-fork] Insert a day in the middle (after :dayId), pushing later days back.
+router.post('/:dayId/insert-after', authenticate, requireTripAccess, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+  const { tripId, dayId } = req.params;
+  const result = dayService.insertDayAfter(tripId, dayId);
+  if ('error' in result) {
+    if (result.error === 'DAY_NOT_FOUND') return res.status(404).json({ error: 'Day not found' });
+    if (result.error === 'SEGMENT_BLOCKS_INSERT')
+      return res.status(409).json({ error: 'Cannot insert here — later days are part of a shared segment.', code: 'SEGMENT_BLOCKS_INSERT' });
+    return res.status(400).json({ error: 'Could not insert day' });
+  }
+  res.status(201).json({ day: result.day });
+  broadcast(tripId, 'day:created', { day: result.day }, req.headers['x-socket-id'] as string);
+});
+
 router.put('/:id', authenticate, requireTripAccess, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))

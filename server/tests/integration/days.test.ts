@@ -559,3 +559,54 @@ describe('Q11 — open-ended trips and add-day affordances', () => {
     expect(after.c).toBe(5);
   });
 });
+
+// [460-fork] Insert a day in the middle (push later days back).
+describe('Insert day (middle)', () => {
+  it('INSERT-DAY-1 — inserts after a day, shifts later days +1 day_number & date, extends end_date', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Insert Trip', start_date: '2026-05-01', end_date: '2026-05-03' });
+    const d1 = testDb.prepare('SELECT id FROM days WHERE trip_id=? AND day_number=1').get(trip.id) as { id: number };
+    const oldD2 = testDb.prepare('SELECT id FROM days WHERE trip_id=? AND day_number=2').get(trip.id) as { id: number };
+
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/days/${d1.id}/insert-after`)
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(201);
+    expect(res.body.day.day_number).toBe(2);
+    expect(res.body.day.date).toBe('2026-05-02');
+
+    const days = testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id=? ORDER BY day_number').all(trip.id) as Array<{ id: number; day_number: number; date: string }>;
+    expect(days.map(d => d.day_number)).toEqual([1, 2, 3, 4]);
+    expect(days.map(d => d.date)).toEqual(['2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04']);
+    const movedD2 = days.find(d => d.id === oldD2.id)!;
+    expect(movedD2.day_number).toBe(3);
+    expect(movedD2.date).toBe('2026-05-03');
+    const t = testDb.prepare('SELECT end_date FROM trips WHERE id=?').get(trip.id) as { end_date: string };
+    expect(t.end_date).toBe('2026-05-04');
+  });
+
+  it('INSERT-DAY-2 — 404 for a day not in the trip', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { start_date: '2026-05-01', end_date: '2026-05-02' });
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/days/999999/insert-after`)
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(404);
+  });
+
+  it('INSERT-DAY-3 — blocked (409) when a later day belongs to a shared segment', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { start_date: '2026-05-01', end_date: '2026-05-03' });
+    const d1 = testDb.prepare('SELECT id FROM days WHERE trip_id=? AND day_number=1').get(trip.id) as { id: number };
+    testDb.prepare("INSERT INTO segments (id, title, created_by) VALUES ('seg-x', 'Shared bit', ?)").run(user.id);
+    testDb.prepare("UPDATE days SET segment_id='seg-x' WHERE trip_id=? AND day_number=3").run(trip.id);
+
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/days/${d1.id}/insert-after`)
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('SEGMENT_BLOCKS_INSERT');
+    const count = testDb.prepare('SELECT COUNT(*) c FROM days WHERE trip_id=?').get(trip.id) as { c: number };
+    expect(count.c).toBe(3); // unchanged
+  });
+});

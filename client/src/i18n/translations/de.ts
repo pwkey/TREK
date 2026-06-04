@@ -820,6 +820,8 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.today': 'Heute',
   'dayplan.addDayAtStart': 'Tag am Anfang hinzufügen',
   'dayplan.addDayAtEnd': 'Tag am Ende hinzufügen',
+  'dayplan.insertDayHere': 'Hier einen Tag einfügen',
+  'dayplan.insertBlockedSegment': 'Einfügen hier nicht möglich — spätere Tage gehören zu einem geteilten Abschnitt.',
   'dayplan.addPhoto': 'Foto hinzufügen',
   'collab.notes.expand': 'Erweitern',
   'photos.notAnImage': 'Kein Bild',

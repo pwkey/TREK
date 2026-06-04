@@ -228,6 +228,49 @@ export function addDayAtStart(tripId: string | number, notes?: string) {
   return { ...day, assignments: [] };
 }
 
+// [460-fork] Insert a day in the MIDDLE, "push the rest back" semantics: the new
+// day lands right after `afterDayId`, and every later day shifts +1 day_number
+// AND +1 calendar date, so the itinerary slides one day later and the trip ends
+// a day later. Content stays with its day (it's keyed by day_id, not date).
+// Returns { day } on success, or { error } for the caller to map to a status.
+export function insertDayAfter(
+  tripId: string | number,
+  afterDayId: string | number,
+): { day: Day & { assignments: unknown[] } } | { error: 'DAY_NOT_FOUND' | 'SEGMENT_BLOCKS_INSERT' } {
+  const anchor = db.prepare('SELECT id, day_number, date FROM days WHERE id = ? AND trip_id = ?')
+    .get(afterDayId, tripId) as { id: number; day_number: number; date: string | null } | undefined;
+  if (!anchor) return { error: 'DAY_NOT_FOUND' };
+
+  // Shifting a segment-shared day's date would desync the segment for the other
+  // household, so refuse to insert when any LATER day belongs to a segment.
+  const segLater = db.prepare(
+    'SELECT 1 FROM days WHERE trip_id = ? AND day_number > ? AND segment_id IS NOT NULL LIMIT 1',
+  ).get(tripId, anchor.day_number);
+  if (segLater) return { error: 'SEGMENT_BLOCKS_INSERT' };
+
+  const newDate = stepDate(anchor.date, 1);
+  let insertedId: number | bigint = 0;
+  db.transaction(() => {
+    // Shift later days +1/+1, descending so the UNIQUE(trip_id, day_number)
+    // target slot is always free.
+    const later = db.prepare(
+      'SELECT id, day_number, date FROM days WHERE trip_id = ? AND day_number > ? ORDER BY day_number DESC',
+    ).all(tripId, anchor.day_number) as Array<{ id: number; day_number: number; date: string | null }>;
+    const upd = db.prepare('UPDATE days SET day_number = ?, date = ? WHERE id = ?');
+    for (const d of later) upd.run(d.day_number + 1, stepDate(d.date, 1), d.id);
+
+    insertedId = db.prepare('INSERT INTO days (trip_id, day_number, date, notes) VALUES (?, ?, ?, ?)')
+      .run(tripId, anchor.day_number + 1, newDate, null).lastInsertRowid;
+
+    // The trip now spans one more day — extend end_date if it has one.
+    const trip = db.prepare('SELECT end_date FROM trips WHERE id = ?').get(tripId) as { end_date: string | null } | undefined;
+    if (trip?.end_date) db.prepare('UPDATE trips SET end_date = ? WHERE id = ?').run(stepDate(trip.end_date, 1), tripId);
+  })();
+
+  const day = db.prepare('SELECT * FROM days WHERE id = ?').get(insertedId) as Day;
+  return { day: { ...day, assignments: [] } };
+}
+
 export function getDay(id: string | number, tripId: string | number) {
   return db.prepare('SELECT * FROM days WHERE id = ? AND trip_id = ?').get(id, tripId) as Day | undefined;
 }

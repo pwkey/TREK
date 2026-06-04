@@ -839,6 +839,8 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.today': 'Today',
   'dayplan.addDayAtStart': 'Add day at start',
   'dayplan.addDayAtEnd': 'Add day at end',
+  'dayplan.insertDayHere': 'Insert a day here',
+  'dayplan.insertBlockedSegment': 'Can’t insert here — later days are part of a shared segment.',
   'dayplan.addPhoto': 'Add photo',
   'collab.notes.expand': 'Expand',
   'photos.notAnImage': 'Not an image',

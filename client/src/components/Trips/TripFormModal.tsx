@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from '../shared/Modal'
-import { Calendar, Camera, X, Clipboard, UserPlus, Bell } from 'lucide-react'
+import { Calendar, Camera, X, Clipboard, UserPlus, Bell, Trash2 } from 'lucide-react'
 import { tripsApi, authApi } from '../../api/client'
 import CustomSelect from '../shared/CustomSelect'
+import ConfirmDialog from '../shared/ConfirmDialog'
 import { useAuthStore } from '../../store/authStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useToast } from '../shared/Toast'
@@ -16,9 +17,12 @@ interface TripFormModalProps {
   onSave: (data: Record<string, string | number | null>) => Promise<void> | void
   trip: Trip | null
   onCoverUpdate: (tripId: number, coverUrl: string) => void
+  /** [460-fork] When provided (edit mode), shows a guarded "Delete trip" button.
+   *  Called after a successful delete so the parent can navigate / refresh. */
+  onDeleted?: () => void
 }
 
-export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUpdate }: TripFormModalProps) {
+export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUpdate, onDeleted }: TripFormModalProps) {
   const isEditing = !!trip
   const fileRef = useRef(null)
   const toast = useToast()
@@ -29,6 +33,29 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
   const can = useCanDo()
   const canUploadCover = !isEditing || can('trip_cover_upload', trip)
   const canEditTrip = !isEditing || can('trip_edit', trip)
+  // [460-fork] Guarded delete, shown only when editing a trip you may delete and
+  // the parent wired an onDeleted handler.
+  const canDeleteTrip = isEditing && !!trip?.id && !!onDeleted && can('trip_delete', trip)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async () => {
+    if (!trip?.id) return
+    setDeleting(true)
+    try {
+      await tripsApi.delete(trip.id)
+      onDeleted?.()
+    } catch (err: unknown) {
+      // Mirror the dashboard's helpful message for the segment-host block.
+      const e = err as { response?: { status?: number; data?: { code?: string } } }
+      if (e?.response?.status === 409 && e?.response?.data?.code === 'SEGMENT_REFERENCES_BLOCK_DELETE') {
+        toast.error('This trip hosts shared segments used by other households. Leave or dissolve them before deleting.')
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Could not delete trip')
+      }
+      setDeleting(false)
+    }
+  }
 
   const [formData, setFormData] = useState({
     title: '',
@@ -272,17 +299,26 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
       title={isEditing ? t('dashboard.editTrip') : t('dashboard.createTrip')}
       size="md"
       footer={
-        <div className="flex gap-3 justify-end">
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-            {t('common.cancel')}
-          </button>
-          <button onClick={handleSubmit} disabled={isLoading}
-            className="px-4 py-2 text-sm bg-slate-900 hover:bg-slate-700 disabled:bg-slate-400 text-white rounded-lg transition-colors flex items-center gap-2">
-            {isLoading
-              ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{t('common.saving')}</>
-              : isEditing ? t('common.update') : t('dashboard.createTrip')}
-          </button>
+        <div className="flex gap-3 justify-between items-center">
+          {/* [460-fork] Guarded delete — owner-only, edit mode only. */}
+          {canDeleteTrip ? (
+            <button type="button" onClick={() => setShowDeleteConfirm(true)} disabled={isLoading || deleting}
+              className="px-4 py-2 text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors flex items-center gap-2">
+              <Trash2 size={14} /> {t('dashboard.deleteTrip') || 'Delete trip'}
+            </button>
+          ) : <div />}
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+              {t('common.cancel')}
+            </button>
+            <button onClick={handleSubmit} disabled={isLoading}
+              className="px-4 py-2 text-sm bg-slate-900 hover:bg-slate-700 disabled:bg-slate-400 text-white rounded-lg transition-colors flex items-center gap-2">
+              {isLoading
+                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{t('common.saving')}</>
+                : isEditing ? t('common.update') : t('dashboard.createTrip')}
+            </button>
+          </div>
         </div>
       }
     >
@@ -534,6 +570,17 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
         </div>
       </Modal>
     )}
+
+    {/* [460-fork] Guarded trip-deletion confirm. */}
+    <ConfirmDialog
+      isOpen={showDeleteConfirm}
+      onClose={() => setShowDeleteConfirm(false)}
+      onConfirm={handleDelete}
+      title={t('dashboard.deleteTrip') || 'Delete trip'}
+      message={t('dashboard.confirm.delete', { title: formData.title || trip?.title || '' })}
+      confirmLabel={t('common.delete')}
+      danger
+    />
   </>
   )
 }

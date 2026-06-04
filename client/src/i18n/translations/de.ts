@@ -106,6 +106,7 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'dashboard.toast.copyError': 'Fehler beim Kopieren der Reise',
   'dashboard.confirm.delete': 'Reise "{title}" löschen? Alle Orte und Pläne werden unwiderruflich gelöscht.',
   'dashboard.editTrip': 'Reise bearbeiten',
+  'dashboard.deleteTrip': 'Reise löschen',
   'dashboard.createTrip': 'Neue Reise erstellen',
   'dashboard.tripTitle': 'Titel',
   'dashboard.tripTitlePlaceholder': 'z.B. Sommer in Japan',

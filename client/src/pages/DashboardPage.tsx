@@ -994,6 +994,15 @@ export default function DashboardPage(): React.ReactElement {
         onSave={editingTrip ? handleUpdate : handleCreate}
         trip={editingTrip}
         onCoverUpdate={handleCoverUpdate}
+        onDeleted={() => {
+          if (editingTrip) {
+            setTrips(prev => prev.filter(t => t.id !== editingTrip.id))
+            setArchivedTrips(prev => prev.filter(t => t.id !== editingTrip.id))
+            toast.success(t('dashboard.toast.deleted'))
+          }
+          setShowForm(false)
+          setEditingTrip(null)
+        }}
       />
 
       {/* [460-fork] Milestone 7 slice 3 — import dialog */}

@@ -106,6 +106,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'dashboard.toast.copyError': 'Failed to copy trip',
   'dashboard.confirm.delete': 'Delete trip "{title}"? All places and plans will be permanently deleted.',
   'dashboard.editTrip': 'Edit Trip',
+  'dashboard.deleteTrip': 'Delete trip',
   'dashboard.createTrip': 'Create New Trip',
   'dashboard.tripTitle': 'Title',
   'dashboard.tripTitlePlaceholder': 'e.g. Summer in Japan',

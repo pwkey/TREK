@@ -1,6 +1,6 @@
 {
   "name": "460-trip-planner-client",
-  "version": "2.9.18",
+  "version": "2.9.19",
   "private": true,
   "type": "module",
   "scripts": {

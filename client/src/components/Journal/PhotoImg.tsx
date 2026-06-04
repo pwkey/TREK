@@ -18,28 +18,32 @@ interface PhotoImgProps {
   alt: string
   onClick?: (e: React.MouseEvent) => void
   style: React.CSSProperties
+  /** [460-fork] M14 — 'thumb' (default, tiny server thumbnail for grids/memoir)
+   *  or 'full' (original, used in the lightbox). */
+  variant?: 'thumb' | 'full'
 }
 
-export default function PhotoImg({ tripId, uploadId, alt, onClick, style }: PhotoImgProps) {
-  // [460-fork] M14 slice 4 — defer the download while Data-saver is active so
-  // browsing (memoir, grids) doesn't silently pull megabytes over the eSIM.
-  // The user taps to load each photo; turning Data-saver off loads them all.
+export default function PhotoImg({ tripId, uploadId, alt, onClick, style, variant = 'thumb' }: PhotoImgProps) {
+  // [460-fork] M14 — thumbnails are tiny (~tens of KB) so they always load, even
+  // on Data-saver; only the FULL image is deferred to tap-to-load on a metered
+  // connection so the lightbox doesn't silently pull a big original.
   const dataSaver = useDataSaverActive()
   const { t } = useTranslation()
   const [src, setSrc] = useState('')
-  const [wantLoad, setWantLoad] = useState(!dataSaver)
+  const deferred = variant === 'full' && dataSaver
+  const [wantLoad, setWantLoad] = useState(!deferred)
 
-  useEffect(() => { if (!dataSaver) setWantLoad(true) }, [dataSaver])
+  useEffect(() => { if (!deferred) setWantLoad(true) }, [deferred])
 
   useEffect(() => {
     if (!wantLoad) return
     let cancelled = false
-    const url = `/api/trips/${tripId}/files/${uploadId}/download`
+    const url = `/api/trips/${tripId}/files/${uploadId}/download${variant === 'thumb' ? '?thumb=1' : ''}`
     getAuthUrl(url, 'download').then(s => { if (!cancelled) setSrc(s) })
     return () => { cancelled = true }
-  }, [wantLoad, tripId, uploadId])
+  }, [wantLoad, tripId, uploadId, variant])
 
-  if (dataSaver && !wantLoad) {
+  if (deferred && !wantLoad) {
     return (
       <button
         type="button"

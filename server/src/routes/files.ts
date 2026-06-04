@@ -16,6 +16,7 @@ import {
   verifyTripAccess,
   formatFile,
   resolveFilePath,
+  resolveThumbPath,
   authenticateDownload,
   listFiles,
   getFileById,
@@ -102,6 +103,14 @@ router.get('/:id/download', (req: Request, res: Response) => {
   const { resolved, safe } = resolveFilePath(file.filename);
   if (!safe) return res.status(403).json({ error: 'Forbidden' });
   if (!fs.existsSync(resolved)) return res.status(404).json({ error: 'File not found' });
+
+  // [460-fork] ?thumb=1 serves the generated thumbnail when one exists; falls
+  // back to the original otherwise (old photos, non-image files, gen failures).
+  const wantThumb = req.query.thumb === '1' || req.query.thumb === 'true';
+  if (wantThumb) {
+    const thumb = resolveThumbPath(file.filename);
+    if (thumb.safe && fs.existsSync(thumb.resolved)) return res.sendFile(thumb.resolved);
+  }
 
   res.sendFile(resolved);
 });

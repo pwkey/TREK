@@ -86,6 +86,7 @@ export default function MemoirView({ tripId, days, assignments }: MemoirViewProp
             tripId={tripId}
             uploadId={currentLightboxPhoto.upload_id}
             alt={currentLightboxPhoto.caption ?? ''}
+            variant="full"
             onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
           />

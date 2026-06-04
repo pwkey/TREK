@@ -20,7 +20,8 @@ import { authenticate, demoUploadBlock } from '../middleware/auth';
 import { broadcast } from '../websocket';
 import { checkPermission } from '../services/permissions';
 import { AuthRequest } from '../types';
-import { MAX_FILE_SIZE, BLOCKED_EXTENSIONS, filesDir, getAllowedExtensions, createFile } from '../services/fileService';
+import { MAX_FILE_SIZE, BLOCKED_EXTENSIONS, filesDir, getAllowedExtensions, createFile, removeThumbnail } from '../services/fileService';
+import { generateThumbnail } from '../services/imageThumbs';
 import * as dayPhotoService from '../services/dayPhotoService';
 
 const router = express.Router({ mergeParams: true });
@@ -78,7 +79,7 @@ router.get('/', authenticate, (req: Request, res: Response) => {
   res.json({ photos: dayPhotoService.listPhotos(Number(dayId), Number(tripId)) });
 });
 
-router.post('/', authenticate, demoUploadBlock, upload.single('file'), (req: Request, res: Response) => {
+router.post('/', authenticate, demoUploadBlock, upload.single('file'), async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { tripId, dayId } = req.params;
   const access = dayPhotoService.verifyTripAccess(tripId, authReq.user.id);
@@ -102,6 +103,11 @@ router.post('/', authenticate, demoUploadBlock, upload.single('file'), (req: Req
     authReq.user.id,
     { description: typeof req.body.caption === 'string' ? req.body.caption : null },
   );
+
+  // [460-fork] Generate a small thumbnail so grids/memoir browse cheaply
+  // (especially on the metered eSIM). Best-effort: the download route falls
+  // back to the original if this fails or hasn't run.
+  await generateThumbnail(req.file.filename);
 
   // EXIF metadata arrives as form-data strings if the client extracted it.
   // Validate each one independently — skip junk, never reject the upload.
@@ -187,6 +193,7 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
     const onDisk = path.join(filesDir, uploadFilename);
     if (fs.existsSync(onDisk)) fs.unlinkSync(onDisk);
   } catch { /* best effort */ }
+  removeThumbnail(uploadFilename); // [460-fork] drop the generated thumbnail too
 
   res.json({ success: true });
   broadcast(tripId, 'dayPhoto:deleted', { dayId: Number(dayId), photoId: Number(id) }, req.headers['x-socket-id'] as string);

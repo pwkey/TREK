@@ -134,16 +134,39 @@ tap-to-load placeholder instead of auto-fetching, so browsing the memoir/grids
 doesn't silently pull megabytes; turning Data-saver off loads them. i18n en+de.
 
 Scope notes:
-- *Thumbnails-only* (small server-generated thumbs) was NOT built: there is no
-  thumbnail endpoint and the server does no image processing — adding it means a
-  server image lib (sharp) + a variant endpoint. Deferred. Photos are already
-  downscaled on upload, so deferring the full download is the available win.
+- *Thumbnails-only* — **now shipped (2.9.18)**, see "Slice 5" below. (Originally
+  deferred here; built afterwards on request.)
 - *Network-API auto-suggest*: already delivered by `auto` mode — `saveDataHint()`
   (navigator.connection saveData/cellular, Android/desktop only) auto-engages
   Data-saver. A separate nag-toast for the manual `off` override was deliberately
   skipped (respects the user's explicit choice; iOS can't detect anyway).
 
 ---
+
+### Slice 5 — server-generated thumbnails ✅ shipped (2.9.18)
+
+Real small thumbnails, so browsing is cheap even on a metered link.
+
+- **Dependency:** `sharp` ^0.33 added to the **server** (already proven in the
+  Docker image — the client uses it for PWA icons; sharp 0.33 bundles libvips).
+- **Generation:** on day-photo upload, a 400px-longest-edge JPEG (q70, EXIF
+  auto-rotated) is written to `uploads/files/thumbs/<uuid>.jpg`
+  (`imageThumbs.generateThumbnail`, best-effort — failure is logged, never
+  blocks the upload). Lives in the same volume → backed up with everything else.
+- **Serving:** the existing download route honours `?thumb=1`, serving the
+  thumbnail when present and **falling back to the original** otherwise — so old
+  photos, non-image files, and any generation failure just work. **No DB column,
+  no migration** (thumb path derived 1:1 from the filename).
+- **Cleanup:** thumbnails are removed on photo delete, permanent file delete,
+  and empty-trash.
+- **Client:** `PhotoImg` gains `variant` — grids/memoir request `thumb` (tiny,
+  always loads even on Data-saver); the lightbox uses `full` (still tap-to-load
+  on Data-saver from Slice 4).
+- **Tests:** DAYPHOTO-THUMB-1/2/3 (generate+serve, fallback, delete-cleanup).
+
+Deferred follow-up: no backfill of pre-existing photos — they serve the
+original via fallback until re-uploaded. A one-off backfill script could
+generate thumbs for old photos if it ever matters.
 
 ## Open questions (resolve before / during build)
 - ~~**Default state**~~ — **Resolved (2026-06-04): `auto`** = on during a trip's

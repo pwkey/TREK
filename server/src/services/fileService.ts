@@ -14,6 +14,10 @@ export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 export const DEFAULT_ALLOWED_EXTENSIONS = 'jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,txt,csv';
 export const BLOCKED_EXTENSIONS = ['.svg', '.html', '.htm', '.xml'];
 export const filesDir = path.join(__dirname, '../../uploads/files');
+// [460-fork] Generated photo thumbnails live in a subdir of the files store so
+// they ride the same persistent volume + backups. Derived 1:1 from the original
+// filename; see thumbFilename / resolveThumbPath.
+export const thumbsDir = path.join(filesDir, 'thumbs');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,6 +82,29 @@ export function resolveFilePath(filename: string): { resolved: string; safe: boo
   const resolved = path.resolve(filePath);
   const safe = resolved.startsWith(path.resolve(filesDir));
   return { resolved, safe };
+}
+
+// [460-fork] Thumbnail path = same (uuid) basename, always .jpg, under thumbs/.
+// Filenames are uuids so the basename never collides across uploads.
+export function thumbFilename(filename: string): string {
+  return `${path.parse(path.basename(filename)).name}.jpg`;
+}
+
+export function resolveThumbPath(filename: string): { resolved: string; safe: boolean } {
+  const safeName = path.basename(thumbFilename(filename));
+  const resolved = path.resolve(path.join(thumbsDir, safeName));
+  const safe = resolved.startsWith(path.resolve(thumbsDir));
+  return { resolved, safe };
+}
+
+/** Best-effort thumbnail removal (fs-only; no sharp). */
+export function removeThumbnail(filename: string): void {
+  try {
+    const { resolved, safe } = resolveThumbPath(filename);
+    if (safe && fs.existsSync(resolved)) fs.unlinkSync(resolved);
+  } catch (e) {
+    console.error('[Thumbs] remove failed:', e instanceof Error ? e.message : e);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +293,7 @@ export function permanentDeleteFile(file: TripFile) {
   if (fs.existsSync(resolved)) {
     try { fs.unlinkSync(resolved); } catch (e) { console.error('Error deleting file:', e); }
   }
+  removeThumbnail(file.filename); // [460-fork] drop the generated thumbnail too
   db.prepare('DELETE FROM trip_files WHERE id = ?').run(file.id);
 }
 
@@ -276,6 +304,7 @@ export function emptyTrash(tripId: string | number): number {
     if (fs.existsSync(resolved)) {
       try { fs.unlinkSync(resolved); } catch (e) { console.error('Error deleting file:', e); }
     }
+    removeThumbnail(file.filename); // [460-fork] drop the generated thumbnail too
   }
   db.prepare('DELETE FROM trip_files WHERE trip_id = ? AND deleted_at IS NOT NULL').run(tripId);
   return trashed.length;

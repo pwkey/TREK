@@ -309,6 +309,7 @@ export default function PhotoGrid({ tripId, dayId }: PhotoGridProps) {
             tripId={tripId}
             uploadId={photos[lightbox].upload_id}
             alt={photos[lightbox].caption ?? ''}
+            variant="full"
             onClick={e => e.stopPropagation()}
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
           />

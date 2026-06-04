@@ -38,9 +38,9 @@ import { createTables } from '../../src/db/schema';
 import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb } from '../helpers/test-db';
 import { createUser, createTrip, createDay, addTripMember } from '../helpers/factories';
-import { authCookie } from '../helpers/auth';
+import { authCookie, authHeader } from '../helpers/auth';
 import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
-import { filesDir } from '../../src/services/fileService';
+import { filesDir, thumbsDir, thumbFilename } from '../../src/services/fileService';
 
 const app: Application = createApp();
 
@@ -334,5 +334,67 @@ describe('Delete day photo', () => {
       .delete(`/api/trips/${trip.id}/days/${dayB.id}/photos/${created.body.photo.id}`)
       .set('Cookie', authCookie(user.id));
     expect(res.status).toBe(404);
+  });
+});
+
+// [460-fork] Thumbnail generation + serving.
+describe('Photo thumbnails', () => {
+  async function uploadPhoto(userId: number, tripId: number, dayId: number, name = 'a.jpg') {
+    const res = await request(app)
+      .post(`/api/trips/${tripId}/days/${dayId}/photos`)
+      .set('Cookie', authCookie(userId))
+      .attach('file', TINY_JPEG, name);
+    expect(res.status).toBe(201);
+    const uploadId = res.body.photo.upload_id as number;
+    const photoId = res.body.photo.id as number;
+    const row = testDb.prepare('SELECT filename FROM trip_files WHERE id = ?').get(uploadId) as { filename: string };
+    return { photoId, uploadId, filename: row.filename };
+  }
+
+  it('DAYPHOTO-THUMB-1 — upload generates a thumbnail and ?thumb=1 serves it', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+
+    const { uploadId, filename } = await uploadPhoto(user.id, trip.id, day.id);
+    const thumbPath = path.join(thumbsDir, thumbFilename(filename));
+    expect(fs.existsSync(thumbPath)).toBe(true);
+
+    const dl = await request(app)
+      .get(`/api/trips/${trip.id}/files/${uploadId}/download?thumb=1`)
+      .set(authHeader(user.id));
+    expect(dl.status).toBe(200);
+  });
+
+  it('DAYPHOTO-THUMB-2 — ?thumb=1 falls back to the original when no thumbnail exists', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+
+    const { uploadId, filename } = await uploadPhoto(user.id, trip.id, day.id, 'b.jpg');
+    // Simulate an old photo / failed generation by removing the thumb.
+    const thumbPath = path.join(thumbsDir, thumbFilename(filename));
+    if (fs.existsSync(thumbPath)) fs.unlinkSync(thumbPath);
+
+    const dl = await request(app)
+      .get(`/api/trips/${trip.id}/files/${uploadId}/download?thumb=1`)
+      .set(authHeader(user.id));
+    expect(dl.status).toBe(200); // served the original
+  });
+
+  it('DAYPHOTO-THUMB-3 — deleting a photo removes its thumbnail', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+
+    const { photoId, filename } = await uploadPhoto(user.id, trip.id, day.id, 'c.jpg');
+    const thumbPath = path.join(thumbsDir, thumbFilename(filename));
+    expect(fs.existsSync(thumbPath)).toBe(true);
+
+    const del = await request(app)
+      .delete(`/api/trips/${trip.id}/days/${day.id}/photos/${photoId}`)
+      .set('Cookie', authCookie(user.id));
+    expect(del.status).toBe(200);
+    expect(fs.existsSync(thumbPath)).toBe(false);
   });
 });

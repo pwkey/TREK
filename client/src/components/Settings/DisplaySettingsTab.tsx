@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react'
 import { Palette, Sun, Moon, Monitor } from 'lucide-react'
 import { SUPPORTED_LANGUAGES, useTranslation } from '../../i18n'
 import { useSettingsStore } from '../../store/settingsStore'
+import { useDataSaverStore, type DataSaverMode } from '../../store/dataSaverStore' // [460-fork] Milestone 14
 import { useToast } from '../shared/Toast'
 import Section from './Section'
 
 export default function DisplaySettingsTab(): React.ReactElement {
   const { settings, updateSetting } = useSettingsStore()
+  const dataSaverMode = useDataSaverStore(s => s.mode) // [460-fork] M14
+  const setDataSaverMode = useDataSaverStore(s => s.setMode) // [460-fork] M14
   const { t } = useTranslation()
   const toast = useToast()
   const [tempUnit, setTempUnit] = useState<string>(settings.temperature_unit || 'celsius')
@@ -237,6 +240,39 @@ export default function DisplaySettingsTab(): React.ReactElement {
               </button>
             )
           })}
+        </div>
+      </div>
+
+      {/* [460-fork] M14 — Data saver (per-device, metered-connection mode) */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+          {t('dataSaver.title') || 'Data saver'}
+        </label>
+        <p className="text-xs mb-2" style={{ color: 'var(--text-faint)' }}>
+          {t('dataSaver.hint') || 'Warns before large uploads/downloads and prefers Wi-Fi. “Auto” turns on during your trip dates. This setting is per-device.'}
+        </p>
+        <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
+          {[
+            { value: 'auto' as DataSaverMode, label: t('dataSaver.modeAuto') || 'Auto (on during trips)' },
+            { value: 'on' as DataSaverMode, label: t('dataSaver.modeOn') || 'Always on' },
+            { value: 'off' as DataSaverMode, label: t('dataSaver.modeOff') || 'Off' },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setDataSaverMode(opt.value)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 14, fontWeight: 500,
+                border: dataSaverMode === opt.value ? '2px solid var(--text-primary)' : '2px solid var(--border-primary)',
+                background: dataSaverMode === opt.value ? 'var(--bg-hover)' : 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
     </Section>

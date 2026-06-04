@@ -2,6 +2,7 @@ import React, { useEffect, ReactNode } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useSettingsStore } from './store/settingsStore'
+import { useDataSaverStore } from './store/dataSaverStore' // [460-fork] Milestone 14
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import TripPlannerPage from './pages/TripPlannerPage'
@@ -130,6 +131,9 @@ export default function App() {
   useEffect(() => {
     if (isAuthenticated) {
       loadSettings()
+      // [460-fork] M14 — refresh whether today is within a trip, so Data-saver
+      // 'auto' mode knows to engage during the trip.
+      void useDataSaverStore.getState().refreshActiveTrip()
     }
   }, [isAuthenticated])
 

@@ -363,9 +363,12 @@ through your allowance.
   badge in the top bar shows how many. They upload by themselves once you're on
   Wi-Fi (or you turn Data saver off), or tap the badge to **upload now**.
   Nothing is lost in the meantime.
-- **Photos don't auto-download.** Browsing the memoir or a day's photos shows a
-  **tap-to-load** placeholder instead of pulling every image — load the ones
-  you want. Turn Data saver off and they all load.
+- **Light browsing, full photos on demand.** Grids and the memoir load small
+  **thumbnails** (tiny — they always load, even on Data saver), so you can
+  browse freely. Opening a photo full-screen is where the big image comes down:
+  with Data saver on that's a **tap-to-load** step, so you only pull full-size
+  images you actually want. Turn Data saver off and full images load on open as
+  usual.
 - **Big transfers ask first.** Downloading a trip for offline, exporting a
   bundle, or a large photo upload shows a quick **"this will use about X MB"**
   check, defaulting to *wait for Wi-Fi* when Data saver is on.

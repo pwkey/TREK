@@ -819,6 +819,8 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'trip.toast.reservationAdded': 'Reservation added',
   'trip.toast.deleted': 'Deleted',
   'trip.confirm.deletePlace': 'Are you sure you want to delete this place?',
+  'trip.confirm.dupAssignTitle': 'Already on this day',
+  'trip.confirm.dupAssign': '{place} is already on {day}. Add it again?',
 
   // Day Plan Sidebar
   'dayplan.emptyDay': 'No places planned for this day',
@@ -875,7 +877,12 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'places.viewDetails': 'View Details',
   'places.assignToDay': 'Add to which day?',
   'places.all': 'All',
+  'places.planned': 'Planned',
   'places.unplanned': 'Unplanned',
+  'places.onDays': 'Day {days}',
+  'places.scheduledOn': 'Scheduled on {days}',
+  'places.nonePlanned': 'No places are planned yet',
+  'places.addAgain': 'Add again',
   'places.search': 'Search places...',
   'places.allCategories': 'All Categories',
   'places.categoriesSelected': 'categories',

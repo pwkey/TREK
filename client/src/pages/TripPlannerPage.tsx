@@ -176,6 +176,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
   const [fitKey, setFitKey] = useState<number>(0)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<'left' | 'right' | null>(null)
   const [deletePlaceId, setDeletePlaceId] = useState<number | null>(null)
+  // [460-fork] Pending same-day duplicate assignment awaiting user confirmation.
+  const [dupAssign, setDupAssign] = useState<{ placeId: number; dayId: number; position?: number } | null>(null)
   // [460-fork] M6 follow-up — chronological photo route. Default
   // 'straight' so a fresh trip with imported geotagged photos shows
   // the route immediately; user can flip to 'road' (OSRM) or 'off'.
@@ -440,9 +442,9 @@ export default function TripPlannerPage(): React.ReactElement | null {
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : 'Unknown error') }
   }, [deletePlaceId, tripId, toast, selectedPlaceId, pushUndo])
 
-  const handleAssignToDay = useCallback(async (placeId, dayId, position) => {
-    const target = dayId || selectedDayId
-    if (!target) { toast.error(t('trip.toast.selectDay')); return }
+  // [460-fork] The actual assignment write. Bypasses the duplicate guard, so
+  // it's also safe to call from undo/redo where the dupe is intentional.
+  const doAssignToDay = useCallback(async (placeId, target, position) => {
     try {
       const assignment = await tripActions.assignPlaceToDay(tripId, target, placeId, position)
       toast.success(t('trip.toast.assignedToDay'))
@@ -455,7 +457,20 @@ export default function TripPlannerPage(): React.ReactElement | null {
         })
       }
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : 'Unknown error') }
-  }, [selectedDayId, tripId, toast, updateRouteForDay, pushUndo])
+  }, [tripId, toast, updateRouteForDay, pushUndo])
+
+  const handleAssignToDay = useCallback(async (placeId, dayId, position) => {
+    const target = dayId || selectedDayId
+    if (!target) { toast.error(t('trip.toast.selectDay')); return }
+    // [460-fork] Warn-but-allow same-day duplicates. A place is a reusable
+    // library item, so repeating it on DIFFERENT days (e.g. a multi-night
+    // hotel, a café you return to) stays friction-free. Only re-adding it to a
+    // day it's already on prompts, since that's almost always a mistake.
+    const already = (useTripStore.getState().assignments[String(target)] || [])
+      .some(a => a.place?.id === placeId)
+    if (already) { setDupAssign({ placeId, dayId: target, position }); return }
+    await doAssignToDay(placeId, target, position)
+  }, [selectedDayId, toast, doAssignToDay])
 
   const handleRemoveAssignment = useCallback(async (dayId, assignmentId) => {
     const state = useTripStore.getState()
@@ -1201,6 +1216,26 @@ export default function TripPlannerPage(): React.ReactElement | null {
         title={t('common.delete')}
         message={t('trip.confirm.deletePlace')}
       />
+      {/* [460-fork] Same-day duplicate-assignment warning (warn-but-allow). */}
+      {dupAssign && (() => {
+        const place = places.find(p => p.id === dupAssign.placeId)
+        const dayIdx = days.findIndex(d => d.id === dupAssign.dayId)
+        const dayLabel = dayIdx >= 0
+          ? (days[dayIdx].title || t('dayplan.dayN', { n: dayIdx + 1 }))
+          : ''
+        return (
+          <ConfirmDialog
+            isOpen
+            danger={false}
+            onClose={() => setDupAssign(null)}
+            onConfirm={() => doAssignToDay(dupAssign.placeId, dupAssign.dayId, dupAssign.position)}
+            title={t('trip.confirm.dupAssignTitle')}
+            message={t('trip.confirm.dupAssign', { place: place?.name || '', day: dayLabel })}
+            confirmLabel={t('places.addAgain')}
+            cancelLabel={t('common.cancel')}
+          />
+        )
+      })()}
     </div>
   )
 }

@@ -118,8 +118,27 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
     Object.values(assignments).flatMap(da => da.map(a => a.place?.id).filter(Boolean))
   ), [assignments])
 
+  // [460-fork] placeId -> sorted list of 1-based day numbers the place is
+  // scheduled on, so each row can show a "Day 3, 5" badge. The day number is
+  // the position in the ordered `days` array (same convention as the day list
+  // and the mobile day-picker sheet).
+  const placeDays = useMemo(() => {
+    const map = new Map<number, number[]>()
+    days.forEach((day, i) => {
+      for (const a of (assignments[String(day.id)] || [])) {
+        const pid = a.place?.id
+        if (!pid) continue
+        const arr = map.get(pid)
+        if (arr) { if (!arr.includes(i + 1)) arr.push(i + 1) }
+        else map.set(pid, [i + 1])
+      }
+    })
+    return map
+  }, [days, assignments])
+
   const filtered = useMemo(() => places.filter(p => {
     if (filter === 'unplanned' && plannedIds.has(p.id)) return false
+    if (filter === 'planned' && !plannedIds.has(p.id)) return false
     if (categoryFilters.size > 0 && !categoryFilters.has(String(p.category_id))) return false
     if (search && !p.name.toLowerCase().includes(search.toLowerCase()) &&
         !(p.address || '').toLowerCase().includes(search.toLowerCase())) return false
@@ -189,7 +208,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
 
         {/* Filter-Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-          {[{ id: 'all', label: t('places.all') }, { id: 'unplanned', label: t('places.unplanned') }].map(f => (
+          {[{ id: 'all', label: t('places.all') }, { id: 'planned', label: t('places.planned') }, { id: 'unplanned', label: t('places.unplanned') }].map(f => (
             <button key={f.id} onClick={() => setFilter(f.id)} style={{
               padding: '4px 10px', borderRadius: 20, border: 'none', cursor: 'pointer',
               fontSize: 11, fontWeight: 500, fontFamily: 'inherit',
@@ -298,7 +317,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
         {filtered.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 16px', gap: 8 }}>
             <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>
-              {filter === 'unplanned' ? t('places.allPlanned') : t('places.noneFound')}
+              {filter === 'unplanned' ? t('places.allPlanned') : filter === 'planned' ? t('places.nonePlanned') : t('places.noneFound')}
             </span>
             {canEditPlaces && <button onClick={onAddPlace} style={{ fontSize: 12, color: 'var(--text-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>
               {t('places.addPlace')}
@@ -398,7 +417,31 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
                     </div>
                   )}
                 </div>
-                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {/* [460-fork] Planned-day badge: shows which day(s) this place
+                      is scheduled on, so there's a visible indicator beyond the
+                      All/Planned/Unplanned filter. */}
+                  {isPlanned && (() => {
+                    const nums = placeDays.get(place.id) || []
+                    if (nums.length === 0) return null
+                    const shown = nums.slice(0, 3).join(', ')
+                    const extra = nums.length > 3 ? ` +${nums.length - 3}` : ''
+                    return (
+                      <span
+                        title={t('places.scheduledOn', { days: nums.join(', ') })}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 3,
+                          padding: '2px 6px', borderRadius: 6, flexShrink: 0,
+                          background: 'var(--bg-tertiary)', color: 'var(--text-faint)',
+                          fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        <CalendarDays size={10} strokeWidth={2} />
+                        {t('places.onDays', { days: shown })}{extra}
+                      </span>
+                    )
+                  })()}
                   {!inDay && selectedDayId && (
                     <button
                       onClick={e => { e.stopPropagation(); onAssignToDay(place.id) }}

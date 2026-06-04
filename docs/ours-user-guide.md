@@ -216,9 +216,11 @@ library as **Unplanned**.
 
 **Categories:** you can tag places by category (Food, Sights, Accommodation,
 etc.) and filter the library by them — invaluable once you have 30+ places.
-The full place editor has a category picker. *Tip:* if you add a place
-quickly (e.g. via a map right-click), open it afterwards to set its
-category.
+Set a category two ways: the full place editor has a category picker, or
+**right-click a place** in the library (long-press on mobile) → **Set
+category** for a quick change. Categories are **shared across your household**
+— create "Accommodation" once and everyone on the trip sees and can use it,
+and places stay categorised the same way for all of you.
 
 ### Step 3 — Slot places onto days
 
@@ -327,6 +329,13 @@ automatically includes the rest — no per-trip invitations.
 
 This is the in-trip mode, mostly on your phone, often offline.
 
+### Jump to today
+
+While you're on the trip, the day plan opens on **today** automatically, and a
+**Today** button in the day-list header jumps you back to the current day
+whenever you've scrolled off. (Before the trip starts it opens on day 1; the
+button appears once you're within the trip's dates.)
+
 ### It works offline
 
 Open each trip while you still have signal (or tap **Download for offline**
@@ -339,6 +348,31 @@ waiting to sync.
 > On iPhone, syncing happens when you next open the app on a connection
 > ("open it when you're back online and it catches up"). You don't need to do
 > anything special.
+
+### Watching your data (Data saver)
+
+Travelling on a limited data SIM? **Data saver** stops the app quietly burning
+through your allowance.
+
+- **Where:** Settings → Display → **Data saver**, with three modes: **Auto**
+  (the default — switches on automatically while you're within a trip's dates),
+  **Always on**, or **Off**. When it's active a small **"Data saver"** badge
+  shows in the top bar, so it's never throttling silently.
+- **Photos wait for Wi-Fi.** With Data saver on, photos you add are saved on
+  your phone and **held** instead of uploaded — a **"… waiting for Wi-Fi"**
+  badge in the top bar shows how many. They upload by themselves once you're on
+  Wi-Fi (or you turn Data saver off), or tap the badge to **upload now**.
+  Nothing is lost in the meantime.
+- **Photos don't auto-download.** Browsing the memoir or a day's photos shows a
+  **tap-to-load** placeholder instead of pulling every image — load the ones
+  you want. Turn Data saver off and they all load.
+- **Big transfers ask first.** Downloading a trip for offline, exporting a
+  bundle, or a large photo upload shows a quick **"this will use about X MB"**
+  check, defaulting to *wait for Wi-Fi* when Data saver is on.
+
+> On iPhone the app can't tell Wi-Fi from mobile data, so Data saver is your
+> switch to flip. Leave it on **Auto** and it looks after itself for the dates
+> of your trip.
 
 ### Capturing photos
 
@@ -551,12 +585,16 @@ family has shared with you shows a small green **Shared** tag.
 | Add somewhere I might visit | Plan tab → search or right-click the map → it lands as **Unplanned** |
 | Put it on a specific day | Drag it from the library onto a day → it becomes **Planned** |
 | Give a place a time | Add it to a day first, then open it — start/end time fields appear |
+| Set a place's category | Right-click the place (long-press on mobile) → **Set category** |
+| Jump to the current day | **Today** button in the day-list header (during the trip) |
 | Add another day | Plan tab → "+ Add day" at the top or bottom of the day list |
 | Import a flight/hotel booking | Reservations tab → Smart Import → drop the PDF or paste the email |
 | Add my partner/kids | Settings → Account → Household |
 | Snap a photo for today | Tap the camera button on the day in the day list |
 | Write about a day | Open the day → journal entry |
 | Relive the trip | Memoir tab |
+| Stop photos eating my data | Settings → Display → **Data saver** → on; photos then wait for Wi-Fi |
+| Upload held photos now | Tap the **"… waiting for Wi-Fi"** badge in the top bar |
 | Keep my own copy | Archive button on the trip → save the `.zip` |
 | Get my copy back | My Trips → Import → pick the `.zip` |
 | Share days with another family | Owner makes a segment + invite link → you attach it (or create a trip from it) |

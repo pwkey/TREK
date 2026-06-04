@@ -175,6 +175,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'photoQueue.waiting': '{count} photos waiting for Wi-Fi',
   'photoQueue.tooltip': 'Photos waiting for Wi-Fi — tap to upload now',
   'photoQueue.uploading': 'Uploading…',
+  'photoImg.tapToLoad': 'Tap to load (Data saver on)',
   'settings.colorMode': 'Color Mode',
   'settings.light': 'Light',
   'settings.dark': 'Dark',

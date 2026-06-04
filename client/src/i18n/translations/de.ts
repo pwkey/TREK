@@ -175,6 +175,7 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'photoQueue.waiting': '{count} Fotos warten auf WLAN',
   'photoQueue.tooltip': 'Fotos warten auf WLAN — zum Hochladen tippen',
   'photoQueue.uploading': 'Wird hochgeladen…',
+  'photoImg.tapToLoad': 'Zum Laden tippen (Datensparmodus an)',
   'settings.colorMode': 'Farbmodus',
   'settings.light': 'Hell',
   'settings.dark': 'Dunkel',

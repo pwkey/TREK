@@ -120,14 +120,28 @@ export bundle, and backup upload-restore (file size). When active the dialog's
 emphasised button is "Wait for Wi-Fi"; otherwise "Continue". Logic split into a
 React-free `dataCostConfirm.ts` so it loads under the node test env. i18n en+de.
 
-### Slice 3 — hold auto-upload
-Gate the queue flush for photo uploads on `dataSaver`; "waiting for wifi" chip +
-"upload now" override. Tests: queue holds + flushes on override / toggle-off.
+### Slice 3 — hold auto-upload ✅ shipped
+NOTE: photos do NOT ride the M5 JSON mutation queue (uploads are multipart), so
+this is a NEW durable IndexedDB hold-queue (`photoUploadQueue.ts`, localDb store
+v2→v3), not a flush-gate on the existing queue. The downscaled JPEG blob is
+stashed and replayed later. Slice-2's "Wait for Wi-Fi" now defers (was: discard).
+"N photos waiting for Wi-Fi" navbar chip + "upload now"; auto-flush when online
+and not metered (boot, reconnect, Data-saver off). Tests: queue persistence.
 
-### Slice 4 — niceties
-Thumbnails-only photo browsing in data-saver (tap to load original) +
-Network-API auto-suggest banner (Android/desktop). Tests: thumbnail gating;
-suggestion fires only when `saveData`/cellular reported.
+### Slice 4 — defer downloads ✅ shipped (scope adjusted)
+Photo DOWNLOADS are deferred while Data-saver is active: `PhotoImg` shows a
+tap-to-load placeholder instead of auto-fetching, so browsing the memoir/grids
+doesn't silently pull megabytes; turning Data-saver off loads them. i18n en+de.
+
+Scope notes:
+- *Thumbnails-only* (small server-generated thumbs) was NOT built: there is no
+  thumbnail endpoint and the server does no image processing — adding it means a
+  server image lib (sharp) + a variant endpoint. Deferred. Photos are already
+  downscaled on upload, so deferring the full download is the available win.
+- *Network-API auto-suggest*: already delivered by `auto` mode — `saveDataHint()`
+  (navigator.connection saveData/cellular, Android/desktop only) auto-engages
+  Data-saver. A separate nag-toast for the manual `off` override was deliberately
+  skipped (respects the user's explicit choice; iOS can't detect anyway).
 
 ---
 

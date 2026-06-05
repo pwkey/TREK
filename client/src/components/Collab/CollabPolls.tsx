@@ -16,7 +16,9 @@ interface PollVoter {
 
 interface PollOption {
   id: number
-  text: string
+  // [460-fork] type fix: the collab API returns option `label` (collabService
+  // formatPoll), not `text`. The code already reads opt.label; the type lied.
+  label: string
   voters: PollVoter[]
 }
 
@@ -24,7 +26,9 @@ interface Poll {
   id: number
   question: string
   options: PollOption[]
-  multi_choice: boolean
+  // [460-fork] type fix: server returns/accepts `multiple_choice`, not
+  // `multi_choice`. Code already uses multiple_choice end-to-end.
+  multiple_choice: boolean
   is_closed: boolean
   deadline: string | null
   created_by: number
@@ -57,7 +61,7 @@ function totalVotes(poll) {
 // ── Create Poll Modal ────────────────────────────────────────────────────────
 interface CreatePollModalProps {
   onClose: () => void
-  onCreate: (data: { question: string; options: string[]; multi_choice: boolean }) => Promise<void>
+  onCreate: (data: { question: string; options: string[]; multiple_choice: boolean }) => Promise<void>
   t: (key: string) => string
 }
 
@@ -305,7 +309,7 @@ function PollCard({ poll, currentUser, canEdit, onVote, onClose, onDelete, t }: 
                 flex: 1, fontSize: 13, fontWeight: myVote || isWinner ? 600 : 400,
                 color: 'var(--text-primary)', position: 'relative', zIndex: 1,
               }}>
-                {typeof opt === 'string' ? opt : opt.label || opt}
+                {typeof opt === 'string' ? opt : opt.label}
               </span>
 
               {/* Voter avatars */}

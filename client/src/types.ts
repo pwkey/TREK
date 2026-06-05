@@ -26,6 +26,15 @@ export interface Trip {
   owner_id: number
   created_at: string
   updated_at: string
+  // [460-fork] type-def gaps: the API returns raw `trips` rows, so these DB
+  // columns (and the computed day_count) are present at runtime but were never
+  // declared. `title`/`user_id`/`currency`/`cover_image` are the real column
+  // names; `name`/`owner_id`/`cover_url` above are legacy aliases.
+  title?: string
+  user_id?: number
+  currency?: string
+  cover_image?: string | null
+  day_count?: number
 }
 
 export interface Day {
@@ -60,6 +69,21 @@ export interface Place {
   place_time: string | null
   end_time: string | null
   created_at: string
+  // [460-fork] type-def gaps: real `places` columns / hydrated category that
+  // the API returns but the type never declared.
+  website?: string | null
+  phone?: string | null
+  notes?: string | null
+  transport_mode?: string | null
+  duration_minutes?: number | null
+  currency?: string | null
+  category?: Category | null
+}
+
+export interface AssignmentParticipant {
+  user_id: number
+  username: string
+  avatar: string | null
 }
 
 export interface Assignment {
@@ -69,6 +93,17 @@ export interface Assignment {
   order_index: number
   notes: string | null
   place: Place
+  // [460-fork] type-def gaps: returned by assignmentService / surfaced when an
+  // accommodation span (day_accommodations: start_day_id..end_day_id) is
+  // rendered through the day plan.
+  participants?: AssignmentParticipant[]
+  assignment_time?: string | null
+  assignment_end_time?: string | null
+  start_day_id?: number | null
+  end_day_id?: number | null
+  sort_order?: number
+  place_name?: string
+  created_at?: string
 }
 
 export interface DayNote {
@@ -88,6 +123,9 @@ export interface PackingItem {
   category: string | null
   checked: number
   quantity: number
+  // [460-fork] type-def gaps: packing-bags feature columns (migrations 71/74).
+  bag_id?: number | null
+  weight_grams?: number | null
 }
 
 export interface TodoItem {
@@ -115,6 +153,7 @@ export interface Category {
   name: string
   icon: string | null
   user_id: number
+  color?: string | null // [460-fork] type-def gap: real `categories.color` column
 }
 
 export interface BudgetItem {
@@ -128,11 +167,15 @@ export interface BudgetItem {
   persons: number
   members: BudgetMember[]
   expense_date: string | null
+  total_price?: number // [460-fork] type-def gap: computed total used in budget UI
 }
 
 export interface BudgetMember {
   user_id: number
   paid: boolean
+  // [460-fork] type-def gaps: hydrated for display in the budget panel.
+  username?: string
+  avatar_url?: string | null
 }
 
 export interface Reservation {
@@ -157,6 +200,10 @@ export interface Reservation {
   day_plan_position?: number | null
   metadata?: Record<string, string> | string | null
   created_at: string
+  // [460-fork] type-def gaps: per-day positions (day_id -> position) for
+  // multi-day reservations, and the joined accommodation place name.
+  day_positions?: Record<number, number> | null
+  accommodation_name?: string | null
   // [460-fork] Milestone 13 — segment document-sharing flags (server-computed).
   owned_by_this_trip?: number       // 1 = this trip owns it; 0 = shared in by another household
   shared_into_segment?: number      // 1 = shared in from another household; 0 = owned
@@ -207,6 +254,9 @@ export interface Settings {
   // taken_at doesn't match the target day's date. Per-user setting,
   // default true.
   check_photo_timestamp?: boolean
+  // [460-fork] type-def gaps: dashboard display overrides.
+  dashboard_timezone?: string
+  dashboard_currency?: string
 }
 
 export interface AssignmentsMap {
@@ -257,6 +307,10 @@ export interface Accommodation {
   notes: string | null
   url: string | null
   created_at: string
+  // [460-fork] type-def gaps: day_accommodations span columns.
+  place_id?: number
+  start_day_id?: number
+  end_day_id?: number
 }
 
 // Trip member (owner or collaborator)
@@ -266,6 +320,7 @@ export interface TripMember {
   email?: string
   avatar_url?: string | null
   role?: string
+  avatar?: string | null // [460-fork] type-def gap: raw `users.avatar` column
 }
 
 // Photo type
@@ -280,6 +335,9 @@ export interface Photo {
   place_id: number | null
   day_id: number | null
   created_at: string
+  // [460-fork] type-def gaps: client-facing URL + alternate size field name.
+  url?: string
+  file_size?: number | null
 }
 
 // Atlas place detail
@@ -352,6 +410,7 @@ export interface VacayPlan {
   owner_id?: number
   created_at?: string
   updated_at?: string
+  weekend_days?: string // [460-fork] type-def gap: CSV of weekend day indices (migration)
 }
 
 export interface VacayUser {

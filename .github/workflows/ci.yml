@@ -65,6 +65,31 @@ jobs:
       - name: Build (production bundle)
         run: cd client && npm run build
 
+  # [460-fork] Typecheck ratchet. Vite/esbuild never type-checks, so this is the
+  # only `tsc` gate. It runs the baseline ratchet (client/scripts/
+  # typecheck-baseline.mjs): it fails ONLY on NEW type errors, not the
+  # pre-existing backlog captured in tsc-baseline.json. Deliberately NOT in the
+  # deploy `needs:` below — installs are non-deterministic (see note at top), so
+  # a cross-platform baseline hiccup must never be able to block a deploy. It
+  # still fails loudly as its own red check on the commit / PR.
+  typecheck:
+    name: Client typecheck (ratchet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install
+        run: cd client && npm install --no-audit --no-fund
+
+      - name: Typecheck (no new errors vs baseline)
+        run: cd client && npm run typecheck
+
   # Single-file CI gate: deploys ONLY after server + client jobs succeed,
   # AND only on a push to `personal` (not on PRs to personal/main).
   #

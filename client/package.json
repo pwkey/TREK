@@ -10,7 +10,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "node scripts/typecheck-baseline.mjs",
+    "typecheck:update": "node scripts/typecheck-baseline.mjs --update"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.2",

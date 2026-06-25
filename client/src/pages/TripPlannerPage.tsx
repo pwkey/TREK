@@ -964,6 +964,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
                     places={places}
                     categories={categories}
                     assignments={assignments}
+                    days={days}
+                    isMobile={isMobile}
                     selectedDayId={selectedDayId}
                     selectedPlaceId={selectedPlaceId}
                     onPlaceClick={handlePlaceClick}

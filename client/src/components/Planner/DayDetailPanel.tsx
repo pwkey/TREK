@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
 import { X, Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudLightning, Wind, Droplets, Sunrise, Sunset, Hotel, Calendar, MapPin, LogIn, LogOut, Hash, Pencil, Plane, Utensils, Train, Car, Ship, Ticket, FileText, Users } from 'lucide-react'
 
@@ -56,9 +56,10 @@ interface DayDetailPanelProps {
   onAccommodationChange: () => void
   leftWidth?: number
   rightWidth?: number
+  focusJournal?: boolean // [460-fork] when true, scroll to the journal editor on open
 }
 
-export default function DayDetailPanel({ day, days, places, categories = [], tripId, assignments, reservations = [], lat, lng, onClose, onAccommodationChange, leftWidth = 0, rightWidth = 0 }: DayDetailPanelProps) {
+export default function DayDetailPanel({ day, days, places, categories = [], tripId, assignments, reservations = [], lat, lng, onClose, onAccommodationChange, leftWidth = 0, rightWidth = 0, focusJournal = false }: DayDetailPanelProps) {
   const { t, language, locale } = useTranslation()
   const can = useCanDo()
   const tripObj = useTripStore((s) => s.trip)
@@ -72,6 +73,16 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
   const [loading, setLoading] = useState(false)
   const [accommodation, setAccommodation] = useState(null)
   const [dayAccommodations, setDayAccommodations] = useState<any[]>([])
+  // [460-fork] Scroll to the journal editor when opened via the Plan-view
+  // journal button. A short delay lets the panel finish its open transition.
+  const journalRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!focusJournal) return
+    const timer = setTimeout(() => {
+      journalRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+    return () => clearTimeout(timer)
+  }, [focusJournal, day.id])
   const [accommodations, setAccommodations] = useState([])
   const [showHotelPicker, setShowHotelPicker] = useState(false)
   const [hotelDayRange, setHotelDayRange] = useState({ start: day?.id, end: day?.id })
@@ -420,7 +431,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
             )}
 
             {/* [460-fork] Milestone 6 slice 1 — per-day journal */}
-            {canEditDays && <JournalEditor tripId={tripId} dayId={day.id} />}
+            {canEditDays && <div ref={journalRef}><JournalEditor tripId={tripId} dayId={day.id} /></div>}
 
             {/* [460-fork] Milestone 6 slice 2 — per-day photos */}
             {canEditDays && <PhotoGrid tripId={tripId} dayId={day.id} />}

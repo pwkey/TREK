@@ -165,6 +165,9 @@ export default function TripPlannerPage(): React.ReactElement | null {
   const { leftWidth, rightWidth, leftCollapsed, rightCollapsed, setLeftCollapsed, setRightCollapsed, startResizeLeft, startResizeRight } = useResizablePanels()
   const { selectedPlaceId, selectedAssignmentId, setSelectedPlaceId, selectAssignment } = usePlaceSelection()
   const [showDayDetail, setShowDayDetail] = useState<Day | null>(null)
+  // [460-fork] When the day detail is opened via the Plan-view journal button,
+  // scroll it straight to the journal editor. False for every other open path.
+  const [dayDetailFocusJournal, setDayDetailFocusJournal] = useState(false)
   const [showPlaceForm, setShowPlaceForm] = useState<boolean>(false)
   const [editingPlace, setEditingPlace] = useState<Place | null>(null)
   const [prefillCoords, setPrefillCoords] = useState<{ lat: number; lng: number; name?: string; address?: string } | null>(null)
@@ -344,9 +347,19 @@ export default function TripPlannerPage(): React.ReactElement | null {
     if (!day) return
     tripActions.setSelectedDay(p.day_id)
     setShowDayDetail(day)
+    setDayDetailFocusJournal(false)
     setSelectedPlaceId(null)
     selectAssignment(null)
   }, [days, tripActions, setSelectedPlaceId, selectAssignment])
+
+  // [460-fork] Open the day-detail panel from the Plan sidebar. `focusJournalView`
+  // routes here from the journal button so the panel scrolls to the journal editor.
+  const openDayDetail = (day: Day, focusJournalView: boolean) => {
+    setShowDayDetail(day)
+    setDayDetailFocusJournal(focusJournalView)
+    setSelectedPlaceId(null)
+    selectAssignment(null)
+  }
 
   const handleMapContextMenu = useCallback(async (e) => {
     if (!can('place_edit', trip)) return
@@ -901,7 +914,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   onRouteCalculated={(r) => { if (r) { setRoute(r.coordinates); setRouteInfo({ distance: r.distanceText, duration: r.durationText, walkingText: r.walkingText, drivingText: r.drivingText }) } else { setRoute(null); setRouteInfo(null) } }}
                   reservations={reservations}
                   onAddReservation={(dayId) => { setEditingReservation(null); tripActions.setSelectedDay(dayId); setShowReservationModal(true) }}
-                  onDayDetail={(day) => { setShowDayDetail(day); setSelectedPlaceId(null); selectAssignment(null) }}
+                  onDayDetail={(day) => openDayDetail(day, false)}
+                  onDayJournal={(day) => openDayDetail(day, true)}
                   onRemoveAssignment={handleRemoveAssignment}
                   onEditPlace={(place, assignmentId) => { setEditingPlace(place); setEditingAssignmentId(assignmentId || null); setShowPlaceForm(true) }}
                   onDeletePlace={(placeId) => handleDeletePlace(placeId)}
@@ -1010,8 +1024,9 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   reservations={reservations}
                   lat={geoPlace?.lat}
                   lng={geoPlace?.lng}
-                  onClose={() => { setShowDayDetail(null); handleSelectDay(null) }}
+                  onClose={() => { setShowDayDetail(null); setDayDetailFocusJournal(false); handleSelectDay(null) }}
                   onAccommodationChange={loadAccommodations}
+                  focusJournal={dayDetailFocusJournal}
                   leftWidth={isMobile ? 0 : (leftCollapsed ? 0 : leftWidth)}
                   rightWidth={isMobile ? 0 : (rightCollapsed ? 0 : rightWidth)}
                 />

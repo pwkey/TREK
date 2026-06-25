@@ -850,6 +850,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.insertDayHere': 'Insert a day here',
   'dayplan.insertBlockedSegment': 'Can’t insert here — later days are part of a shared segment.',
   'dayplan.addPhoto': 'Add photo',
+  'dayplan.openJournal': 'Journal',
   'collab.notes.expand': 'Expand',
   'photos.notAnImage': 'Not an image',
   'photos.uploadSuccess': 'Photo added',

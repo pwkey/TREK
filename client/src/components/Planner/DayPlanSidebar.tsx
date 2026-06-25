@@ -4,7 +4,7 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download, Archive, FileJson, Images, CalendarDays } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download, Archive, FileJson, Images, CalendarDays, BookOpen } from 'lucide-react'
 import BatchPhotoImport from '../Journal/BatchPhotoImport' // [460-fork] M6 follow-up
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
@@ -75,6 +75,7 @@ interface DayPlanSidebarProps {
   onSelectDay: (dayId: number | null) => void
   onPlaceClick: (placeId: number) => void
   onDayDetail: (day: Day) => void
+  onDayJournal?: (day: Day) => void // [460-fork] open day detail scrolled to the journal editor
   accommodations?: Assignment[]
   onReorder: (dayId: number, orderedIds: number[]) => void
   onUpdateDayTitle: (dayId: number, title: string) => void
@@ -97,7 +98,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   tripId,
   trip, days, places, categories, assignments,
   selectedDayId, selectedPlaceId, selectedAssignmentId,
-  onSelectDay, onPlaceClick, onDayDetail, accommodations = [],
+  onSelectDay, onPlaceClick, onDayDetail, onDayJournal, accommodations = [],
   onReorder, onUpdateDayTitle, onRouteCalculated,
   onAssignToDay, onRemoveAssignment, onEditPlace, onDeletePlace,
   reservations = [],
@@ -1444,6 +1445,18 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                   onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}
                 >
                   <FileText size={16} strokeWidth={2} />
+                </button>}
+                {/* [460-fork] Journal — opens the day detail scrolled to the journal editor
+                    ("what actually happened"), distinct from the planning notes above. */}
+                {canEditDays && onDayJournal && <button
+                  onClick={e => { e.stopPropagation(); onDayJournal(day) }}
+                  title={t('dayplan.openJournal')}
+                  aria-label={t('dayplan.openJournal')}
+                  style={{ flexShrink: 0, background: 'none', border: 'none', padding: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-faint)' }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}
+                >
+                  <BookOpen size={16} strokeWidth={2} />
                 </button>}
                 <button
                   onClick={e => toggleDay(day.id, e)}

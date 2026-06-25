@@ -931,8 +931,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }}>
       {/* Reise-Titel */}
       <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border-faint)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', lineHeight: '1.3' }}>{trip?.title}</div>
             {(trip?.start_date || trip?.end_date) && (
               <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 3 }}>
@@ -959,6 +959,9 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
               </button>
             )}
           </div>
+          {/* [460-fork] Export / tool icon strip — its own row below the title so a
+              long trip name no longer collides with these buttons. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <button
               onClick={async () => {
@@ -1246,6 +1249,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
               )}
             </div>
           )}
+          </div>
         </div>
       </div>
 

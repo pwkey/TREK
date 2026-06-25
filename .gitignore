@@ -66,6 +66,7 @@ test-data
 # Per-developer local launch scripts
 start.bat
 stop.bat
+fire-up.ps1
 
 # [460-fork] Local backup-pull script — contains the server IP, root SSH
 # target and internal Docker volume path. MUST NOT be committed to this

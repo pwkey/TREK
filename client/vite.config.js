@@ -6,11 +6,15 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      // [460-fork] Inject the service-worker registration script into the
-      // HTML head — without this, dev mode serves the SW file but never
-      // registers it, so Chrome's installability check silently fails.
-      injectRegister: 'script',
+      // [460-fork] 'prompt' (not 'autoUpdate'): a new build no longer swaps in
+      // silently — UpdatePrompt.tsx shows an "Update available" banner and the
+      // user taps Reload. autoUpdate was unreliable on installed Android PWAs,
+      // which sat on a stale build indefinitely.
+      registerType: 'prompt',
+      // [460-fork] We register the SW ourselves via useRegisterSW in
+      // UpdatePrompt.tsx (works in dev too, thanks to devOptions below), so the
+      // plugin must NOT also inject its own registration script.
+      injectRegister: false,
       // [460-fork] Enable the manifest + service worker in `npm run dev` so
       // Chrome / Edge offer the install prompt during phone testing through
       // a tunnel. Without this, vite-plugin-pwa only wires up for production
@@ -21,11 +25,10 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2,ttf}'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/mcp/],
-        // [460-fork] Activate new SW immediately on next page load instead
-        // of waiting for every tab to close. Without these the PWA on
-        // Android can get stuck on a stale build for an indefinite time
-        // because Chrome keeps the SW alive in the background.
-        skipWaiting: true,
+        // [460-fork] With registerType 'prompt' the new SW must WAIT until the
+        // user taps Reload in the update banner (which posts SKIP_WAITING via
+        // updateServiceWorker), so we deliberately do NOT set skipWaiting here.
+        // clientsClaim lets the activated SW take control of open pages.
         clientsClaim: true,
         runtimeCaching: [
           {

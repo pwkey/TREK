@@ -23,6 +23,7 @@ import { ToastContainer } from './components/shared/Toast'
 import { DataCostConfirmHost } from './components/shared/DataCostConfirmHost' // [460-fork] Milestone 14
 import SplashScreen from './components/shared/SplashScreen'
 import ErrorBoundary from './components/shared/ErrorBoundary' // [460-fork] catch render crashes
+import UpdatePrompt from './components/shared/UpdatePrompt' // [460-fork] "update available" banner
 import { TranslationProvider, useTranslation } from './i18n'
 import { authApi } from './api/client'
 import { usePermissionsStore, PermissionLevel } from './store/permissionsStore'
@@ -200,6 +201,7 @@ export default function App() {
   return (
     <TranslationProvider>
       <SplashScreen />
+      <UpdatePrompt />{/* [460-fork] PWA update banner */}
       <ToastContainer />
       <DataCostConfirmHost />{/* [460-fork] Milestone 14 */}
       <ErrorBoundary resetKey={location.pathname}>

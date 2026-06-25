@@ -807,6 +807,10 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'trip.tabs.files': 'Files',
   'trip.loading': 'Loading trip...',
   'trip.loadingPhotos': 'Loading place photos...',
+  // [460-fork] PWA "update available" banner.
+  'update.available': 'A new version is available.',
+  'update.reload': 'Reload',
+  'update.dismiss': 'Dismiss',
   // [460-fork] App-level error boundary fallback.
   'errorBoundary.title': 'Something went wrong',
   'errorBoundary.message': "This screen hit an unexpected error. Your data is safe — try reloading, or head back to your trips.",

@@ -1,6 +1,6 @@
 {
   "note": "Baseline of pre-existing tsc --noEmit errors. Regenerate with `npm run typecheck:update`. Lower is better; never raise it to silence new errors.",
-  "total": 304,
+  "total": 301,
   "errors": {
     "src/components/Budget/BudgetPanel.tsx: error TS2322: Type '{ minWidth: number; padding: string; textAlign: string; fontSize: number; fontWeight: number; color: string; textTransform: string; letterSpacing: string; borderBottom: string; whiteSpace: string; background: string; }' is not assignable to type 'CSSProperties'.": 7,
     "src/components/Budget/BudgetPanel.tsx: error TS2322: Type '{ name: string; value: any; color: string; }[]' is not assignable to type 'PieSegment[]'.": 1,
@@ -61,8 +61,6 @@
     "src/components/Map/MapView.tsx: error TS2339: Property 'tileUrl' does not exist on type '{}'.": 1,
     "src/components/Map/MapView.tsx: error TS2339: Property 'zoom' does not exist on type '{}'.": 1,
     "src/components/Map/MapView.tsx: error TS2345: Argument of type '() => () => L.Map' is not assignable to parameter of type 'EffectCallback'.": 3,
-    "src/components/Map/MapView.tsx: error TS2882: Cannot find module or type declarations for side-effect import of 'leaflet.markercluster/dist/MarkerCluster.Default.css'.": 1,
-    "src/components/Map/MapView.tsx: error TS2882: Cannot find module or type declarations for side-effect import of 'leaflet.markercluster/dist/MarkerCluster.css'.": 1,
     "src/components/PDF/TripPDF.tsx: error TS2339: Property 'map' does not exist on type 'unknown'.": 1,
     "src/components/PDF/TripPDF.tsx: error TS2339: Property 'onclick' does not exist on type 'Element'.": 2,
     "src/components/PDF/TripPDF.tsx: error TS2349: This expression is not callable.": 1,
@@ -155,7 +153,6 @@
     "src/i18n/translations/ru.ts: error TS2322: Type '{ name: string; category: string; }[]' is not assignable to type 'string'.": 1,
     "src/i18n/translations/zh.ts: error TS2322: Type '{ name: string; category: string; }[]' is not assignable to type 'string'.": 1,
     "src/i18n/translations/zhTw.ts: error TS2322: Type '{ name: string; category: string; }[]' is not assignable to type 'string'.": 1,
-    "src/main.tsx: error TS2882: Cannot find module or type declarations for side-effect import of './index.css'.": 1,
     "src/pages/AtlasPage.tsx: error TS2353: Object literal may only specify known properties, and 'renderer' does not exist in type 'GeoJSONOptions<any, Geometry>'.": 2,
     "src/pages/DashboardPage.tsx: error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.": 1,
     "src/pages/DashboardPage.tsx: error TS2363: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.": 1,

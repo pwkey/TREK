@@ -22,6 +22,7 @@ import InAppNotificationsPage from './pages/InAppNotificationsPage.tsx'
 import { ToastContainer } from './components/shared/Toast'
 import { DataCostConfirmHost } from './components/shared/DataCostConfirmHost' // [460-fork] Milestone 14
 import SplashScreen from './components/shared/SplashScreen'
+import ErrorBoundary from './components/shared/ErrorBoundary' // [460-fork] catch render crashes
 import { TranslationProvider, useTranslation } from './i18n'
 import { authApi } from './api/client'
 import { usePermissionsStore, PermissionLevel } from './store/permissionsStore'
@@ -201,6 +202,7 @@ export default function App() {
       <SplashScreen />
       <ToastContainer />
       <DataCostConfirmHost />{/* [460-fork] Milestone 14 */}
+      <ErrorBoundary resetKey={location.pathname}>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
@@ -291,6 +293,8 @@ export default function App() {
         <Route path="/poll/:token" element={<PublicPollPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </ErrorBoundary>
     </TranslationProvider>
   )
 }
+

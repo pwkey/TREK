@@ -4,6 +4,48 @@
 
 ---
 
+## Start here — the 2-minute version
+
+**What it is.** 460 Trip Planner is a private, invite-only travel planner and
+journal — one place where everyone on a trip sees the same plan, day by day, on
+their phone or laptop. It isn't from an app store: you open it in your browser at
+**https://460planner.pwkconsulting.org** and add it to your home screen so it
+feels like an app. No fees, no adverts, and only people we invite can use it.
+
+**How it works, in three ideas:**
+
+- **Places vs Days.** You collect *places* — a hotel, a hike, a restaurant —
+  into a wishlist, then drag them onto specific *days* to build the itinerary.
+  (It's the one idea worth understanding; see Section 2.)
+- **Households.** A couple or family link into a *household*, so they're added to
+  trips together and only enter their details once.
+- **Shared segments.** When two families travel together for part of a trip, the
+  family that owns those days *shares* them with you. The shared days appear in
+  **your own** trip and stay in sync — while each family keeps its own bookings,
+  journal and photos private.
+
+**If you've just been invited into a trip — your fast path:**
+
+1. **Open the link** Peter sent, **create your own account**, and add the app to
+   your home screen (Section 3). Installing alone isn't enough — the *account* is
+   what unlocks everything.
+2. **Travelling as a couple or family?** Set up your **household** first
+   (Section 7) so that *both* of you see the shared days — not just whoever
+   accepts the invite.
+3. **Open the segment invite link** Peter sends and choose **"Attach to my
+   trip"** (or "Create a new trip from it" if you haven't started one yet). The
+   shared days now appear in your trip.
+4. **What you'll see:** the agreed *itinerary* for those days — places, order,
+   times and notes — shared and kept in sync for everyone. **What stays yours:**
+   your own flights and hotels and their documents, and your own journal and
+   photos, even on the shared days.
+
+That's the whole idea. Everything below is detail you can dip into as you need
+it — installing (Section 3), the full invite flow (Section 12), and travelling
+with it on the road (Section 8).
+
+---
+
 ## 1. What 460 Trip Planner is
 
 460 Trip Planner is a private, shared travel planner and travel journal. We
@@ -153,6 +195,15 @@ time from **Settings → Account**.
 > one inbox can each sign up with a **"plus" alias** of it — e.g.
 > **yourname+jane@gmail.com** and **yourname+john@gmail.com**. Gmail delivers
 > both to the same inbox, but the app treats them as two separate logins.
+
+### Keeping the app up to date
+
+The app improves regularly. When there's a new version, you'll see an
+**"Update available — Reload"** banner at the bottom of the screen; just tap
+**Reload**. If the app ever looks broken, blank, or stuck on something old —
+usually a sign it's holding an out-of-date copy — **fully close it and reopen**
+(on a phone, swipe it away from your recent-apps; on a laptop, close the tab or
+window). If it's still odd after that, tell Peter rather than reinstalling.
 
 ---
 

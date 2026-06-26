@@ -83,6 +83,7 @@ Backup Pull script/
 # of artefact, so it's ignored too.
 460 Trip Planner - User Guide.docx
 460 Trip Planner - User Guide.pdf
+460 Trip Planner - Quick Start.pdf
 *.docx
 
 # [460-fork] Local manual-test data — real trip photos + exported JSON used

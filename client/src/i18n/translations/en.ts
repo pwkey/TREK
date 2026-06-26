@@ -44,8 +44,11 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'nav.trip': 'Trip',
   'nav.share': 'Share',
   'nav.settings': 'Settings',
+  'nav.userGuide': 'User Guide',
   'nav.admin': 'Admin',
   'nav.logout': 'Log out',
+  // [460-fork] In-app user guide page
+  'help.title': 'User Guide',
   'nav.lightMode': 'Light Mode',
   'nav.darkMode': 'Dark Mode',
   'nav.autoMode': 'Auto Mode',

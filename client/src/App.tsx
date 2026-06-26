@@ -9,6 +9,7 @@ import TripPlannerPage from './pages/TripPlannerPage'
 import FilesPage from './pages/FilesPage'
 import AdminPage from './pages/AdminPage'
 import SettingsPage from './pages/SettingsPage'
+import HelpPage from './pages/HelpPage' // [460-fork] in-app user guide
 import VacayPage from './pages/VacayPage'
 import AtlasPage from './pages/AtlasPage'
 import PollsPage from './pages/PollsPage' // [460-fork] Milestone 9
@@ -256,6 +257,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/help"
+          element={
+            <ProtectedRoute>
+              <HelpPage />
             </ProtectedRoute>
           }
         />

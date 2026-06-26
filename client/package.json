@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/generate-icons.mjs && node scripts/build-viewer.mjs",
+    "prebuild": "node scripts/sync-guide.mjs && node scripts/generate-icons.mjs && node scripts/build-viewer.mjs",
     "build:viewer": "node scripts/build-viewer.mjs",
     "build": "vite build",
     "preview": "vite preview",

@@ -512,4 +512,44 @@ describe('M12 — faithful off-boarding round-trip', () => {
     try { fs.unlinkSync(path.join(filesDir, realName)); } catch { /* ignore */ }
     try { fs.unlinkSync(path.join(filesDir, linkedFile.filename)); } catch { /* ignore */ }
   });
+
+  it('IMPORT-015 — a hotel reservation re-links to its accommodation through import', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Hotel link' });
+    const dIn = createDay(testDb, trip.id, { date: '2026-07-01', title: 'Check in' });
+    const dOut = createDay(testDb, trip.id, { date: '2026-07-02', title: 'Check out' });
+    const place = testDb.prepare(`INSERT INTO places (trip_id, name) VALUES (?, 'Grand Hotel')`).run(trip.id);
+    const acc = testDb.prepare(
+      `INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, confirmation) VALUES (?, ?, ?, ?, 'CONF123')`
+    ).run(trip.id, place.lastInsertRowid, dIn.id, dOut.id);
+    // A hotel reservation linked to that accommodation (the app's own model).
+    testDb.prepare(
+      `INSERT INTO reservations (trip_id, title, type, status, accommodation_id, confirmation_number) VALUES (?, 'Grand Hotel booking', 'hotel', 'confirmed', ?, 'CONF123')`
+    ).run(trip.id, acc.lastInsertRowid);
+
+    const exportRes = await request(app)
+      .get(`/api/trips/${trip.id}/export`)
+      .set('Cookie', authCookie(user.id))
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (c: Buffer) => chunks.push(c));
+        response.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+
+    const importRes = await request(app)
+      .post('/api/trips/import?dry_run=false')
+      .set('Cookie', authCookie(user.id))
+      .attach('file', exportRes.body as Buffer, 'hotel.json');
+    expect(importRes.status).toBe(201);
+    const newTripId = importRes.body.result.trip_id;
+
+    // The imported hotel reservation must point at the imported accommodation's
+    // NEW id (the link survived the id re-mapping), not the stale source id.
+    const newAcc = testDb.prepare('SELECT id FROM day_accommodations WHERE trip_id = ?').get(newTripId) as { id: number };
+    const newRes = testDb.prepare(`SELECT accommodation_id FROM reservations WHERE trip_id = ? AND type = 'hotel'`).get(newTripId) as { accommodation_id: number | string | null };
+    expect(newAcc?.id).toBeGreaterThan(0);
+    // accommodation_id is a TEXT column → may come back as a string; compare numerically.
+    expect(Number(newRes?.accommodation_id)).toBe(newAcc.id);
+  });
 });

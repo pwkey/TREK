@@ -150,6 +150,10 @@ interface ImportedReservation {
   confirmation_number?: string | null;
   notes?: string | null;
   status?: string | null;
+  // [460-fork] Link to an accommodation (export id); re-mapped on import so a
+  // hotel booking re-attaches to its stay. TEXT column upstream, so it can be a
+  // string. See step 9b in importTrip.
+  accommodation_id?: number | string | null;
 }
 
 interface ImportedBudgetItem {
@@ -617,13 +621,15 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
       );
     }
 
-    // 9. Accommodations — need both the place and day mappings.
+    // 9. Accommodations — need both the place and day mappings. [460-fork] keep
+    //    an accommodationIdMap so hotel reservations can be re-linked below.
+    const accommodationIdMap = new Map<number, number>();
     for (const a of trip.accommodations ?? []) {
       const newPlaceId = a.place_id ? placeIdMap.get(a.place_id) : undefined;
       const newStartDayId = a.start_day_id ? dayIdMap.get(a.start_day_id) : undefined;
       const newEndDayId = a.end_day_id ? dayIdMap.get(a.end_day_id) : undefined;
       if (!newPlaceId || !newStartDayId || !newEndDayId) continue;
-      db.prepare(`
+      const accIns = db.prepare(`
         INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_out, confirmation, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -636,6 +642,23 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
         a.confirmation ?? null,
         a.notes ?? null,
       );
+      if (a.id != null) accommodationIdMap.set(Number(a.id), Number(accIns.lastInsertRowid));
+    }
+
+    // 9b. [460-fork] Re-link hotel reservations to their accommodation. The
+    //     reservation rows were inserted in step 5 without accommodation_id (the
+    //     accommodations didn't exist yet); now that both are mapped, set the FK
+    //     so a type:'hotel' booking — and its attached PDF — shows on the
+    //     accommodation strip, matching the app's own create-accommodation flow.
+    for (const r of trip.reservations ?? []) {
+      if (typeof r.id !== 'number' || r.accommodation_id == null) continue;
+      const newResId = reservationIdMap.get(r.id);
+      // accommodation_id is a TEXT column, so it can arrive as a string ("2");
+      // normalise to number to match the numeric accommodation ids in the map.
+      const newAccId = accommodationIdMap.get(Number(r.accommodation_id));
+      if (newResId && newAccId) {
+        db.prepare('UPDATE reservations SET accommodation_id = ? WHERE id = ?').run(newAccId, newResId);
+      }
     }
 
     return {

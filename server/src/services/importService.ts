@@ -32,6 +32,7 @@ import { randomUUID } from 'node:crypto';
 import unzipper from 'unzipper';
 import { db } from '../db/database';
 import { filesDir } from './fileService';
+import { autoAddHouseholdToTrip } from './householdService';
 import { EXPORT_SCHEMA_VERSION, EXPORT_APP_ID, type ExportFormat } from './exportService';
 
 export interface ImportInput {
@@ -659,6 +660,16 @@ export function applyImport(input: ImportInput, importerId: number): ImportResul
       if (newResId && newAccId) {
         db.prepare('UPDATE reservations SET accommodation_id = ? WHERE id = ?').run(newAccId, newResId);
       }
+    }
+
+    // 10. [460-fork] M11 household auto-add — match normal trip creation so an
+    //     imported trip also lands on the importer's household members. Without
+    //     this, a (re-)import silently leaves a partner/household off the trip.
+    //     Idempotent (ON CONFLICT DO NOTHING); failure here must not fail the import.
+    try {
+      autoAddHouseholdToTrip(importerId, newTripId);
+    } catch (err) {
+      console.error('[importService] household auto-add failed:', err);
     }
 
     return {

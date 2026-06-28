@@ -552,4 +552,29 @@ describe('M12 — faithful off-boarding round-trip', () => {
     // accommodation_id is a TEXT column → may come back as a string; compare numerically.
     expect(Number(newRes?.accommodation_id)).toBe(newAcc.id);
   });
+
+  it('IMPORT-016 — an imported trip auto-adds the importer’s household members', async () => {
+    const { user: importer } = createUser(testDb);
+    const { user: partner } = createUser(testDb);
+    // Put both accounts in one household (the M11 link is users.household_id).
+    const hh = testDb.prepare('INSERT INTO households (created_by) VALUES (?)').run(importer.id);
+    const hid = Number(hh.lastInsertRowid);
+    testDb.prepare('UPDATE users SET household_id = ? WHERE id IN (?, ?)').run(hid, importer.id, partner.id);
+
+    const envelope = {
+      schema_version: 1, app: '460-trip-planner', format: 'metadata-only',
+      trip: { title: 'Household import', days: [], places: [], reservations: [], accommodations: [], todo_items: [] },
+    };
+    const res = await request(app)
+      .post('/api/trips/import?dry_run=false')
+      .set('Cookie', authCookie(importer.id))
+      .attach('file', Buffer.from(JSON.stringify(envelope)), 'hh.json');
+    expect(res.status).toBe(201);
+    const newTripId = res.body.result.trip_id;
+
+    // The household partner must have been added to the imported trip.
+    const member = testDb.prepare('SELECT user_id, invited_by FROM trip_members WHERE trip_id = ? AND user_id = ?').get(newTripId, partner.id) as { user_id: number; invited_by: number } | undefined;
+    expect(member?.user_id).toBe(partner.id);
+    expect(member?.invited_by).toBe(importer.id);
+  });
 });

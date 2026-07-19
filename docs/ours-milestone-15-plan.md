@@ -130,6 +130,12 @@ Integration, in the existing `IMPORT-0xx` style:
    user-guide section. `MERGE-009` locks the `place_ref` assignment shape the
    generator emits.
 
+   **To-dos (added 2026-07-20).** To-dos have no natural date, so a `TODO` entry
+   only reaches a patch if it carries an explicit `"date"` inside the window.
+   Undated ones are trip-wide, already arrived with the full build, and are
+   *counted and reported* rather than silently dropped — emitting them on every
+   patch would drag the Spain actions into a Morocco import.
+
 **Milestone complete.** Loop: edit `build_trip.py` → emit a patch for the
 affected dates → import it into the existing trip → nothing lost, no duplicates.
 

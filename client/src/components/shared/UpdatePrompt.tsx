@@ -49,7 +49,17 @@ export default function UpdatePrompt(): React.ReactElement | null {
       <RefreshCw size={18} strokeWidth={2} style={{ flexShrink: 0, color: 'var(--accent)' }} aria-hidden />
       <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{t('update.available')}</span>
       <button
-        onClick={() => { void updateServiceWorker(true) }}
+        onClick={() => {
+          void updateServiceWorker(true)
+          // updateServiceWorker only reloads us via workbox's "controlling"
+          // event, and that event carries isUpdate=false unless a worker was
+          // ALREADY controlling this page when it registered. After an install,
+          // an unregister, or a hard-refresh the page starts uncontrolled — so
+          // the new worker activates and nothing reloads, leaving you on the old
+          // build with the banner still up. Reload ourselves as a backstop; if
+          // workbox got there first this never runs.
+          window.setTimeout(() => window.location.reload(), 1200)
+        }}
         style={{
           flexShrink: 0, minHeight: 44, padding: '0 18px', borderRadius: 22,
           border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,

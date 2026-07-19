@@ -788,6 +788,10 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'trip.tabs.files': 'Dateien',
   'trip.loading': 'Reise wird geladen...',
   'trip.loadingPhotos': 'Fotos der Orte werden geladen...',
+  // [460-fork] PWA "update available" banner.
+  'update.available': 'Eine neue Version ist verfügbar.',
+  'update.reload': 'Neu laden',
+  'update.dismiss': 'Schließen',
   'trip.mobilePlan': 'Planung',
   'trip.mobilePlaces': 'Orte',
   'trip.toast.placeUpdated': 'Ort aktualisiert',

@@ -43,6 +43,16 @@ export interface MergeReport {
     places_added: number;
     places_updated: number;
     assignments_added: number;
+    // [460-fork] M15 slice 2
+    reservations_added: number;
+    reservations_updated: number;
+    accommodations_added: number;
+    accommodations_updated: number;
+    budget_items_added: number;
+    budget_items_updated: number;
+    todo_items_added: number;
+    todo_items_updated: number;
+    duplicates_skipped: number;
   };
   warnings: string[];
   errors: string[];
@@ -64,6 +74,47 @@ interface PatchDay {
   title?: string | null;
   notes?: string | null;
   assignments?: Array<{ place?: { id?: number } | null; place_ref?: string | null }>;
+}
+
+// [460-fork] M15 slice 2 — the rest of the entity scope.
+interface PatchReservation {
+  external_ref?: string | null;
+  title?: string;
+  type?: string | null;
+  reservation_time?: string | null;
+  location?: string | null;
+  confirmation_number?: string | null;
+  notes?: string | null;
+  status?: string | null;
+}
+interface PatchAccommodation {
+  external_ref?: string | null;
+  place_ref?: string | null;
+  place_id?: number | null;
+  /** Dates are the reliable key across trips; day ids/numbers are not. */
+  start_date?: string | null;
+  end_date?: string | null;
+  check_in?: string | null;
+  check_out?: string | null;
+  confirmation?: string | null;
+  notes?: string | null;
+}
+interface PatchBudgetItem {
+  external_ref?: string | null;
+  category?: string | null;
+  name?: string;
+  total_price?: number | null;
+  persons?: number | null;
+  days?: number | null;
+  note?: string | null;
+}
+interface PatchTodo {
+  external_ref?: string | null;
+  name?: string;
+  text?: string;
+  category?: string | null;
+  checked?: number | boolean;
+  sort_order?: number | null;
 }
 
 /** Replace the keyed import block in `existing`, or append it if absent. Text
@@ -102,7 +153,14 @@ function emptyDiff(date: string, matched: boolean): MergeDayDiff {
 function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeReport {
   const envelope = input.envelope as unknown as {
     patch_key?: string;
-    trip?: { days?: PatchDay[]; places?: PatchPlace[] };
+    trip?: {
+      days?: PatchDay[];
+      places?: PatchPlace[];
+      reservations?: PatchReservation[];
+      accommodations?: PatchAccommodation[];
+      budget_items?: PatchBudgetItem[];
+      todo_items?: PatchTodo[];
+    };
   };
   const patch = envelope.trip ?? {};
   const patchKey = (envelope.patch_key || 'import').toString().trim() || 'import';
@@ -116,7 +174,14 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     trip_title: trip?.title ?? '',
     patch_key: patchKey,
     days: [],
-    totals: { days_matched: 0, days_skipped: 0, places_added: 0, places_updated: 0, assignments_added: 0 },
+    totals: {
+      days_matched: 0, days_skipped: 0, places_added: 0, places_updated: 0, assignments_added: 0,
+      reservations_added: 0, reservations_updated: 0,
+      accommodations_added: 0, accommodations_updated: 0,
+      budget_items_added: 0, budget_items_updated: 0,
+      todo_items_added: 0, todo_items_updated: 0,
+      duplicates_skipped: 0,
+    },
     warnings: [],
     errors: [],
   };
@@ -246,6 +311,150 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     }
 
     report.days.push(diff);
+  }
+
+  // ── Reservations. The file is the scope: every reservation it lists is merged.
+  //    Ref → upsert; no ref → reuse a matching confirmation number rather than
+  //    creating a second copy of the same booking.
+  for (const r of patch.reservations ?? []) {
+    if (!r?.title) continue;
+    const ref = r.external_ref?.trim() || null;
+    let hit: { id: number } | undefined;
+    if (ref) {
+      hit = db.prepare('SELECT id FROM reservations WHERE trip_id = ? AND external_ref = ?').get(tripId, ref) as { id: number } | undefined;
+    } else if (r.confirmation_number) {
+      hit = db
+        .prepare('SELECT id FROM reservations WHERE trip_id = ? AND confirmation_number = ? LIMIT 1')
+        .get(tripId, r.confirmation_number) as { id: number } | undefined;
+    }
+    if (hit && ref) {
+      report.totals.reservations_updated += 1;
+      if (apply) {
+        db.prepare(
+          `UPDATE reservations SET title = ?, type = COALESCE(?, type), reservation_time = COALESCE(?, reservation_time),
+                  location = COALESCE(?, location), confirmation_number = COALESCE(?, confirmation_number),
+                  notes = COALESCE(?, notes), status = COALESCE(?, status)
+            WHERE id = ?`,
+        ).run(r.title, r.type ?? null, r.reservation_time ?? null, r.location ?? null, r.confirmation_number ?? null, r.notes ?? null, r.status ?? null, hit.id);
+      }
+    } else if (hit) {
+      report.totals.duplicates_skipped += 1; // same confirmation already here — left alone
+    } else {
+      report.totals.reservations_added += 1;
+      if (apply) {
+        db.prepare(
+          `INSERT INTO reservations (trip_id, title, type, reservation_time, location, confirmation_number, notes, status, external_ref)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(tripId, r.title, r.type ?? 'other', r.reservation_time ?? null, r.location ?? null, r.confirmation_number ?? null, r.notes ?? null, r.status ?? 'confirmed', ref);
+      }
+    }
+  }
+
+  // ── Accommodations. Anchored to DATES (day ids/numbers from another trip
+  //    can't be trusted), so a stay whose dates aren't in this trip is skipped.
+  for (const a of patch.accommodations ?? []) {
+    const label = a?.confirmation || a?.external_ref || 'accommodation';
+    const s = a?.start_date ? dayByDate.get(a.start_date) : undefined;
+    const e = a?.end_date ? dayByDate.get(a.end_date) : undefined;
+    if (!s || !e) {
+      report.warnings.push(`Accommodation "${label}" needs start_date and end_date that exist in this trip — skipped`);
+      continue;
+    }
+    const pid = a.place_ref ? placeIdByRef.get(a.place_ref.trim()) : a.place_id != null ? placeIdByPatchId.get(a.place_id) : undefined;
+    if (pid === undefined) {
+      report.warnings.push(`Accommodation "${label}" refers to a place that isn't in this patch — skipped`);
+      continue;
+    }
+    const ref = a.external_ref?.trim() || null;
+    let hit: { id: number } | undefined;
+    if (ref) {
+      hit = db.prepare('SELECT id FROM day_accommodations WHERE trip_id = ? AND external_ref = ?').get(tripId, ref) as { id: number } | undefined;
+    } else if (pid > 0) {
+      hit = db
+        .prepare('SELECT id FROM day_accommodations WHERE trip_id = ? AND place_id = ? AND start_day_id = ? AND end_day_id = ? LIMIT 1')
+        .get(tripId, pid, s.id, e.id) as { id: number } | undefined;
+    }
+    if (hit && ref) {
+      report.totals.accommodations_updated += 1;
+      if (apply) {
+        db.prepare(
+          `UPDATE day_accommodations SET place_id = ?, start_day_id = ?, end_day_id = ?,
+                  check_in = COALESCE(?, check_in), check_out = COALESCE(?, check_out),
+                  confirmation = COALESCE(?, confirmation), notes = COALESCE(?, notes)
+            WHERE id = ?`,
+        ).run(pid, s.id, e.id, a.check_in ?? null, a.check_out ?? null, a.confirmation ?? null, a.notes ?? null, hit.id);
+      }
+    } else if (hit) {
+      report.totals.duplicates_skipped += 1;
+    } else {
+      report.totals.accommodations_added += 1;
+      if (apply && pid > 0) {
+        db.prepare(
+          `INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_out, confirmation, notes, external_ref)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(tripId, pid, s.id, e.id, a.check_in ?? null, a.check_out ?? null, a.confirmation ?? null, a.notes ?? null, ref);
+      }
+    }
+  }
+
+  // ── Budget items.
+  for (const b of patch.budget_items ?? []) {
+    if (!b?.name) continue;
+    const ref = b.external_ref?.trim() || null;
+    let hit: { id: number } | undefined;
+    if (ref) {
+      hit = db.prepare('SELECT id FROM budget_items WHERE trip_id = ? AND external_ref = ?').get(tripId, ref) as { id: number } | undefined;
+    } else {
+      hit = db.prepare('SELECT id FROM budget_items WHERE trip_id = ? AND LOWER(name) = LOWER(?) LIMIT 1').get(tripId, b.name) as { id: number } | undefined;
+    }
+    if (hit && ref) {
+      report.totals.budget_items_updated += 1;
+      if (apply) {
+        db.prepare(
+          `UPDATE budget_items SET category = COALESCE(?, category), name = ?, total_price = COALESCE(?, total_price),
+                  persons = COALESCE(?, persons), days = COALESCE(?, days), note = COALESCE(?, note)
+            WHERE id = ?`,
+        ).run(b.category ?? null, b.name, b.total_price ?? null, b.persons ?? null, b.days ?? null, b.note ?? null, hit.id);
+      }
+    } else if (hit) {
+      report.totals.duplicates_skipped += 1;
+    } else {
+      report.totals.budget_items_added += 1;
+      if (apply) {
+        db.prepare(
+          `INSERT INTO budget_items (trip_id, category, name, total_price, persons, days, note, external_ref)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(tripId, b.category ?? 'Other', b.name, b.total_price ?? 0, b.persons ?? null, b.days ?? null, b.note ?? null, ref);
+      }
+    }
+  }
+
+  // ── To-dos. The column is `name` (see IMPORT-009); accept `text` too.
+  for (const t of patch.todo_items ?? []) {
+    const name = (t?.name ?? t?.text ?? '').toString().trim();
+    if (!name) continue;
+    const ref = t.external_ref?.trim() || null;
+    let hit: { id: number } | undefined;
+    if (ref) {
+      hit = db.prepare('SELECT id FROM todo_items WHERE trip_id = ? AND external_ref = ?').get(tripId, ref) as { id: number } | undefined;
+    } else {
+      hit = db.prepare('SELECT id FROM todo_items WHERE trip_id = ? AND LOWER(name) = LOWER(?) LIMIT 1').get(tripId, name) as { id: number } | undefined;
+    }
+    if (hit && ref) {
+      report.totals.todo_items_updated += 1;
+      if (apply) {
+        db.prepare('UPDATE todo_items SET name = ?, category = COALESCE(?, category) WHERE id = ?')
+          .run(name, t.category ?? null, hit.id);
+      }
+    } else if (hit) {
+      report.totals.duplicates_skipped += 1;
+    } else {
+      report.totals.todo_items_added += 1;
+      if (apply) {
+        db.prepare('INSERT INTO todo_items (trip_id, name, category, checked, sort_order, external_ref) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(tripId, name, t.category ?? null, t.checked ? 1 : 0, t.sort_order ?? 0, ref);
+      }
+    }
   }
 
   report.totals.places_added = placesAdded;

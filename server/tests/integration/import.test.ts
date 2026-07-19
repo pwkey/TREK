@@ -673,4 +673,82 @@ describe('M15 — merge import into an existing trip', () => {
     const res = await post(trip.id, stranger.id);
     expect(res.status).toBe(403);
   });
+
+  // ── Slice 2: reservations, accommodations, budget items, to-dos ──────────
+  const fullPatch = () => Buffer.from(JSON.stringify({
+    schema_version: 1, app: '460-trip-planner', format: 'metadata-only', patch_key: 'spain',
+    trip: {
+      places: [{ id: 1, external_ref: 'eu:place:hotel', name: 'Hotel Granada' }],
+      days: [],
+      reservations: [{ external_ref: 'eu:res:alhambra', title: 'Alhambra entry', type: 'event', reservation_time: '2026-09-18T09:00', confirmation_number: 'H0MAXDJ' }],
+      accommodations: [{ external_ref: 'eu:acc:granada', place_ref: 'eu:place:hotel', start_date: '2026-09-18', end_date: '2026-09-19', confirmation: 'BK123' }],
+      budget_items: [{ external_ref: 'eu:bud:tickets', category: 'Activities', name: 'Alhambra tickets', total_price: 120 }],
+      todo_items: [{ external_ref: 'eu:todo:confirm', name: 'Confirm Alhambra time', category: 'Bookings to sort' }],
+    },
+  }));
+  const postFull = (tripId: number, userId: number) =>
+    request(app)
+      .post(`/api/trips/import?mode=merge&trip_id=${tripId}&dry_run=false`)
+      .set('Cookie', authCookie(userId))
+      .attach('file', fullPatch(), 'patch.json');
+
+  it('MERGE-006 — merges reservations, accommodations, budget items and to-dos', async () => {
+    const { user } = createUser(testDb);
+    const { trip, d1, d2 } = seedTarget(user.id);
+
+    const res = await postFull(trip.id, user.id);
+    expect(res.status).toBe(200);
+    const t = res.body.report.totals;
+    expect([t.reservations_added, t.accommodations_added, t.budget_items_added, t.todo_items_added]).toEqual([1, 1, 1, 1]);
+
+    const resv = testDb.prepare("SELECT title, external_ref FROM reservations WHERE trip_id = ?").get(trip.id) as { title: string; external_ref: string };
+    expect(resv.title).toBe('Alhambra entry');
+    expect(resv.external_ref).toBe('eu:res:alhambra');
+
+    // Accommodation anchored to the right days via its dates.
+    const acc = testDb.prepare('SELECT start_day_id, end_day_id, confirmation FROM day_accommodations WHERE trip_id = ?').get(trip.id) as { start_day_id: number; end_day_id: number; confirmation: string };
+    expect(acc.start_day_id).toBe(d1.id);
+    expect(acc.end_day_id).toBe(d2.id);
+    expect(acc.confirmation).toBe('BK123');
+
+    expect((testDb.prepare('SELECT name FROM budget_items WHERE trip_id = ?').get(trip.id) as { name: string }).name).toBe('Alhambra tickets');
+    expect((testDb.prepare('SELECT name FROM todo_items WHERE trip_id = ?').get(trip.id) as { name: string }).name).toBe('Confirm Alhambra time');
+  });
+
+  it('MERGE-007 — re-importing updates those items in place, never duplicating', async () => {
+    const { user } = createUser(testDb);
+    const { trip } = seedTarget(user.id);
+    await postFull(trip.id, user.id);
+    const second = await postFull(trip.id, user.id);
+
+    const t = second.body.report.totals;
+    expect([t.reservations_added, t.accommodations_added, t.budget_items_added, t.todo_items_added]).toEqual([0, 0, 0, 0]);
+    expect([t.reservations_updated, t.accommodations_updated, t.budget_items_updated, t.todo_items_updated]).toEqual([1, 1, 1, 1]);
+
+    for (const table of ['reservations', 'day_accommodations', 'budget_items', 'todo_items']) {
+      const n = testDb.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE trip_id = ?`).get(trip.id) as { n: number };
+      expect(`${table}=${n.n}`).toBe(`${table}=1`);
+    }
+  });
+
+  it('MERGE-008 — an accommodation whose dates are not in the trip is warned + skipped', async () => {
+    const { user } = createUser(testDb);
+    const { trip } = seedTarget(user.id);
+    const patch = Buffer.from(JSON.stringify({
+      schema_version: 1, app: '460-trip-planner', format: 'metadata-only', patch_key: 'spain',
+      trip: {
+        places: [{ id: 1, external_ref: 'eu:place:hotel', name: 'Hotel Granada' }],
+        accommodations: [{ external_ref: 'eu:acc:x', place_ref: 'eu:place:hotel', start_date: '2027-01-01', end_date: '2027-01-02' }],
+      },
+    }));
+    const res = await request(app)
+      .post(`/api/trips/import?mode=merge&trip_id=${trip.id}&dry_run=false`)
+      .set('Cookie', authCookie(user.id))
+      .attach('file', patch, 'patch.json');
+
+    expect(res.status).toBe(200);
+    expect(res.body.report.totals.accommodations_added).toBe(0);
+    expect(res.body.report.warnings.join(' ')).toMatch(/start_date and end_date/);
+    expect((testDb.prepare('SELECT COUNT(*) AS n FROM day_accommodations WHERE trip_id = ?').get(trip.id) as { n: number }).n).toBe(0);
+  });
 });

@@ -109,10 +109,14 @@ Integration, in the existing `IMPORT-0xx` style:
 
 ## Slices
 
-1. **Migration + merge engine** (days/places/assignments) + dry-run diff +
-   endpoint + tests
-2. Reservations, accommodations, budget items, to-dos
-3. Client UI (target picker + per-day diff preview)
+1. ✅ **Shipped** — migration + merge engine (days/places/assignments) +
+   dry-run diff + `?mode=merge` endpoint + `MERGE-001..005`
+2. ✅ **Shipped** — reservations, accommodations, budget items, to-dos +
+   `MERGE-006..008`. Accommodations anchor to `start_date`/`end_date` (day ids
+   from another trip aren't trustworthy); a stay whose dates aren't in the trip
+   is warned and skipped.
+3. Client UI (target picker + per-day diff preview) — *still API-only until this
+   lands, so only a scripted/API caller can use merge*
 4. `build_trip.py` patch mode + user-guide update
 
 All of it is `[460-fork]` additive on our own import feature — no upstream

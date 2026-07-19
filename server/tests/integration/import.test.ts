@@ -578,3 +578,99 @@ describe('M12 — faithful off-boarding round-trip', () => {
     expect(member?.invited_by).toBe(importer.id);
   });
 });
+
+// [460-fork] Milestone 15 — merge import ("patch" an existing trip).
+describe('M15 — merge import into an existing trip', () => {
+  /** A target trip with two dated days; day 1 already has a title + notes. */
+  function seedTarget(userId: number) {
+    const trip = createTrip(testDb, userId, { title: 'Target trip' });
+    const d1 = createDay(testDb, trip.id, { date: '2026-09-18', title: 'My own title' });
+    const d2 = createDay(testDb, trip.id, { date: '2026-09-19' });
+    testDb.prepare('UPDATE days SET notes = ? WHERE id = ?').run('My own note', d1.id);
+    return { trip, d1, d2 };
+  }
+  const patchFile = () => Buffer.from(JSON.stringify({
+    schema_version: 1, app: '460-trip-planner', format: 'metadata-only',
+    patch_key: 'spain',
+    trip: {
+      places: [{ id: 1, external_ref: 'eu:place:alhambra', name: 'Alhambra', lat: 37.176, lng: -3.588 }],
+      days: [
+        { date: '2026-09-18', title: 'Should NOT overwrite', notes: 'Alhambra tickets 09:00', assignments: [{ place: { id: 1 } }] },
+        { date: '2026-12-31', title: 'Not a day in this trip', notes: 'nope' },
+      ],
+    },
+  }));
+  const post = (tripId: number, userId: number, dryRun = false) =>
+    request(app)
+      .post(`/api/trips/import?mode=merge&trip_id=${tripId}&dry_run=${dryRun}`)
+      .set('Cookie', authCookie(userId))
+      .attach('file', patchFile(), 'patch.json');
+
+  it('MERGE-001 — patches matched days, warns + skips dates not in the trip', async () => {
+    const { user } = createUser(testDb);
+    const { trip, d1 } = seedTarget(user.id);
+
+    const res = await post(trip.id, user.id);
+    expect(res.status).toBe(200);
+    expect(res.body.report.totals.days_matched).toBe(1);
+    expect(res.body.report.totals.days_skipped).toBe(1);
+    expect(res.body.report.warnings.join(' ')).toMatch(/2026-12-31/);
+
+    // The place landed, stamped with its ref, and got assigned to the matched day.
+    const place = testDb.prepare('SELECT id, name, external_ref FROM places WHERE trip_id = ?').get(trip.id) as { id: number; name: string; external_ref: string };
+    expect(place.name).toBe('Alhambra');
+    expect(place.external_ref).toBe('eu:place:alhambra');
+    const asg = testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE day_id = ? AND place_id = ?').get(d1.id, place.id) as { n: number };
+    expect(asg.n).toBe(1);
+  });
+
+  it('MERGE-002 — add-only: existing title kept, notes appended as a keyed block', async () => {
+    const { user } = createUser(testDb);
+    const { trip, d1 } = seedTarget(user.id);
+    await post(trip.id, user.id);
+
+    const day = testDb.prepare('SELECT title, notes FROM days WHERE id = ?').get(d1.id) as { title: string; notes: string };
+    expect(day.title).toBe('My own title');            // never overwritten
+    expect(day.notes).toContain('My own note');        // own text survives
+    expect(day.notes).toContain('<!-- 460-import: spain -->');
+    expect(day.notes).toContain('Alhambra tickets 09:00');
+  });
+
+  it('MERGE-003 — re-importing the same patch duplicates nothing', async () => {
+    const { user } = createUser(testDb);
+    const { trip, d1 } = seedTarget(user.id);
+    await post(trip.id, user.id);
+    await post(trip.id, user.id);
+
+    const places = testDb.prepare("SELECT COUNT(*) AS n FROM places WHERE trip_id = ? AND external_ref = 'eu:place:alhambra'").get(trip.id) as { n: number };
+    expect(places.n).toBe(1);
+    const asg = testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE day_id = ?').get(d1.id) as { n: number };
+    expect(asg.n).toBe(1);
+    const day = testDb.prepare('SELECT notes FROM days WHERE id = ?').get(d1.id) as { notes: string };
+    expect(day.notes.match(/460-import: spain/g)?.length).toBe(1); // block replaced, not appended twice
+    expect(day.notes).toContain('My own note');
+  });
+
+  it('MERGE-004 — dry run reports the diff and writes nothing', async () => {
+    const { user } = createUser(testDb);
+    const { trip, d1 } = seedTarget(user.id);
+
+    const res = await post(trip.id, user.id, true);
+    expect(res.status).toBe(200);
+    expect(res.body.dry_run).toBe(true);
+    expect(res.body.report.totals.places_added).toBe(1);
+    expect(res.body.report.totals.days_matched).toBe(1);
+
+    expect((testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id) as { n: number }).n).toBe(0);
+    expect((testDb.prepare('SELECT notes FROM days WHERE id = ?').get(d1.id) as { notes: string }).notes).toBe('My own note');
+  });
+
+  it('MERGE-005 — a user with no access to the target trip is rejected', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: stranger } = createUser(testDb);
+    const { trip } = seedTarget(owner.id);
+
+    const res = await post(trip.id, stranger.id);
+    expect(res.status).toBe(403);
+  });
+});

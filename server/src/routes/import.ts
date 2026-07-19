@@ -12,7 +12,11 @@ import express, { Request, Response } from 'express';
 import multer from 'multer';
 import { authenticate, demoUploadBlock } from '../middleware/auth';
 import { AuthRequest } from '../types';
+import { canAccessTrip } from '../db/database';
 import { parseImportInput, dryRunImport, applyImport } from '../services/importService';
+// [460-fork] Milestone 15 — merge mode: patch an EXISTING trip instead of
+// creating a new one. Same endpoint, ?mode=merge&trip_id=<id>.
+import { dryRunMerge, applyMerge } from '../services/importMergeService';
 
 const router = express.Router({ mergeParams: true });
 
@@ -33,6 +37,30 @@ router.post('/', authenticate, demoUploadBlock, upload.single('file'), async (re
   }
 
   const dryRun = req.query.dry_run !== 'false'; // default true
+
+  // [460-fork] M15 — merge into an existing trip. Add-only; days match by date;
+  // items with an external_ref update in place so re-import can't duplicate.
+  if (String(req.query.mode ?? '') === 'merge') {
+    const tripId = Number(req.query.trip_id);
+    if (!Number.isInteger(tripId) || tripId <= 0) {
+      return res.status(400).json({ error: 'merge mode requires ?trip_id=<id>' });
+    }
+    if (!canAccessTrip(tripId, authReq.user.id)) {
+      return res.status(403).json({ error: 'No access to that trip' });
+    }
+    const mergeReport = dryRunMerge(input, tripId);
+    if (dryRun) return res.json({ dry_run: true, mode: 'merge', report: mergeReport });
+    if (mergeReport.errors.length > 0) {
+      return res.status(400).json({ dry_run: false, mode: 'merge', report: mergeReport, error: 'Merge has validation errors — see report.errors' });
+    }
+    try {
+      const applied = applyMerge(input, tripId);
+      return res.status(200).json({ dry_run: false, mode: 'merge', report: applied });
+    } catch (err) {
+      return res.status(500).json({ error: err instanceof Error ? err.message : 'Merge failed' });
+    }
+  }
+
   const report = dryRunImport(input);
   if (dryRun) {
     return res.json({ dry_run: true, report });

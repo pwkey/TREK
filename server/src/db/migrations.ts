@@ -1459,6 +1459,23 @@ function runMigrations(db: Database.Database): void {
         if (!err.message?.includes('duplicate column name')) throw err;
       }
     },
+    // [460-fork] Milestone 15 — merge import. A generated patch file stamps each
+    // item with a stable external_ref so re-importing an updated file UPDATES the
+    // item it created before instead of duplicating it. Nullable + scoped per
+    // trip, so nothing existing and no create-new import is affected.
+    () => {
+      for (const table of ['places', 'reservations', 'day_accommodations', 'budget_items', 'todo_items']) {
+        try {
+          db.exec(`ALTER TABLE ${table} ADD COLUMN external_ref TEXT`);
+        } catch (err: any) {
+          if (!err.message?.includes('duplicate column name')) throw err;
+        }
+        db.exec(
+          `CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_external_ref
+             ON ${table}(trip_id, external_ref) WHERE external_ref IS NOT NULL`,
+        );
+      }
+    },
   ];
 
   if (currentVersion < migrations.length) {

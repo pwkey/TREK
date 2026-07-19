@@ -1692,6 +1692,10 @@ const cs: Record<string, string | { name: string; category: string }[]> = {
   'notif.generic.text': 'Máte nové oznámení',
   'notif.dev.unknown_event.title': '[DEV] Neznámá událost',
   'notif.dev.unknown_event.text': 'Typ události "{event}" není registrován v EVENT_NOTIFICATION_CONFIG',
+  // [460-fork] PWA "update available" banner.
+  'update.available': 'Je dostupná nová verze.',
+  'update.reload': 'Načíst znovu',
+  'update.dismiss': 'Zavřít',
 }
 
 export default cs

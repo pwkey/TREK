@@ -1689,6 +1689,10 @@ const hu: Record<string, string | { name: string; category: string }[]> = {
   'notif.generic.text': 'Új értesítésed érkezett',
   'notif.dev.unknown_event.title': '[DEV] Ismeretlen esemény',
   'notif.dev.unknown_event.text': 'A(z) "{event}" eseménytípus nincs regisztrálva az EVENT_NOTIFICATION_CONFIG-ban',
+  // [460-fork] PWA "update available" banner.
+  'update.available': 'Új verzió érhető el.',
+  'update.reload': 'Újratöltés',
+  'update.dismiss': 'Elvetés',
 }
 
 export default hu

@@ -1692,6 +1692,10 @@ const ar: Record<string, string | { name: string; category: string }[]> = {
   'notif.generic.text': 'لديك إشعار جديد',
   'notif.dev.unknown_event.title': '[DEV] حدث غير معروف',
   'notif.dev.unknown_event.text': 'نوع الحدث "{event}" غير مسجل في EVENT_NOTIFICATION_CONFIG',
+  // [460-fork] PWA "update available" banner.
+  'update.available': 'يتوفر إصدار جديد.',
+  'update.reload': 'إعادة تحميل',
+  'update.dismiss': 'تجاهل',
 }
 
 export default ar

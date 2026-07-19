@@ -1688,6 +1688,10 @@ const ru: Record<string, string> = {
   'notif.generic.text': 'У вас новое уведомление',
   'notif.dev.unknown_event.title': '[DEV] Неизвестное событие',
   'notif.dev.unknown_event.text': 'Тип события "{event}" не зарегистрирован в EVENT_NOTIFICATION_CONFIG',
+  // [460-fork] PWA "update available" banner.
+  'update.available': 'Доступна новая версия.',
+  'update.reload': 'Обновить',
+  'update.dismiss': 'Закрыть',
 }
 
 export default ru

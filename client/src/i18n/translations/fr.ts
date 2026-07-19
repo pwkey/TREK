@@ -1688,6 +1688,10 @@ const fr: Record<string, string> = {
   'notif.generic.text': 'Vous avez une nouvelle notification',
   'notif.dev.unknown_event.title': '[DEV] Événement inconnu',
   'notif.dev.unknown_event.text': 'Le type d\'événement "{event}" n\'est pas enregistré dans EVENT_NOTIFICATION_CONFIG',
+  // [460-fork] PWA "update available" banner.
+  'update.available': 'Une nouvelle version est disponible.',
+  'update.reload': 'Recharger',
+  'update.dismiss': 'Ignorer',
 }
 
 export default fr

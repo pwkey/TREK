@@ -1688,6 +1688,10 @@ const zh: Record<string, string> = {
   'notif.generic.text': '您有一条新通知',
   'notif.dev.unknown_event.title': '[DEV] 未知事件',
   'notif.dev.unknown_event.text': '事件类型 "{event}" 未在 EVENT_NOTIFICATION_CONFIG 中注册',
+  // [460-fork] PWA "update available" banner.
+  'update.available': '有新版本可用。',
+  'update.reload': '重新加载',
+  'update.dismiss': '关闭',
 }
 
 export default zh

@@ -1543,6 +1543,10 @@ const zhTw: Record<string, string> = {
   'notifications.test.adminText': '{actor} 向所有管理員傳送了測試通知。',
   'notifications.test.tripTitle': '{actor} 在您的行程中發帖',
   'notifications.test.tripText': '行程"{trip}"的測試通知。',
+  // [460-fork] PWA "update available" banner.
+  'update.available': '有新版本可用。',
+  'update.reload': '重新載入',
+  'update.dismiss': '關閉',
 }
 
 export default zhTw

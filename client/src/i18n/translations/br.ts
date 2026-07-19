@@ -1687,6 +1687,10 @@ const br: Record<string, string | { name: string; category: string }[]> = {
   'notif.generic.text': 'Você tem uma nova notificação',
   'notif.dev.unknown_event.title': '[DEV] Evento desconhecido',
   'notif.dev.unknown_event.text': 'O tipo de evento "{event}" não está registrado em EVENT_NOTIFICATION_CONFIG',
+  // [460-fork] PWA "update available" banner.
+  'update.available': 'Uma nova versão está disponível.',
+  'update.reload': 'Recarregar',
+  'update.dismiss': 'Dispensar',
 }
 
 export default br

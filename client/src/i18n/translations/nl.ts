@@ -1688,6 +1688,10 @@ const nl: Record<string, string> = {
   'notif.generic.text': 'Je hebt een nieuwe melding',
   'notif.dev.unknown_event.title': '[DEV] Onbekende gebeurtenis',
   'notif.dev.unknown_event.text': 'Gebeurtenistype "{event}" is niet geregistreerd in EVENT_NOTIFICATION_CONFIG',
+  // [460-fork] PWA "update available" banner.
+  'update.available': 'Er is een nieuwe versie beschikbaar.',
+  'update.reload': 'Herladen',
+  'update.dismiss': 'Sluiten',
 }
 
 export default nl

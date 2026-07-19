@@ -1681,6 +1681,10 @@ const pl: Record<string, string | { name: string; category: string }[]> = {
   'notif.generic.text': 'Masz nowe powiadomienie',
   'notif.dev.unknown_event.title': '[DEV] Nieznane zdarzenie',
   'notif.dev.unknown_event.text': 'Typ zdarzenia "{event}" nie jest zarejestrowany w EVENT_NOTIFICATION_CONFIG',
+  // [460-fork] PWA "update available" banner.
+  'update.available': 'Dostępna jest nowa wersja.',
+  'update.reload': 'Odśwież',
+  'update.dismiss': 'Zamknij',
 }
 
 export default pl

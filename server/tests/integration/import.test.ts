@@ -755,6 +755,45 @@ describe('M15 — merge import into an existing trip', () => {
     expect(asg.n).toBe(1);
   });
 
+  it('MERGE-010 — first patch into a trip built by the create-new import adopts existing rows', async () => {
+    const { user } = createUser(testDb);
+    const { trip, d1, d2 } = seedTarget(user.id);
+
+    // Rows as applyImport (create-new) leaves them: no external_ref anywhere.
+    const place = testDb
+      .prepare('INSERT INTO places (trip_id, name) VALUES (?, ?)')
+      .run(trip.id, 'Hotel Granada');
+    testDb
+      .prepare('INSERT INTO reservations (trip_id, title, type, confirmation_number) VALUES (?, ?, ?, ?)')
+      .run(trip.id, 'Alhambra entry', 'event', 'H0MAXDJ');
+    testDb
+      .prepare('INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id) VALUES (?, ?, ?, ?)')
+      .run(trip.id, Number(place.lastInsertRowid), d1.id, d2.id);
+    testDb
+      .prepare('INSERT INTO budget_items (trip_id, category, name, total_price) VALUES (?, ?, ?, ?)')
+      .run(trip.id, 'Activities', 'Alhambra tickets', 120);
+    testDb
+      .prepare('INSERT INTO todo_items (trip_id, name) VALUES (?, ?)')
+      .run(trip.id, 'Confirm Alhambra time');
+
+    const res = await postFull(trip.id, user.id);
+    expect(res.status).toBe(200);
+    const t = res.body.report.totals;
+    // Everything already there is updated in place — nothing is duplicated.
+    expect([t.places_added, t.reservations_added, t.accommodations_added, t.budget_items_added, t.todo_items_added])
+      .toEqual([0, 0, 0, 0, 0]);
+
+    for (const table of ['places', 'reservations', 'day_accommodations', 'budget_items', 'todo_items']) {
+      const n = testDb.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE trip_id = ?`).get(trip.id) as { n: number };
+      expect(`${table}=${n.n}`).toBe(`${table}=1`);
+    }
+    // ...and each adopted row now carries the ref, so later patches match by it.
+    const refs = ['places', 'reservations', 'day_accommodations', 'budget_items', 'todo_items'].map((table) =>
+      (testDb.prepare(`SELECT external_ref FROM ${table} WHERE trip_id = ?`).get(trip.id) as { external_ref: string | null }).external_ref,
+    );
+    expect(refs).toEqual(['eu:place:hotel', 'eu:res:alhambra', 'eu:acc:granada', 'eu:bud:tickets', 'eu:todo:confirm']);
+  });
+
   it('MERGE-008 — an accommodation whose dates are not in the trip is warned + skipped', async () => {
     const { user } = createUser(testDb);
     const { trip } = seedTarget(user.id);

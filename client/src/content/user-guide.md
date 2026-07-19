@@ -508,13 +508,31 @@ the app yourself:
 
 A few things to know about importing your own copy:
 
-- It always creates a **new** trip (it never overwrites an existing one), so
-  it's always safe to try.
+- By default it creates a **new** trip (it never overwrites an existing one), so
+  it's always safe to try. (See "Adding detail to a trip you already have" below
+  for the other option.)
 - **Shared segments** come back as **standalone** — your shared days and their
   contents are restored, but they're no longer live-linked to the other
   household's copy (that connection only exists while both trips live on the
   same server). For a faithful, still-connected shared trip, the server
   backup is the right path, not a personal archive.
+
+### Adding detail to a trip you already have
+
+Sometimes you don't want a whole new trip — you want to drop a batch of detail
+into a trip that's already running (say, the activities for one leg). In the
+import dialog, switch **Import into** from *A new trip* to **An existing trip**
+and pick it.
+
+- The file's days are matched **by date**, so only the days it covers are
+  touched. Dates that aren't in the trip are listed as warnings and skipped.
+- It only ever **adds**. Your day titles, your notes, your journals and your
+  photos are never overwritten — imported notes go into their own clearly
+  marked block underneath anything you've written.
+- You get the same **preview first**: a day-by-day summary of exactly what will
+  be added, before you confirm.
+- Re-importing an updated version of the same file **updates** what it added
+  last time rather than duplicating it — so it's safe to iterate.
 
 ---
 

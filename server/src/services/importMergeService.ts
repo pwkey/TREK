@@ -211,30 +211,38 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     const ref = p.external_ref?.trim() || null;
     let resolvedId: number | undefined;
 
-    if (ref) {
-      const hit = db
-        .prepare('SELECT id FROM places WHERE trip_id = ? AND external_ref = ?')
-        .get(tripId, ref) as { id: number } | undefined;
-      if (hit) {
-        resolvedId = hit.id;
-        placesUpdated += 1;
-        if (apply) {
-          db.prepare(
-            `UPDATE places SET name = ?, description = COALESCE(?, description), lat = COALESCE(?, lat),
-                    lng = COALESCE(?, lng), address = COALESCE(?, address), notes = COALESCE(?, notes),
-                    updated_at = CURRENT_TIMESTAMP
-              WHERE id = ?`,
-          ).run(p.name, p.description ?? null, p.lat ?? null, p.lng ?? null, p.address ?? null, p.notes ?? null, hit.id);
-        }
-      }
-    }
+    let hit = ref
+      ? (db.prepare('SELECT id FROM places WHERE trip_id = ? AND external_ref = ?').get(tripId, ref) as
+          | { id: number }
+          | undefined)
+      : undefined;
 
-    if (resolvedId === undefined && !ref) {
-      // No ref — reuse a same-named place rather than duplicating it.
-      const same = db
+    // Nothing matched the ref. On the FIRST patch into a trip built by the
+    // create-new import, nothing carries a ref yet — so fall back to the
+    // natural key and ADOPT that row (stamping the ref below) rather than
+    // inserting a second copy of a place that's already here.
+    const adopt = !hit && ref !== null;
+    if (!hit) {
+      hit = db
         .prepare('SELECT id FROM places WHERE trip_id = ? AND LOWER(name) = LOWER(?) LIMIT 1')
         .get(tripId, p.name) as { id: number } | undefined;
-      if (same) resolvedId = same.id;
+    }
+
+    if (hit && ref) {
+      resolvedId = hit.id;
+      placesUpdated += 1;
+      if (apply) {
+        db.prepare(
+          `UPDATE places SET name = ?, description = COALESCE(?, description), lat = COALESCE(?, lat),
+                  lng = COALESCE(?, lng), address = COALESCE(?, address), notes = COALESCE(?, notes),
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?`,
+        ).run(p.name, p.description ?? null, p.lat ?? null, p.lng ?? null, p.address ?? null, p.notes ?? null, hit.id);
+        if (adopt) db.prepare('UPDATE places SET external_ref = ? WHERE id = ?').run(ref, hit.id);
+      }
+    } else if (hit) {
+      // No ref at all — reuse the same-named place, untouched.
+      resolvedId = hit.id;
     }
 
     if (resolvedId === undefined) {
@@ -322,7 +330,11 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     let hit: { id: number } | undefined;
     if (ref) {
       hit = db.prepare('SELECT id FROM reservations WHERE trip_id = ? AND external_ref = ?').get(tripId, ref) as { id: number } | undefined;
-    } else if (r.confirmation_number) {
+    }
+    // Ref missed → adopt an existing booking with the same confirmation number
+    // (see the places block: the first patch into an existing trip finds no refs).
+    const adopt = !hit && ref !== null;
+    if (!hit && r.confirmation_number) {
       hit = db
         .prepare('SELECT id FROM reservations WHERE trip_id = ? AND confirmation_number = ? LIMIT 1')
         .get(tripId, r.confirmation_number) as { id: number } | undefined;
@@ -336,6 +348,7 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
                   notes = COALESCE(?, notes), status = COALESCE(?, status)
             WHERE id = ?`,
         ).run(r.title, r.type ?? null, r.reservation_time ?? null, r.location ?? null, r.confirmation_number ?? null, r.notes ?? null, r.status ?? null, hit.id);
+        if (adopt) db.prepare('UPDATE reservations SET external_ref = ? WHERE id = ?').run(ref, hit.id);
       }
     } else if (hit) {
       report.totals.duplicates_skipped += 1; // same confirmation already here — left alone
@@ -369,7 +382,10 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     let hit: { id: number } | undefined;
     if (ref) {
       hit = db.prepare('SELECT id FROM day_accommodations WHERE trip_id = ? AND external_ref = ?').get(tripId, ref) as { id: number } | undefined;
-    } else if (pid > 0) {
+    }
+    // Ref missed → adopt the stay already sitting on the same place and dates.
+    const adopt = !hit && ref !== null;
+    if (!hit && pid > 0) {
       hit = db
         .prepare('SELECT id FROM day_accommodations WHERE trip_id = ? AND place_id = ? AND start_day_id = ? AND end_day_id = ? LIMIT 1')
         .get(tripId, pid, s.id, e.id) as { id: number } | undefined;
@@ -383,6 +399,7 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
                   confirmation = COALESCE(?, confirmation), notes = COALESCE(?, notes)
             WHERE id = ?`,
         ).run(pid, s.id, e.id, a.check_in ?? null, a.check_out ?? null, a.confirmation ?? null, a.notes ?? null, hit.id);
+        if (adopt) db.prepare('UPDATE day_accommodations SET external_ref = ? WHERE id = ?').run(ref, hit.id);
       }
     } else if (hit) {
       report.totals.duplicates_skipped += 1;
@@ -404,7 +421,9 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     let hit: { id: number } | undefined;
     if (ref) {
       hit = db.prepare('SELECT id FROM budget_items WHERE trip_id = ? AND external_ref = ?').get(tripId, ref) as { id: number } | undefined;
-    } else {
+    }
+    const adopt = !hit && ref !== null; // ref missed → adopt the same-named item
+    if (!hit) {
       hit = db.prepare('SELECT id FROM budget_items WHERE trip_id = ? AND LOWER(name) = LOWER(?) LIMIT 1').get(tripId, b.name) as { id: number } | undefined;
     }
     if (hit && ref) {
@@ -415,6 +434,7 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
                   persons = COALESCE(?, persons), days = COALESCE(?, days), note = COALESCE(?, note)
             WHERE id = ?`,
         ).run(b.category ?? null, b.name, b.total_price ?? null, b.persons ?? null, b.days ?? null, b.note ?? null, hit.id);
+        if (adopt) db.prepare('UPDATE budget_items SET external_ref = ? WHERE id = ?').run(ref, hit.id);
       }
     } else if (hit) {
       report.totals.duplicates_skipped += 1;
@@ -437,7 +457,9 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     let hit: { id: number } | undefined;
     if (ref) {
       hit = db.prepare('SELECT id FROM todo_items WHERE trip_id = ? AND external_ref = ?').get(tripId, ref) as { id: number } | undefined;
-    } else {
+    }
+    const adopt = !hit && ref !== null; // ref missed → adopt the same-named to-do
+    if (!hit) {
       hit = db.prepare('SELECT id FROM todo_items WHERE trip_id = ? AND LOWER(name) = LOWER(?) LIMIT 1').get(tripId, name) as { id: number } | undefined;
     }
     if (hit && ref) {
@@ -445,6 +467,7 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
       if (apply) {
         db.prepare('UPDATE todo_items SET name = ?, category = COALESCE(?, category) WHERE id = ?')
           .run(name, t.category ?? null, hit.id);
+        if (adopt) db.prepare('UPDATE todo_items SET external_ref = ? WHERE id = ?').run(ref, hit.id);
       }
     } else if (hit) {
       report.totals.duplicates_skipped += 1;

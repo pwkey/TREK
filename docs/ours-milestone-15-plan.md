@@ -55,10 +55,17 @@ re-run as the generated file is iterated on.
 Generated items carry `external_ref` (e.g. `eu2026:place:alhambra`). On import:
 
 - ref matches an existing row in this trip → **update it**
-- no match → **insert**, stamping the ref
-- no ref at all → insert, with a light dedupe fallback (place name + coords;
-  reservation confirmation number + time) so a hand-made file can't trivially
+- ref doesn't match, but the row is already here under its **natural key** →
+  **adopt it**: update in place and stamp the ref (see below)
+- no match at all → **insert**, stamping the ref
+- no ref at all → insert, with a light dedupe fallback (place name; reservation
+  confirmation number; stay place+dates) so a hand-made file can't trivially
   double up
+
+**Adoption** matters because the *first* patch into a trip always lands on rows
+that were created by the create-new import, and those carry no ref. Without it,
+patching Europe 2026 would have inserted a second Intrepid tour booking, a
+second Moroccan House, and a second stay. Covered by `MERGE-010`.
 
 Refs are scoped per trip, so two trips can reuse the same key space.
 

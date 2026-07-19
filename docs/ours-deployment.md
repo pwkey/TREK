@@ -98,9 +98,28 @@ rendering of `UpdatePrompt`. If `waiting` stays null after a confirmed deploy,
 the browser isn't seeing a new `sw.js` — check that its bytes actually changed
 between builds (`curl -s <url>/sw.js | md5sum` before and after).
 
-A first-ever load, or a load right after unregistering, activates immediately with
-no `waiting` step — so it correctly shows no banner. You need a *previously
-controlling* worker for the prompt path to run at all.
+### The controlled-vs-uncontrolled trap
+
+Whether the page is *controlled* by a worker changes the behaviour completely, and
+it's the reason "the banner is broken" was reported when it wasn't:
+
+| Session | New worker | Banner | Reload button |
+|---|---|---|---|
+| Controlled (normal open) | enters `waiting` | appears | works |
+| Uncontrolled (fresh install, just unregistered, hard-refresh) | activates immediately | never appears | was broken |
+
+A first-ever load, or one right after unregistering, has no active worker for the
+new one to queue behind — so it activates straight away, no `waiting` event fires,
+and no banner shows. That is correct, but it makes right after a cache-clear the
+*worst* moment to test the banner. Reload the app once first so a worker is in
+control, then test.
+
+The uncontrolled case also hid a real bug (fixed 2026-07-20): `updateServiceWorker()`
+relies on workbox's `controlling` event to reload, and that handler is guarded by
+`isUpdate`, which is false whenever no worker controlled the page at registration.
+The worker would swap and the page would never reload — banner still up, old build
+still running, Reload apparently dead. `UpdatePrompt` now reloads itself 1.2s after
+the click as a backstop.
 
 ## Rotating the webhook secret
 

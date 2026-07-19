@@ -75,6 +75,33 @@ shipped isn't showing up, run check 1 above *before* blaming PWA caching.
 bundle is being served, then it's the installed app holding old code — service
 worker unregister / clear site data. Before that, it's a server problem.
 
+## Verifying the "Update available" banner
+
+The banner is what saves everyone from being talked through cache-clearing mid-trip,
+so it's worth checking after a deploy rather than assuming. In a browser that
+already has the app loaded:
+
+```js
+// 1. Is a worker actually in control?
+const r = await navigator.serviceWorker.getRegistration()
+console.log(!!navigator.serviceWorker.controller, r.active?.state, r.waiting?.state)
+
+// 2. Force an update check (this is what visibilitychange does)
+await r.update()
+
+// 3. A new build should now be sitting in `waiting` — that's what fires the banner
+console.log(r.waiting?.state)   // "installed" => banner should be on screen
+```
+
+If `waiting` is populated but no banner is visible, the fault is in the React
+rendering of `UpdatePrompt`. If `waiting` stays null after a confirmed deploy,
+the browser isn't seeing a new `sw.js` — check that its bytes actually changed
+between builds (`curl -s <url>/sw.js | md5sum` before and after).
+
+A first-ever load, or a load right after unregistering, activates immediately with
+no `waiting` step — so it correctly shows no banner. You need a *previously
+controlling* worker for the prompt path to run at all.
+
 ## Rotating the webhook secret
 
 ```bash

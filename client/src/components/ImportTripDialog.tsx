@@ -239,9 +239,15 @@ function MergePreviewPhase({
   const t = report.totals
   const hasErrors = report.errors.length > 0
   const matched = report.days.filter(d => d.matched)
+  // Updates count as work too — a patch that only rewrites existing records is
+  // not "nothing to do".
   const nothingToDo =
-    t.days_matched === 0 && t.places_added === 0 && t.reservations_added === 0 &&
-    t.accommodations_added === 0 && t.budget_items_added === 0 && t.todo_items_added === 0
+    t.days_matched === 0 &&
+    t.places_added + t.places_updated === 0 &&
+    t.reservations_added + t.reservations_updated === 0 &&
+    t.accommodations_added + t.accommodations_updated === 0 &&
+    t.budget_items_added + t.budget_items_updated === 0 &&
+    t.todo_items_added + t.todo_items_updated === 0
   return (
     <>
       <div style={{ marginBottom: 12 }}>
@@ -277,13 +283,14 @@ function MergePreviewPhase({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 6, fontSize: 12 }}>
           <Stat label="days patched" value={t.days_matched} />
           {t.days_skipped > 0 && <Stat label="days not in trip" value={t.days_skipped} dim />}
-          <Stat label="places added" value={t.places_added} />
-          {t.places_updated > 0 && <Stat label="places updated" value={t.places_updated} />}
           <Stat label="place slots" value={t.assignments_added} />
-          <Stat label="reservations" value={t.reservations_added + t.reservations_updated} />
-          <Stat label="accommodations" value={t.accommodations_added + t.accommodations_updated} />
-          <Stat label="budget items" value={t.budget_items_added + t.budget_items_updated} />
-          <Stat label="to-dos" value={t.todo_items_added + t.todo_items_updated} />
+          {/* added and updated stay SEPARATE — on a merge, "1 reservation" is the
+              difference between a new booking and one quietly rewritten. */}
+          <Pair label="places" added={t.places_added} updated={t.places_updated} />
+          <Pair label="reservations" added={t.reservations_added} updated={t.reservations_updated} />
+          <Pair label="accommodations" added={t.accommodations_added} updated={t.accommodations_updated} />
+          <Pair label="budget items" added={t.budget_items_added} updated={t.budget_items_updated} />
+          <Pair label="to-dos" added={t.todo_items_added} updated={t.todo_items_updated} />
           {t.duplicates_skipped > 0 && <Stat label="duplicates skipped" value={t.duplicates_skipped} dim />}
         </div>
       </div>
@@ -440,6 +447,17 @@ function PreviewPhase({
           {busy ? 'Importing…' : 'Import'}
         </button>
       </div>
+    </>
+  )
+}
+
+// "<thing> added" always; "<thing> updated" only when something is being
+// rewritten, so the common add-only patch doesn't grow a row of zeroes.
+function Pair({ label, added, updated }: { label: string; added: number; updated: number }) {
+  return (
+    <>
+      <Stat label={`${label} added`} value={added} />
+      {updated > 0 && <Stat label={`${label} updated`} value={updated} />}
     </>
   )
 }

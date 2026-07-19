@@ -115,9 +115,16 @@ Integration, in the existing `IMPORT-0xx` style:
    `MERGE-006..008`. Accommodations anchor to `start_date`/`end_date` (day ids
    from another trip aren't trustworthy); a stay whose dates aren't in the trip
    is warned and skipped.
-3. Client UI (target picker + per-day diff preview) — *still API-only until this
-   lands, so only a scripted/API caller can use merge*
-4. `build_trip.py` patch mode + user-guide update
+3. ✅ **Shipped** — client UI: an "Import into: a new trip / an existing trip"
+   picker in `ImportTripDialog`, with a day-by-day diff preview before confirm.
+4. ✅ **Shipped** — `build_trip.py --patch <start> <end> --key <name>` emits
+   `patch-<key>.json` (deterministic `external_ref`s, stays anchored to dates,
+   `type:'hotel'` reservations skipped since the stay carries them), plus a
+   user-guide section. `MERGE-009` locks the `place_ref` assignment shape the
+   generator emits.
+
+**Milestone complete.** Loop: edit `build_trip.py` → emit a patch for the
+affected dates → import it into the existing trip → nothing lost, no duplicates.
 
 All of it is `[460-fork]` additive on our own import feature — no upstream
 merge risk.

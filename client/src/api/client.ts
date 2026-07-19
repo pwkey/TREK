@@ -187,6 +187,42 @@ export interface ImportReport {
   errors: string[]
 }
 
+// [460-fork] Milestone 15 — merge import: patching an EXISTING trip. Different
+// shape from ImportReport because it's a per-day diff, not create-counts.
+export interface MergeDayDiff {
+  date: string
+  matched: boolean
+  title_set: boolean
+  notes_block: 'added' | 'replaced' | 'unchanged' | 'none'
+  places_added: number
+  places_updated: number
+  assignments_added: number
+}
+export interface MergeReport {
+  trip_id: number
+  trip_title: string
+  patch_key: string
+  days: MergeDayDiff[]
+  totals: {
+    days_matched: number
+    days_skipped: number
+    places_added: number
+    places_updated: number
+    assignments_added: number
+    reservations_added: number
+    reservations_updated: number
+    accommodations_added: number
+    accommodations_updated: number
+    budget_items_added: number
+    budget_items_updated: number
+    todo_items_added: number
+    todo_items_updated: number
+    duplicates_skipped: number
+  }
+  warnings: string[]
+  errors: string[]
+}
+
 export const tripsApi = {
   list: (params?: Record<string, unknown>) => apiClient.get('/trips', { params }).then(r => r.data),
   create: (data: Record<string, unknown>) => apiClient.post('/trips', data).then(r => r.data),
@@ -225,6 +261,24 @@ export const tripsApi = {
     return apiClient.post('/trips/import?dry_run=false', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data as { dry_run: false; report: ImportReport; result: { trip_id: number; created: ImportReport['would_create'] } })
+  },
+
+  // [460-fork] Milestone 15 — merge a patch file INTO an existing trip. Same
+  // two-phase flow, but the report is a per-day diff and nothing is created
+  // from scratch. Add-only: existing content is never deleted or overwritten.
+  mergeDryRun: (file: File, tripId: number | string) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return apiClient.post(`/trips/import?mode=merge&trip_id=${tripId}`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data as { dry_run: true; mode: 'merge'; report: MergeReport })
+  },
+  mergeApply: (file: File, tripId: number | string) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return apiClient.post(`/trips/import?mode=merge&trip_id=${tripId}&dry_run=false`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data as { dry_run: false; mode: 'merge'; report: MergeReport })
   },
 
   // [460-fork] Milestone 7 slices 1+2 — JSON-only or zip-bundle export.

@@ -731,6 +731,30 @@ describe('M15 — merge import into an existing trip', () => {
     }
   });
 
+  it('MERGE-009 — day assignments resolve by place_ref (the shape build_trip.py emits)', async () => {
+    const { user } = createUser(testDb);
+    const { trip, d1 } = seedTarget(user.id);
+    // build_trip.py --patch emits assignments as { place_ref } rather than a
+    // patch-local place id, so the two must resolve identically.
+    const patch = Buffer.from(JSON.stringify({
+      schema_version: 1, app: '460-trip-planner', format: 'metadata-only', patch_key: 'spain',
+      trip: {
+        places: [{ external_ref: 'eu2026:place:alhambra', name: 'Alhambra', lat: 37.176, lng: -3.588 }],
+        days: [{ date: '2026-09-18', notes: 'Self-guided, 09:00', assignments: [{ place_ref: 'eu2026:place:alhambra' }] }],
+      },
+    }));
+    const res = await request(app)
+      .post(`/api/trips/import?mode=merge&trip_id=${trip.id}&dry_run=false`)
+      .set('Cookie', authCookie(user.id))
+      .attach('file', patch, 'patch-spain.json');
+
+    expect(res.status).toBe(200);
+    expect(res.body.report.totals.assignments_added).toBe(1);
+    const place = testDb.prepare("SELECT id FROM places WHERE trip_id = ? AND external_ref = 'eu2026:place:alhambra'").get(trip.id) as { id: number };
+    const asg = testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE day_id = ? AND place_id = ?').get(d1.id, place.id) as { n: number };
+    expect(asg.n).toBe(1);
+  });
+
   it('MERGE-008 — an accommodation whose dates are not in the trip is warned + skipped', async () => {
     const { user } = createUser(testDb);
     const { trip } = seedTarget(user.id);

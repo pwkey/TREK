@@ -67,6 +67,14 @@ that were created by the create-new import, and those carry no ref. Without it,
 patching Europe 2026 would have inserted a second Intrepid tour booking, a
 second Moroccan House, and a second stay. Covered by `MERGE-010`.
 
+**Adoption only fires on a UNIQUE natural-key match.** A confirmation number is
+not a unique key in practice: one airline booking reference covers every leg, so
+Europe 2026 has six reservations sharing `MRVMY2`. Taking the first match would
+have retitled *EK413 Sydney → Dubai* as *EK751 Dubai → Casablanca* and stamped
+someone else's ref on it — silent corruption of a correct booking. When the key
+matches more than one row the item is **warned and skipped**, never guessed.
+Same guard on places, stays, budget items and to-dos. Covered by `MERGE-011`.
+
 Refs are scoped per trip, so two trips can reuse the same key space.
 
 ## Schema

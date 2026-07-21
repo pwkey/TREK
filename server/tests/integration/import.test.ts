@@ -794,6 +794,44 @@ describe('M15 — merge import into an existing trip', () => {
     expect(refs).toEqual(['eu:place:hotel', 'eu:res:alhambra', 'eu:acc:granada', 'eu:bud:tickets', 'eu:todo:confirm']);
   });
 
+  it('MERGE-011 — a confirmation number shared by several bookings is never adopted blindly', async () => {
+    const { user } = createUser(testDb);
+    const { trip } = seedTarget(user.id);
+
+    // One airline booking reference covers every leg — so the "natural key" is
+    // not unique. Adopting the first match would rewrite an unrelated flight.
+    for (const title of ['EK413 Sydney → Dubai', 'EK751 Dubai → Casablanca']) {
+      testDb
+        .prepare('INSERT INTO reservations (trip_id, title, type, confirmation_number) VALUES (?, ?, ?, ?)')
+        .run(trip.id, title, 'flight', 'MRVMY2');
+    }
+
+    const patch = Buffer.from(JSON.stringify({
+      schema_version: 1, app: '460-trip-planner', format: 'metadata-only', patch_key: 'morocco',
+      trip: {
+        reservations: [{
+          external_ref: 'eu2026:res:ek751', title: 'EK751 Dubai → Casablanca',
+          type: 'flight', confirmation_number: 'MRVMY2',
+        }],
+      },
+    }));
+    const res = await request(app)
+      .post(`/api/trips/import?mode=merge&trip_id=${trip.id}&dry_run=false`)
+      .set('Cookie', authCookie(user.id))
+      .attach('file', patch, 'patch-morocco.json');
+
+    expect(res.status).toBe(200);
+    expect(res.body.report.warnings.join(' ')).toMatch(/MRVMY2/);
+    // Nothing added, nothing updated — and critically, the OTHER leg is untouched.
+    expect(res.body.report.totals.reservations_added).toBe(0);
+    expect(res.body.report.totals.reservations_updated).toBe(0);
+    const titles = testDb
+      .prepare('SELECT title FROM reservations WHERE trip_id = ? ORDER BY id')
+      .all(trip.id)
+      .map((r: { title: string }) => r.title);
+    expect(titles).toEqual(['EK413 Sydney → Dubai', 'EK751 Dubai → Casablanca']);
+  });
+
   it('MERGE-008 — an accommodation whose dates are not in the trip is warned + skipped', async () => {
     const { user } = createUser(testDb);
     const { trip } = seedTarget(user.id);

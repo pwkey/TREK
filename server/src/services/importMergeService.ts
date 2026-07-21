@@ -198,6 +198,20 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     dayByDate.set(d.date, { id: d.id, title: d.title, notes: d.notes });
   }
 
+  // Natural-key adoption is only safe when the key identifies ONE row. Real
+  // data breaks that assumption: a single airline booking reference covers
+  // every leg, so six reservations can share one confirmation number. Picking
+  // the first would rewrite an unrelated leg in place. Returns the row only
+  // when it is unique; `ambiguous` means "leave it alone and tell the user".
+  const uniqueMatch = (
+    sql: string,
+    ...params: unknown[]
+  ): { hit?: { id: number }; ambiguous: boolean } => {
+    const rows = db.prepare(sql).all(...params) as Array<{ id: number }>;
+    if (rows.length === 1) return { hit: rows[0], ambiguous: false };
+    return { ambiguous: rows.length > 1 };
+  };
+
   // ── Places. Resolve every patch place to a real place id in this trip,
   //    upserting by external_ref (or reusing a same-named place). Keyed by the
   //    patch's own place id AND by ref so day assignments can point at either.
@@ -223,9 +237,12 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     // inserting a second copy of a place that's already here.
     const adopt = !hit && ref !== null;
     if (!hit) {
-      hit = db
-        .prepare('SELECT id FROM places WHERE trip_id = ? AND LOWER(name) = LOWER(?) LIMIT 1')
-        .get(tripId, p.name) as { id: number } | undefined;
+      const m = uniqueMatch('SELECT id FROM places WHERE trip_id = ? AND LOWER(name) = LOWER(?)', tripId, p.name);
+      if (m.ambiguous) {
+        report.warnings.push(`Place "${p.name}" matches more than one place in this trip — skipped, resolve by hand`);
+        continue;
+      }
+      hit = m.hit;
     }
 
     if (hit && ref) {
@@ -335,9 +352,18 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     // (see the places block: the first patch into an existing trip finds no refs).
     const adopt = !hit && ref !== null;
     if (!hit && r.confirmation_number) {
-      hit = db
-        .prepare('SELECT id FROM reservations WHERE trip_id = ? AND confirmation_number = ? LIMIT 1')
-        .get(tripId, r.confirmation_number) as { id: number } | undefined;
+      const m = uniqueMatch(
+        'SELECT id FROM reservations WHERE trip_id = ? AND confirmation_number = ?',
+        tripId, r.confirmation_number,
+      );
+      if (m.ambiguous) {
+        // e.g. one airline booking ref shared by every leg of the itinerary.
+        report.warnings.push(
+          `"${r.title}" — confirmation ${r.confirmation_number} is on more than one booking in this trip, so it can't be matched safely. Skipped; add an external_ref or edit it by hand.`,
+        );
+        continue;
+      }
+      hit = m.hit;
     }
     if (hit && ref) {
       report.totals.reservations_updated += 1;
@@ -386,9 +412,15 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     // Ref missed → adopt the stay already sitting on the same place and dates.
     const adopt = !hit && ref !== null;
     if (!hit && pid > 0) {
-      hit = db
-        .prepare('SELECT id FROM day_accommodations WHERE trip_id = ? AND place_id = ? AND start_day_id = ? AND end_day_id = ? LIMIT 1')
-        .get(tripId, pid, s.id, e.id) as { id: number } | undefined;
+      const m = uniqueMatch(
+        'SELECT id FROM day_accommodations WHERE trip_id = ? AND place_id = ? AND start_day_id = ? AND end_day_id = ?',
+        tripId, pid, s.id, e.id,
+      );
+      if (m.ambiguous) {
+        report.warnings.push(`Accommodation "${label}" matches more than one stay on those dates — skipped, resolve by hand`);
+        continue;
+      }
+      hit = m.hit;
     }
     if (hit && ref) {
       report.totals.accommodations_updated += 1;
@@ -424,7 +456,12 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     }
     const adopt = !hit && ref !== null; // ref missed → adopt the same-named item
     if (!hit) {
-      hit = db.prepare('SELECT id FROM budget_items WHERE trip_id = ? AND LOWER(name) = LOWER(?) LIMIT 1').get(tripId, b.name) as { id: number } | undefined;
+      const m = uniqueMatch('SELECT id FROM budget_items WHERE trip_id = ? AND LOWER(name) = LOWER(?)', tripId, b.name);
+      if (m.ambiguous) {
+        report.warnings.push(`Budget item "${b.name}" matches more than one existing item — skipped, resolve by hand`);
+        continue;
+      }
+      hit = m.hit;
     }
     if (hit && ref) {
       report.totals.budget_items_updated += 1;
@@ -460,7 +497,12 @@ function mergeInto(input: ImportInput, tripId: number, apply: boolean): MergeRep
     }
     const adopt = !hit && ref !== null; // ref missed → adopt the same-named to-do
     if (!hit) {
-      hit = db.prepare('SELECT id FROM todo_items WHERE trip_id = ? AND LOWER(name) = LOWER(?) LIMIT 1').get(tripId, name) as { id: number } | undefined;
+      const m = uniqueMatch('SELECT id FROM todo_items WHERE trip_id = ? AND LOWER(name) = LOWER(?)', tripId, name);
+      if (m.ambiguous) {
+        report.warnings.push(`To-do "${name.slice(0, 40)}…" matches more than one existing item — skipped, resolve by hand`);
+        continue;
+      }
+      hit = m.hit;
     }
     if (hit && ref) {
       report.totals.todo_items_updated += 1;

@@ -307,6 +307,16 @@ export function updateDay(id: string | number, current: Day, fields: { notes?: s
   return { ...updatedDay, assignments: getAssignmentsForDay(id) };
 }
 
+// [460-fork] Quick-jump sections. Dedicated setter so labelling a day as a
+// section start (or clearing it) never touches its notes/title — unlike
+// updateDay, which the day PUT route always rewrites both of.
+export function setDaySection(id: string | number, label: string | null) {
+  const trimmed = label && label.trim() ? label.trim().slice(0, 80) : null;
+  db.prepare('UPDATE days SET section_label = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(trimmed, id);
+  const updatedDay = db.prepare('SELECT * FROM days WHERE id = ?').get(id) as Day;
+  return { ...updatedDay, assignments: getAssignmentsForDay(id) };
+}
+
 export function deleteDay(id: string | number) {
   db.prepare('DELETE FROM days WHERE id = ?').run(id);
 }

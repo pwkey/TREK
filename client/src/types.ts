@@ -47,6 +47,7 @@ export interface Day {
   assignments: Assignment[]
   notes_items: DayNote[]
   segment_id?: string | null // [460-fork] Milestone 4: shared-segment pointer
+  section_label?: string | null // [460-fork] quick-jump: non-null = start of a named leg
   segment?: { id: string; title: string } | null // [460-fork] Milestone 4: hydrated for the chip
   updated_at?: string // [460-fork] Milestone 5 slice 4: precondition currency
 }

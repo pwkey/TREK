@@ -11,6 +11,7 @@ const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Tr
 import { assignmentsApi, reservationsApi, tripsApi, daysApi } from '../../api/client'
 import { writeTripSnapshot } from '../../db/localDb' // [460-fork] Milestone 5 slice 5
 import { downloadTripPDF } from '../PDF/TripPDF'
+import SectionJumpMenu from './SectionJumpMenu' // [460-fork] quick-jump sections
 import { calculateRoute, generateGoogleMapsUrl, optimizeRoute } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import { useContextMenu, ContextMenu } from '../shared/ContextMenu'
@@ -927,6 +928,17 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     }
   }
 
+  // [460-fork] quick-jump — scroll the day list to a section's first day, the
+  // same mechanism the "Today" button uses (each day row carries data-day-id).
+  const jumpToDay = (dayId: number): void => {
+    onSelectDay(dayId)
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-day-id="${dayId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }}>
       {/* Reise-Titel */}
@@ -962,6 +974,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
           {/* [460-fork] Export / tool icon strip — its own row below the title so a
               long trip name no longer collides with these buttons. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {/* [460-fork] quick-jump to a leg — on-demand overlay, nothing on the list. */}
+          <SectionJumpMenu days={days} accommodations={accommodations} locale={locale} onJump={jumpToDay} />
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <button
               onClick={async () => {

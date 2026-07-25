@@ -67,6 +67,7 @@ export interface TripStoreState
   handleRemoteEvent: (event: WebSocketEvent) => void
   loadTrip: (tripId: number | string) => Promise<void>
   refreshDays: (tripId: number | string) => Promise<void>
+  setDaySection: (tripId: number | string, dayId: number, label: string | null) => Promise<void>
   updateTrip: (tripId: number | string, data: Partial<Trip>) => Promise<Trip>
   addTag: (data: Partial<Tag>) => Promise<Tag>
   addCategory: (data: Partial<Category>) => Promise<Category>
@@ -177,6 +178,20 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
       const message = err instanceof Error ? err.message : 'Unknown error'
       set({ isLoading: false, error: message })
       throw err
+    }
+  },
+
+  // [460-fork] quick-jump — label a day as a section start (or clear it).
+  // Optimistic: patch the day in state immediately, then persist.
+  setDaySection: async (tripId: number | string, dayId: number, label: string | null) => {
+    const clean = label && label.trim() ? label.trim() : null
+    const prev = get().days
+    set({ days: prev.map((d) => (d.id === dayId ? { ...d, section_label: clean } : d)) })
+    try {
+      await daysApi.setSection(tripId, dayId, clean)
+    } catch (err) {
+      set({ days: prev }) // revert on failure
+      throw new Error(getApiErrorMessage(err, 'Could not update the section'))
     }
   },
 

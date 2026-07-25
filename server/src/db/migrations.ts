@@ -1476,6 +1476,17 @@ function runMigrations(db: Database.Database): void {
         );
       }
     },
+    // [460-fork] Quick-jump sections. A day with a non-null section_label is the
+    // START of a named leg ("Morocco", "Balkans"); the jump menu lists them.
+    // Nullable + additive — nothing existing is affected, and trips with no
+    // labels fall back to accommodation-derived sections client-side.
+    () => {
+      try {
+        db.exec('ALTER TABLE days ADD COLUMN section_label TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+    },
   ];
 
   if (currentVersion < migrations.length) {

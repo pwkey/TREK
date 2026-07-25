@@ -189,6 +189,50 @@ describe('Update day', () => {
     expect(res.body.day.notes).toBe('Visit the Louvre');
   });
 
+  it('DAY-013 — PUT /days/:id/section sets a section label without touching notes/title', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Europe' });
+    const day = createDay(testDb, trip.id, { title: 'Fly to Marrakech' });
+    testDb.prepare('UPDATE days SET notes = ? WHERE id = ?').run('my own note', day.id);
+
+    const res = await request(app)
+      .put(`/api/trips/${trip.id}/days/${day.id}/section`)
+      .set('Cookie', authCookie(user.id))
+      .send({ section_label: 'Morocco' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.day.section_label).toBe('Morocco');
+    // The dedicated endpoint must NOT wipe the day's own notes or title.
+    expect(res.body.day.notes).toBe('my own note');
+    expect(res.body.day.title).toBe('Fly to Marrakech');
+
+    // Clearing it (null / empty) removes the section start.
+    const cleared = await request(app)
+      .put(`/api/trips/${trip.id}/days/${day.id}/section`)
+      .set('Cookie', authCookie(user.id))
+      .send({ section_label: '' });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.day.section_label).toBeNull();
+    expect(cleared.body.day.notes).toBe('my own note');
+  });
+
+  it('DAY-014 — listDays returns section_label', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Europe' });
+    const day = createDay(testDb, trip.id);
+    await request(app)
+      .put(`/api/trips/${trip.id}/days/${day.id}/section`)
+      .set('Cookie', authCookie(user.id))
+      .send({ section_label: 'Balkans' });
+
+    const res = await request(app)
+      .get(`/api/trips/${trip.id}/days`)
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(200);
+    const got = res.body.days.find((d: { id: number }) => d.id === day.id);
+    expect(got.section_label).toBe('Balkans');
+  });
+
   it('DAY-003 — PUT returns 404 for a day that does not belong to the trip', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'My Trip' });

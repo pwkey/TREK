@@ -118,6 +118,23 @@ router.put('/:id', authenticate, requireTripAccess, (req: Request, res: Response
   broadcastDay(day as any, 'day:updated', { day }, req.headers['x-socket-id'] as string);
 });
 
+// [460-fork] Quick-jump sections — set/clear a day's section label without
+// disturbing its notes/title (the PUT above always rewrites both).
+router.put('/:id/section', authenticate, requireTripAccess, (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+    return res.status(403).json({ error: 'No permission' });
+
+  const { tripId, id } = req.params;
+  const current = dayService.getAccessibleDay(id, tripId);
+  if (!current) return res.status(404).json({ error: 'Day not found' });
+
+  const label = typeof req.body?.section_label === 'string' ? req.body.section_label : null;
+  const day = dayService.setDaySection(id, label);
+  res.json({ day });
+  broadcastDay(day as any, 'day:updated', { day }, req.headers['x-socket-id'] as string);
+});
+
 router.delete('/:id', authenticate, requireTripAccess, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))

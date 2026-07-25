@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
-import { X, Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudLightning, Wind, Droplets, Sunrise, Sunset, Hotel, Calendar, MapPin, LogIn, LogOut, Hash, Pencil, Plane, Utensils, Train, Car, Ship, Ticket, FileText, Users } from 'lucide-react'
+import { X, Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudLightning, Wind, Droplets, Sunrise, Sunset, Hotel, Calendar, MapPin, LogIn, LogOut, Hash, Pencil, Plane, Utensils, Train, Car, Ship, Ticket, FileText, Users, Bookmark } from 'lucide-react'
 
 const RES_TYPE_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 const RES_TYPE_COLORS = { flight: '#3b82f6', hotel: '#8b5cf6', restaurant: '#ef4444', train: '#06b6d4', car: '#6b7280', cruise: '#0ea5e9', event: '#f59e0b', tour: '#10b981', other: '#6b7280' }
@@ -85,6 +85,10 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
   }, [focusJournal, day.id])
   const [accommodations, setAccommodations] = useState([])
   const [showHotelPicker, setShowHotelPicker] = useState(false)
+  // [460-fork] quick-jump — edit this day's section label (start of a leg).
+  const setDaySection = useTripStore((s) => s.setDaySection)
+  const [sectionDraft, setSectionDraft] = useState(day.section_label || '')
+  useEffect(() => { setSectionDraft(day.section_label || '') }, [day.id, day.section_label])
   const [hotelDayRange, setHotelDayRange] = useState({ start: day?.id, end: day?.id })
   const [hotelCategoryFilter, setHotelCategoryFilter] = useState('')
   const [hotelForm, setHotelForm] = useState({ check_in: '', check_out: '', confirmation: '', place_id: null })
@@ -428,6 +432,44 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
               }}>
                 <Hotel size={12} /> {t('day.addAccommodation')}
               </button> : null
+            )}
+
+            {/* [460-fork] quick-jump — name this day as the start of a section
+                ("Morocco", "Balkans"). Lives in the day panel, not the day list,
+                so the list stays clutter-free; the jump menu reads these labels. */}
+            {canEditDays && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-faint)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Bookmark size={13} /> {t('day.section')}
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input
+                    value={sectionDraft}
+                    onChange={(e) => setSectionDraft(e.target.value)}
+                    placeholder={t('day.sectionPlaceholder')}
+                    maxLength={80}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void setDaySection(tripId, day.id, sectionDraft) }}
+                    style={{ flex: 1, minHeight: 40, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit' }}
+                  />
+                  {sectionDraft.trim() !== (day.section_label || '') && (
+                    <button
+                      onClick={() => void setDaySection(tripId, day.id, sectionDraft)}
+                      style={{ flexShrink: 0, minHeight: 40, padding: '0 14px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: 'var(--accent-text)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      {t('day.sectionSave')}
+                    </button>
+                  )}
+                  {day.section_label && (
+                    <button
+                      onClick={() => { setSectionDraft(''); void setDaySection(tripId, day.id, null) }}
+                      style={{ flexShrink: 0, minHeight: 40, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'none', color: 'var(--text-faint)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      {t('day.sectionClear')}
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 4 }}>{t('day.sectionHint')}</div>
+              </div>
             )}
 
             {/* [460-fork] M15 — the day's own `notes` field. Imported/merged day

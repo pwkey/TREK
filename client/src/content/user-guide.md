@@ -389,16 +389,40 @@ button appears once you're within the trip's dates.)
 
 ### It works offline
 
-Open each trip while you still have signal (or tap **Download for offline**
-on a trip) and you can review and *record* with no connection at all. Any
-changes you make offline — journal entries, ticking packing items, adding
-photos — are saved on your phone and **sync automatically when you're back
-online**. There's an online/offline indicator and a count of anything still
-waiting to sync.
+Short version: **open the trip once while you have signal, and it's on your
+device.** From then on you can review and record it with no connection, and
+anything you change syncs back by itself when you're online again.
+
+**Your itinerary is saved automatically.** Every time you open a trip with a
+connection, the app quietly keeps a local copy of it — the days, the day plans,
+the places, the running order. You don't have to press anything. If you then
+walk into a dead-signal area and open the app (or even reload it), the planner
+still shows your trip from that local copy instead of a blank screen. This is
+the everyday safety net for "I didn't know I'd lose signal here."
+
+**Changes you make offline are never lost.** Journal entries, ticking packing
+items, adding and linking photos — all saved on your phone and **synced
+automatically the next time you're online**. A small dot in the top bar shows
+green (online), red (offline) or amber (something needs a look), with a count of
+anything still waiting to sync, so you can see it's all accounted for.
+
+**Download for offline — the thorough version.** The **⬇ download** button on a
+trip does the belt-and-braces job: it pulls the *whole* trip down in one go,
+including your **bookings and the packing/to-do/budget lists**, and primes your
+**photos** for offline viewing. Use it before somewhere you *know* will be off
+the grid — a desert camp, a long ferry, a remote valley. The automatic save
+above covers the itinerary; this makes sure the bookings, lists and pictures
+come too.
+
+> **One honest limit:** *making* notes and *adding* photos offline is rock-solid.
+> Scrolling back through *existing* photos with no signal is the weakest part —
+> so if you want your past pictures available offline, tap **Download for
+> offline** first.
 
 > On iPhone, syncing happens when you next open the app on a connection
 > ("open it when you're back online and it catches up"). You don't need to do
-> anything special.
+> anything special. And don't stay offline for weeks on end without syncing —
+> phone storage can be reclaimed under pressure, so let it catch up when you can.
 
 ### Watching your data (Data saver)
 

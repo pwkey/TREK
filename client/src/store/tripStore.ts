@@ -157,8 +157,13 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
       void (get() as TripStoreState).loadGpxTracks(tripId).catch(() => {/* silent */})
 
       // [460-fork] Milestone 5 — write-through to the local mirror so the
-      // next cold start (or an offline reload) can hydrate from it.
-      void persistTripSnapshotToMirror(tripData.trip, daysData.days, placesData.places).catch(() => {/* silent */})
+      // next cold start (or an offline reload) can hydrate from it. Packing +
+      // to-do come with this fetch; bookings + budget load on their own tabs
+      // and mirror themselves from their slices (see mirrorTripLists).
+      void persistTripSnapshotToMirror(
+        tripData.trip, daysData.days, placesData.places,
+        { packing: packingData.items, todo: todoData.items },
+      ).catch(() => {/* silent */})
     } catch (err: unknown) {
       // [460-fork] Milestone 5 — if the local mirror gave us a usable trip,
       // the network failure isn't fatal. Render the cached planner and
@@ -269,15 +274,26 @@ async function hydrateFromLocalMirror(tripId: number, set: SetTripState): Promis
       places: (snap.places || []) as unknown as Place[],
       assignments: assignmentsMap,
       dayNotes: dayNotesMap,
+      // [460-fork] M5 follow-up — bookings + the three lists, so an offline
+      // open shows a fully usable trip, not just the itinerary.
+      reservations: (snap.reservations || []) as unknown as Reservation[],
+      packingItems: (snap.packing || []) as unknown as PackingItem[],
+      todoItems: (snap.todo || []) as unknown as TodoItem[],
+      budgetItems: (snap.budget || []) as unknown as BudgetItem[],
     }
   })
   return true
 }
 
-async function persistTripSnapshotToMirror(trip: Trip, days: Day[], places: Place[]): Promise<void> {
+async function persistTripSnapshotToMirror(
+  trip: Trip, days: Day[], places: Place[],
+  lists?: { packing?: PackingItem[]; todo?: TodoItem[] },
+): Promise<void> {
   await writeTripSnapshot({
     trip: { ...(trip as any), id: trip.id, _updated_at: (trip as any).updated_at },
     days: days.map((d) => ({ ...(d as any), id: d.id, trip_id: d.trip_id, _updated_at: (d as any).updated_at })),
     places: places.map((p) => ({ ...(p as any), id: p.id, trip_id: (p as any).trip_id })),
+    packing: lists?.packing?.map((p) => ({ ...(p as any), id: p.id })),
+    todo: lists?.todo?.map((t) => ({ ...(t as any), id: t.id })),
   })
 }

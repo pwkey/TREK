@@ -3,6 +3,7 @@ import type { StoreApi } from 'zustand'
 import type { TripStoreState } from '../tripStore'
 import type { Reservation } from '../../types'
 import { getApiErrorMessage } from '../../types'
+import { mirrorTripLists } from '../../db/localDb' // [460-fork] M5 follow-up — offline mirror
 
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
@@ -22,6 +23,11 @@ export const createReservationsSlice = (set: SetState, get: GetState): Reservati
     try {
       const data = await reservationsApi.list(tripId)
       set({ reservations: data.reservations })
+      // [460-fork] M5 follow-up — mirror bookings for offline. Bookings load on
+      // their own tab, after the main planner fetch, so they mirror themselves.
+      void mirrorTripLists(Number(tripId), {
+        reservations: data.reservations.map((r) => ({ ...(r as any), id: r.id })),
+      }).catch(() => {/* silent — offline mirror is best-effort */})
     } catch (err: unknown) {
       console.error('Failed to load reservations:', err)
     }

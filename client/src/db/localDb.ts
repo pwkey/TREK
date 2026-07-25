@@ -11,7 +11,7 @@
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 
 export const DB_NAME = '460tp-local'
-export const DB_VERSION = 3
+export const DB_VERSION = 4
 
 interface TripRecord {
   id: number
@@ -93,6 +93,11 @@ interface LocalDb extends DBSchema {
   assignments: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
   dayNotes: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
   reservations: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
+  // [460-fork] M5 follow-up — the three list surfaces, mirrored so a trip is
+  // fully usable offline (not just its itinerary). Photos stay opt-in.
+  packing: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
+  todo: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
+  budget: { key: number; value: IndexedRecord; indexes: { 'by-trip': number } }
   mutations: { key: string; value: QueuedMutationRecord }
   pendingPhotos: { key: string; value: PendingPhotoRecord; indexes: { 'by-trip': number } }
   _meta: { key: string; value: MetaRecord }
@@ -126,6 +131,13 @@ export function getDb(): Promise<LocalDbHandle> {
           // [460-fork] M14 slice 3 — photo uploads held for Wi-Fi.
           db.createObjectStore('pendingPhotos', { keyPath: 'id' }).createIndex('by-trip', 'trip_id')
         }
+        if (oldVersion < 4) {
+          // [460-fork] M5 follow-up — mirror bookings + the three lists so a
+          // trip opened online is fully usable offline, not just its itinerary.
+          db.createObjectStore('packing', { keyPath: 'id' }).createIndex('by-trip', 'trip_id')
+          db.createObjectStore('todo', { keyPath: 'id' }).createIndex('by-trip', 'trip_id')
+          db.createObjectStore('budget', { keyPath: 'id' }).createIndex('by-trip', 'trip_id')
+        }
       },
     })
   }
@@ -148,62 +160,99 @@ export async function _resetForTests(): Promise<void> {
 // Write-through helpers — bulk-replace a trip's mirrored data
 // ---------------------------------------------------------------------------
 
+type SnapshotList = Array<Omit<IndexedRecord, '_cached_at'> & { trip_id?: number }>
+
 export interface TripSnapshot {
   trip: TripRecord
   days?: Array<Omit<DayRecord, '_cached_at'>>
-  places?: Array<Omit<IndexedRecord, '_cached_at'> & { trip_id: number }>
-  assignments?: Array<Omit<IndexedRecord, '_cached_at'> & { trip_id: number }>
-  dayNotes?: Array<Omit<IndexedRecord, '_cached_at'> & { trip_id: number }>
-  reservations?: Array<Omit<IndexedRecord, '_cached_at'> & { trip_id: number }>
+  places?: SnapshotList
+  assignments?: SnapshotList
+  dayNotes?: SnapshotList
+  reservations?: SnapshotList
+  packing?: SnapshotList
+  todo?: SnapshotList
+  budget?: SnapshotList
+}
+
+/** The trip-scoped list stores, in one place so write/read/mirror agree. */
+const LIST_STORES = ['days', 'places', 'assignments', 'dayNotes', 'reservations', 'packing', 'todo', 'budget'] as const
+type ListStore = (typeof LIST_STORES)[number]
+
+/**
+ * Replace a trip's cached rows in one store: delete everything for the trip,
+ * then write the supplied rows (stamped with trip_id + _cached_at). Shared by
+ * writeTripSnapshot and mirrorTripLists so the delete-then-write is identical.
+ */
+async function replaceStoreRows(
+  tx: Awaited<ReturnType<LocalDbHandle['transaction']>>,
+  storeName: ListStore,
+  tripId: number,
+  rows: SnapshotList,
+  now: number,
+): Promise<void> {
+  const store = tx.objectStore(storeName)
+  let cursor = await store.index('by-trip').openCursor(IDBKeyRange.only(tripId))
+  while (cursor) {
+    await cursor.delete()
+    cursor = await cursor.continue()
+  }
+  for (const row of rows) await store.put({ ...row, trip_id: tripId, _cached_at: now } as never)
 }
 
 /**
  * Bulk-replace a trip's cached records. Called from tripStore whenever the
- * planner has just pulled fresh data from the server. Existing records for
- * the trip in the listed stores are deleted first so the local mirror can't
- * silently retain rows the server has since deleted.
+ * planner has just pulled fresh data from the server.
+ *
+ * A store is only touched when its array is **provided**. A missing key leaves
+ * that store's cached rows alone — so a partial snapshot (e.g. itinerary only,
+ * before the Book/Budget tabs have loaded) can't silently wipe the bookings or
+ * budget cached from a previous session.
  */
 export async function writeTripSnapshot(snapshot: TripSnapshot): Promise<void> {
   const db = await getDb()
   const now = Date.now()
   const tripId = snapshot.trip.id
-  const stores = ['trips', 'days', 'places', 'assignments', 'dayNotes', 'reservations'] as const
-  const tx = db.transaction(stores, 'readwrite')
+  const tx = db.transaction(['trips', ...LIST_STORES], 'readwrite')
 
   await tx.objectStore('trips').put({ ...snapshot.trip, _cached_at: now })
 
-  for (const storeName of ['days', 'places', 'assignments', 'dayNotes', 'reservations'] as const) {
-    const store = tx.objectStore(storeName)
-    // Delete existing rows for this trip via the index.
-    const idx = store.index('by-trip')
-    let cursor = await idx.openCursor(IDBKeyRange.only(tripId))
-    while (cursor) {
-      await cursor.delete()
-      cursor = await cursor.continue()
-    }
+  const provided: Record<ListStore, SnapshotList | undefined> = {
+    days: snapshot.days as SnapshotList | undefined,
+    places: snapshot.places,
+    assignments: snapshot.assignments,
+    dayNotes: snapshot.dayNotes,
+    reservations: snapshot.reservations,
+    packing: snapshot.packing,
+    todo: snapshot.todo,
+    budget: snapshot.budget,
+  }
+  for (const storeName of LIST_STORES) {
+    const rows = provided[storeName]
+    if (rows === undefined) continue // not provided → leave cached rows intact
+    await replaceStoreRows(tx, storeName, tripId, rows, now)
   }
 
-  if (snapshot.days) {
-    const store = tx.objectStore('days')
-    for (const d of snapshot.days) await store.put({ ...d, _cached_at: now } as DayRecord)
-  }
-  if (snapshot.places) {
-    const store = tx.objectStore('places')
-    for (const p of snapshot.places) await store.put({ ...p, _cached_at: now } as IndexedRecord)
-  }
-  if (snapshot.assignments) {
-    const store = tx.objectStore('assignments')
-    for (const a of snapshot.assignments) await store.put({ ...a, _cached_at: now } as IndexedRecord)
-  }
-  if (snapshot.dayNotes) {
-    const store = tx.objectStore('dayNotes')
-    for (const n of snapshot.dayNotes) await store.put({ ...n, _cached_at: now } as IndexedRecord)
-  }
-  if (snapshot.reservations) {
-    const store = tx.objectStore('reservations')
-    for (const r of snapshot.reservations) await store.put({ ...r, _cached_at: now } as IndexedRecord)
-  }
+  await tx.done
+}
 
+/**
+ * Update just the list stores for a trip (bookings / packing / to-do / budget),
+ * without touching the cached trip row. Called from the slices that load those
+ * lists on their own (they arrive after the main planner fetch). Only provided
+ * lists are replaced; the rest are left alone.
+ */
+export async function mirrorTripLists(
+  tripId: number,
+  lists: { reservations?: SnapshotList; packing?: SnapshotList; todo?: SnapshotList; budget?: SnapshotList },
+): Promise<void> {
+  const entries = (Object.entries(lists) as [ListStore, SnapshotList | undefined][]).filter(
+    ([, v]) => v !== undefined,
+  ) as [ListStore, SnapshotList][]
+  if (entries.length === 0) return
+  const db = await getDb()
+  const now = Date.now()
+  const tx = db.transaction(entries.map(([s]) => s), 'readwrite')
+  for (const [storeName, rows] of entries) await replaceStoreRows(tx, storeName, tripId, rows, now)
   await tx.done
 }
 
@@ -216,14 +265,17 @@ export async function readTripSnapshot(tripId: number): Promise<TripSnapshot | n
   const db = await getDb()
   const trip = await db.get('trips', tripId)
   if (!trip) return null
-  const [days, places, assignments, dayNotes, reservations] = await Promise.all([
+  const [days, places, assignments, dayNotes, reservations, packing, todo, budget] = await Promise.all([
     db.getAllFromIndex('days', 'by-trip', tripId),
     db.getAllFromIndex('places', 'by-trip', tripId),
     db.getAllFromIndex('assignments', 'by-trip', tripId),
     db.getAllFromIndex('dayNotes', 'by-trip', tripId),
     db.getAllFromIndex('reservations', 'by-trip', tripId),
+    db.getAllFromIndex('packing', 'by-trip', tripId),
+    db.getAllFromIndex('todo', 'by-trip', tripId),
+    db.getAllFromIndex('budget', 'by-trip', tripId),
   ])
-  return { trip, days, places, assignments, dayNotes, reservations }
+  return { trip, days, places, assignments, dayNotes, reservations, packing, todo, budget }
 }
 
 // ---------------------------------------------------------------------------

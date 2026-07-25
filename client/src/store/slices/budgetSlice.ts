@@ -3,6 +3,7 @@ import type { StoreApi } from 'zustand'
 import type { TripStoreState } from '../tripStore'
 import type { BudgetItem, BudgetMember } from '../../types'
 import { getApiErrorMessage } from '../../types'
+import { mirrorTripLists } from '../../db/localDb' // [460-fork] M5 follow-up — offline mirror
 
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
@@ -21,6 +22,11 @@ export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => 
     try {
       const data = await budgetApi.list(tripId)
       set({ budgetItems: data.items })
+      // [460-fork] M5 follow-up — mirror the budget for offline (loads on its
+      // own tab, so it mirrors itself rather than riding the main planner fetch).
+      void mirrorTripLists(Number(tripId), {
+        budget: data.items.map((b) => ({ ...(b as any), id: b.id })),
+      }).catch(() => {/* silent — offline mirror is best-effort */})
     } catch (err: unknown) {
       console.error('Failed to load budget items:', err)
     }

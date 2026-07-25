@@ -1146,6 +1146,12 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                     trip: bundle.trip,
                     days: bundle.days,
                     places: bundle.places,
+                    // [460-fork] M5 follow-up — the deliberate download also
+                    // fills bookings + the three lists in one go.
+                    reservations: bundle.reservations,
+                    packing: bundle.packing_items,
+                    todo: bundle.todo_items,
+                    budget: bundle.budget_items,
                   })
                   toast.success('Trip downloaded for offline use')
                 } catch {

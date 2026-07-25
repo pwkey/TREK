@@ -1444,6 +1444,7 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'stats.visitedCountries': 'Visited Countries',
 
   // Day Detail Panel
+  'day.planNotes': 'Day plan',
   'day.precipProb': 'Rain probability',
   'day.precipitation': 'Precipitation',
   'day.wind': 'Wind',

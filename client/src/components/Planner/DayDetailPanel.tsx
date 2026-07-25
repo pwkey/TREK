@@ -430,6 +430,30 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
               </button> : null
             )}
 
+            {/* [460-fork] M15 — the day's own `notes` field. Imported/merged day
+                plans land here (via patch import), but nothing rendered it, so the
+                content was invisible. Shown to everyone (read-only), above the
+                journal: "the plan" then "what actually happened". The app's other
+                notes are the day_notes cards in the planner timeline. Import wraps
+                its block in <!-- 460-import: key --> markers — strip those. */}
+            {(() => {
+              const clean = (day.notes || '')
+                .replace(/<!--\s*\/?\s*460-import[^>]*-->/g, '')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim()
+              if (!clean) return null
+              return (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-faint)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <FileText size={13} /> {t('day.planNotes')}
+                  </div>
+                  <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {clean}
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* [460-fork] Milestone 6 slice 1 — per-day journal */}
             {canEditDays && <div ref={journalRef}><JournalEditor tripId={tripId} dayId={day.id} /></div>}
 

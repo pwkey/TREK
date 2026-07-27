@@ -31,7 +31,8 @@ import { useSettingsStore } from '../../store/settingsStore'
 import { useTranslation } from '../../i18n'
 import { formatDate, formatTime, dayTotalCost, currencyDecimals } from '../../utils/formatters'
 import { useDayNotes } from '../../hooks/useDayNotes'
-import type { Trip, Day, Place, Category, Assignment, Reservation, AssignmentsMap, RouteResult } from '../../types'
+import type { Trip, Day, Place, Category, Assignment, Reservation, AssignmentsMap, RouteResult, TripFile } from '../../types'
+import FilePreviewModal from '../Files/FilePreviewModal' // [460-fork] shared file preview
 
 const NOTE_ICONS = [
   { id: 'FileText', Icon: FileText },
@@ -170,6 +171,9 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const [dragOverDayId, setDragOverDayId] = useState(null)
   const [hoveredId, setHoveredId] = useState(null)
   const [transportDetail, setTransportDetail] = useState(null)
+  // [460-fork] preview a day attachment in place (over the planner) rather than
+  // jumping to the Files tab — closing returns you to the day you came from.
+  const [previewFile, setPreviewFile] = useState<TripFile | null>(null)
   const [transportPosVersion, setTransportPosVersion] = useState(0)
   const [timeConfirm, setTimeConfirm] = useState<{
     dayId: number; fromId: number; time: string;
@@ -2165,6 +2169,9 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
         document.body
       )}
 
+      {/* [460-fork] day attachment preview — in place, over the planner. */}
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
+
       {/* Transport-Detail-Modal */}
       {transportDetail && ReactDOM.createPortal(
         <div style={{
@@ -2279,7 +2286,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           {resFiles.map(f => (
                             <div key={f.id}
-                              onClick={() => { setTransportDetail(null); onNavigateToFiles?.() }}
+                              onClick={() => { setTransportDetail(null); setPreviewFile(f) }}
                               style={{
                                 display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
                                 background: 'var(--bg-tertiary)', borderRadius: 8, cursor: 'pointer',

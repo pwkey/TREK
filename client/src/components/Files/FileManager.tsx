@@ -12,6 +12,7 @@ import { ShareControl, SharedInBadge } from '../Segments/ShareControl'
 import { useTripSegments } from '../Segments/useTripSegments'
 
 import { getAuthUrl } from '../../api/authUrl'
+import FilePreviewModal from './FilePreviewModal' // [460-fork] shared file preview
 
 function isImage(mimeType) {
   if (!mimeType) return false
@@ -388,15 +389,8 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
     }
   }
 
+  // [460-fork] preview now lives in the shared FilePreviewModal.
   const [previewFile, setPreviewFile] = useState(null)
-  const [previewFileUrl, setPreviewFileUrl] = useState('')
-  useEffect(() => {
-    if (previewFile) {
-      getAuthUrl(previewFile.url, 'download').then(setPreviewFileUrl)
-    } else {
-      setPreviewFileUrl('')
-    }
-  }, [previewFile?.url])
   const [assignFileId, setAssignFileId] = useState<number | null>(null)
 
   const handleAssign = async (fileId: number, data: { place_id?: number | null; reservation_id?: number | null }) => {
@@ -730,48 +724,8 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
         document.body
       )}
 
-      {/* PDF preview modal */}
-      {previewFile && ReactDOM.createPortal(
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={() => setPreviewFile(null)}
-        >
-          <div
-            style={{ width: '100%', maxWidth: 950, height: '94vh', background: 'var(--bg-card)', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border-primary)', flexShrink: 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{previewFile.original_name}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <button
-                  onClick={async () => { const u = await getAuthUrl(previewFile.url, 'download'); window.open(u, '_blank', 'noreferrer') }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, transition: 'color 0.15s' }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'}>
-                  <ExternalLink size={13} /> {t('files.openTab')}
-                </button>
-                <button onClick={() => setPreviewFile(null)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', display: 'flex', padding: 4, borderRadius: 6, transition: 'color 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
-                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}>
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-            <object
-              data={previewFileUrl ? `${previewFileUrl}#view=FitH` : undefined}
-              type="application/pdf"
-              style={{ flex: 1, width: '100%', border: 'none' }}
-              title={previewFile.original_name}
-            >
-              <p style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
-                <button onClick={async () => { const u = await getAuthUrl(previewFile.url, 'download'); window.open(u, '_blank', 'noopener noreferrer') }} style={{ color: 'var(--text-primary)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>PDF herunterladen</button>
-              </p>
-            </object>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* [460-fork] shared preview modal — translated, mobile-aware, per-type. */}
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
 
       {/* Header */}
       <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>

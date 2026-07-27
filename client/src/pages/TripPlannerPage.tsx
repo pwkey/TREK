@@ -168,6 +168,11 @@ export default function TripPlannerPage(): React.ReactElement | null {
   // [460-fork] When the day detail is opened via the Plan-view journal button,
   // scroll it straight to the journal editor. False for every other open path.
   const [dayDetailFocusJournal, setDayDetailFocusJournal] = useState(false)
+  // [460-fork] On mobile, opening the day detail closes the full-screen Plan
+  // overlay (the panel is a low-z sheet over the map). Remember that so we can
+  // reopen Plan — scrolled back to the same day — when the detail closes,
+  // instead of dumping the user on the map.
+  const [reopenPlanForDay, setReopenPlanForDay] = useState<number | null>(null)
   const [showPlaceForm, setShowPlaceForm] = useState<boolean>(false)
   const [editingPlace, setEditingPlace] = useState<Place | null>(null)
   const [prefillCoords, setPrefillCoords] = useState<{ lat: number; lng: number; name?: string; address?: string } | null>(null)
@@ -1024,7 +1029,18 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   reservations={reservations}
                   lat={geoPlace?.lat}
                   lng={geoPlace?.lng}
-                  onClose={() => { setShowDayDetail(null); setDayDetailFocusJournal(false); handleSelectDay(null) }}
+                  onClose={() => {
+                    setShowDayDetail(null); setDayDetailFocusJournal(false); handleSelectDay(null)
+                    // [460-fork] mobile: reopen Plan at the day we came from.
+                    const dayId = reopenPlanForDay
+                    if (dayId != null) {
+                      setReopenPlanForDay(null)
+                      setMobileSidebarOpen('left')
+                      setTimeout(() => {
+                        document.querySelector(`[data-day-id="${dayId}"]`)?.scrollIntoView({ block: 'start' })
+                      }, 100)
+                    }
+                  }}
                   onAccommodationChange={loadAccommodations}
                   focusJournal={dayDetailFocusJournal}
                   leftWidth={isMobile ? 0 : (leftCollapsed ? 0 : leftWidth)}
@@ -1146,7 +1162,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
                       sidebar item clears iPhone's home-indicator strip. */}
                   <div style={{ flex: 1, overflow: 'auto', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
                     {mobileSidebarOpen === 'left'
-                      ? <DayPlanSidebar tripId={tripId} trip={trip} days={days} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} selectedAssignmentId={selectedAssignmentId} onSelectDay={(id) => { handleSelectDay(id); setMobileSidebarOpen(null) }} onPlaceClick={(placeId, assignmentId) => { handlePlaceClick(placeId, assignmentId); setMobileSidebarOpen(null) }} onReorder={handleReorder} onUpdateDayTitle={handleUpdateDayTitle} onAssignToDay={handleAssignToDay} onRouteCalculated={(r) => { if (r) { setRoute(r.coordinates); setRouteInfo({ distance: r.distanceText, duration: r.durationText }) } }} reservations={reservations} onAddReservation={(dayId) => { setEditingReservation(null); tripActions.setSelectedDay(dayId); setShowReservationModal(true); setMobileSidebarOpen(null) }} onDayDetail={(day) => { setShowDayDetail(day); setSelectedPlaceId(null); setSelectedAssignmentId(null); setMobileSidebarOpen(null) }} accommodations={tripAccommodations} onNavigateToFiles={() => { setMobileSidebarOpen(null); handleTabChange('dateien') }} onExpandedDaysChange={setExpandedDayIds} pushUndo={pushUndo} canUndo={canUndo} lastActionLabel={lastActionLabel} onUndo={handleUndo} />
+                      ? <DayPlanSidebar tripId={tripId} trip={trip} days={days} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} selectedAssignmentId={selectedAssignmentId} onSelectDay={(id) => { handleSelectDay(id); setMobileSidebarOpen(null) }} onPlaceClick={(placeId, assignmentId) => { handlePlaceClick(placeId, assignmentId); setMobileSidebarOpen(null) }} onReorder={handleReorder} onUpdateDayTitle={handleUpdateDayTitle} onAssignToDay={handleAssignToDay} onRouteCalculated={(r) => { if (r) { setRoute(r.coordinates); setRouteInfo({ distance: r.distanceText, duration: r.durationText }) } }} reservations={reservations} onAddReservation={(dayId) => { setEditingReservation(null); tripActions.setSelectedDay(dayId); setShowReservationModal(true); setMobileSidebarOpen(null) }} onDayDetail={(day) => { setShowDayDetail(day); setSelectedPlaceId(null); setSelectedAssignmentId(null); if (mobileSidebarOpen === 'left') setReopenPlanForDay(day.id); setMobileSidebarOpen(null) }} accommodations={tripAccommodations} onNavigateToFiles={() => { setMobileSidebarOpen(null); handleTabChange('dateien') }} onExpandedDaysChange={setExpandedDayIds} pushUndo={pushUndo} canUndo={canUndo} lastActionLabel={lastActionLabel} onUndo={handleUndo} />
                       : <PlacesSidebar tripId={tripId} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} onPlaceClick={(placeId) => { handlePlaceClick(placeId); setMobileSidebarOpen(null) }} onAddPlace={() => { setEditingPlace(null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onAssignToDay={handleAssignToDay} onEditPlace={(place) => { setEditingPlace(place); setEditingAssignmentId(null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onDeletePlace={(placeId) => handleDeletePlace(placeId)} days={days} isMobile onCategoryFilterChange={setMapCategoryFilter} pushUndo={pushUndo} />
                     }
                   </div>

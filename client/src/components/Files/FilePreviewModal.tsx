@@ -9,6 +9,10 @@
 //   2. `<object type=application/pdf>` renders blank on Android, so tapping a
 //      PDF appeared to do nothing. On a coarse pointer we skip the embed and
 //      show an "Open PDF" action that hands off to the browser's own viewer.
+//      The open/download actions are real <a> anchors, NOT window.open() —
+//      window.open('_blank') is silently blocked in an installed (standalone)
+//      Android PWA, which is why the earlier fix still did nothing on the phone.
+//      A user-tapped anchor is a trusted navigation the OS honours.
 //   3. The old modal rendered a PDF <object> for EVERY file type; non-PDFs now
 //      get a proper info panel with Download.
 import { useEffect, useState } from 'react'
@@ -51,29 +55,31 @@ export default function FilePreviewModal({ file, onClose }: Props): React.ReactE
 
   if (!file) return null
 
-  const openInTab = (): void => { if (url) window.open(url, '_blank', 'noopener,noreferrer') }
   const pdf = isPdf(file.mime_type)
   const img = isImage(file.mime_type)
   const coarse = isCoarsePointer()
 
-  const linkBtnStyle: React.CSSProperties = {
+  const linkStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)',
-    background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: 6,
-    fontFamily: 'inherit',
+    background: 'none', border: 'none', cursor: url ? 'pointer' : 'default', padding: '4px 8px',
+    borderRadius: 6, fontFamily: 'inherit', textDecoration: 'none', opacity: url ? 1 : 0.5,
   }
-  const bigBtnStyle: React.CSSProperties = {
+  const bigLinkStyle: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 44, padding: '0 20px',
     borderRadius: 10, border: 'none', background: 'var(--accent)', color: 'var(--accent-text)',
-    fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: 14, fontWeight: 600, cursor: url ? 'pointer' : 'default', fontFamily: 'inherit',
+    textDecoration: 'none', opacity: url ? 1 : 0.6,
   }
 
+  // Real anchors, not window.open() — see the header note. target=_blank lets
+  // the OS open it (PDF viewer / browser); rel guards the opener.
   const fallback = (message: string) => (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: 24, textAlign: 'center' }}>
       <FileText size={40} strokeWidth={1.6} style={{ color: 'var(--text-faint)' }} />
       <div style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 320 }}>{message}</div>
-      <button onClick={openInTab} style={bigBtnStyle}>
+      <a href={url || undefined} target="_blank" rel="noopener noreferrer" style={bigLinkStyle}>
         {pdf ? <><ExternalLink size={16} /> {t('files.openPdf')}</> : <><Download size={16} /> {t('files.download')}</>}
-      </button>
+      </a>
     </div>
   )
 
@@ -89,11 +95,11 @@ export default function FilePreviewModal({ file, onClose }: Props): React.ReactE
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border-primary)', flexShrink: 0 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{file.original_name}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <button onClick={openInTab} style={linkBtnStyle}
+            <a href={url || undefined} target="_blank" rel="noopener noreferrer" style={linkStyle}
               onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--text-primary)')}
               onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--text-muted)')}>
               <ExternalLink size={13} /> {t('files.openTab')}
-            </button>
+            </a>
             <button onClick={onClose}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', display: 'flex', padding: 4, borderRadius: 6 }}
               onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}

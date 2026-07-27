@@ -2129,9 +2129,11 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
       ))}
 
       {/* Confirm: remove time when reordering a timed place */}
+      {/* [460-fork] z:10000 to clear the mobile Plan sidebar (z:9999), same as
+          the transport-detail modal below. */}
       {timeConfirm && ReactDOM.createPortal(
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
+          position: 'fixed', inset: 0, zIndex: 10000,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(3px)',
         }} onClick={() => setTimeConfirm(null)}>
@@ -2173,9 +2175,13 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
       <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
 
       {/* Transport-Detail-Modal */}
+      {/* [460-fork] zIndex must clear the mobile Plan sidebar (a fixed z:9999
+          slide-over). At the old z:1000 this popup opened BEHIND the sidebar on
+          phones — tapping a booking looked like nothing happened but a faint
+          backdrop tint. */}
       {transportDetail && ReactDOM.createPortal(
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
+          position: 'fixed', inset: 0, zIndex: 10000,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(3px)',
         }} onClick={() => setTransportDetail(null)}>

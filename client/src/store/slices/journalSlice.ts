@@ -35,6 +35,19 @@ function isQueueableError(err: unknown): boolean {
   return status === undefined || status >= 500 || status === 408 || status === 429
 }
 
+function statusOf(err: unknown): number | undefined {
+  return (err as { response?: { status?: number } })?.response?.status
+}
+
+// [460-fork] Per-day save chain. The editor autosaves on a debounce AND flushes
+// on exit, so two saves for the same day can overlap. Each carries an
+// If-Unmodified-Since precondition; if the second sends the timestamp it
+// observed BEFORE the first landed, the server 409s it and the later text is
+// lost — exactly the "only the first portion saved" report from the trip.
+// Chaining saves per day means each one reads a fresh timestamp after the
+// previous has committed, so a device never conflicts with itself.
+const saveChains: Record<string, Promise<void>> = {}
+
 export const createJournalSlice = (set: SetState, get: GetState): JournalSlice => ({
   dayJournals: {},
 
@@ -54,12 +67,9 @@ export const createJournalSlice = (set: SetState, get: GetState): JournalSlice =
   updateJournal: async (tripId, dayId, contentMarkdown) => {
     const dayKey = String(dayId)
     const prev = get().dayJournals[dayKey] ?? null
-    const observed = prev?.updated_at ?? null
 
-    // Optimistic local apply. The day_id and updated_by are filled from the
-    // server response on success; here we just stash the new content so the
-    // editor reflects the user's typing immediately and offline edits
-    // survive the round-trip via the M5 mutation queue.
+    // Optimistic local apply, immediately, so the editor reflects the user's
+    // typing and offline edits survive the round-trip via the M5 mutation queue.
     set(state => ({
       dayJournals: {
         ...state.dayJournals,
@@ -72,22 +82,42 @@ export const createJournalSlice = (set: SetState, get: GetState): JournalSlice =
       },
     }))
 
-    try {
-      const result = await journalApi.update(tripId, dayId, contentMarkdown, observed)
-      const updated = (result as { journal?: DayJournal } | undefined)?.journal
-      if (updated) {
-        set(state => ({
-          dayJournals: { ...state.dayJournals, [dayKey]: updated },
-        }))
+    const run = async (): Promise<void> => {
+      // Read the precondition NOW (inside the chain), so it reflects the
+      // timestamp from any earlier save that has already committed.
+      const observed = get().dayJournals[dayKey]?.updated_at ?? null
+      try {
+        const result = await journalApi.update(tripId, dayId, contentMarkdown, observed)
+        const updated = (result as { journal?: DayJournal } | undefined)?.journal
+        if (updated) set(state => ({ dayJournals: { ...state.dayJournals, [dayKey]: updated } }))
+      } catch (err: unknown) {
+        if (isQueueableError(err)) return // offline → M5 queue replays it later
+        if (statusOf(err) === 409) {
+          // Genuine stale-write (e.g. two devices, or a residual race). The
+          // editor holds the text we want to keep, so resolve last-write-wins:
+          // refetch the server's current timestamp and retry once with it.
+          try {
+            const fresh = await journalApi.get(tripId, dayId)
+            const freshObserved = (fresh as { journal?: DayJournal } | undefined)?.journal?.updated_at ?? null
+            const retry = await journalApi.update(tripId, dayId, contentMarkdown, freshObserved)
+            const rj = (retry as { journal?: DayJournal } | undefined)?.journal
+            if (rj) set(state => ({ dayJournals: { ...state.dayJournals, [dayKey]: rj } }))
+            return
+          } catch {
+            // Retry failed too — fall through to surface the error.
+          }
+        }
+        // Roll back to whatever the server last confirmed, then surface.
+        set(state => ({ dayJournals: { ...state.dayJournals, [dayKey]: prev } }))
+        throw err
       }
-    } catch (err: unknown) {
-      if (isQueueableError(err)) return
-      // Roll back to whatever the server last confirmed.
-      set(state => ({
-        dayJournals: { ...state.dayJournals, [dayKey]: prev },
-      }))
-      throw err
     }
+
+    // Serialize behind any in-flight save for this day (success OR failure),
+    // so overlapping autosave + exit-flush can't collide into a 409.
+    const chain = (saveChains[dayKey] ?? Promise.resolve()).then(run, run)
+    saveChains[dayKey] = chain.catch(() => {})
+    return chain
   },
 
   setJournalFromBroadcast: (dayId, journal) => {

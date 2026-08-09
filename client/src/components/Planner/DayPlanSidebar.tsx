@@ -4,7 +4,7 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download, Archive, FileJson, Images, CalendarDays, BookOpen } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, Link2, Download, Archive, FileJson, Images, CalendarDays, BookOpen } from 'lucide-react'
 import BatchPhotoImport from '../Journal/BatchPhotoImport' // [460-fork] M6 follow-up
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
@@ -921,16 +921,23 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     return days.find(d => d.date === iso) ?? null
   }, [days])
 
-  const goToToday = (): void => {
-    if (!todayDay) return
-    onSelectDay(todayDay.id)
-    if (onDayDetail) onDayDetail(todayDay)
+  // [460-fork] Open a day's detail and scroll the list to it. Shared by the
+  // Yesterday / Today / Tomorrow header buttons.
+  const goToDay = (d: Day): void => {
+    onSelectDay(d.id)
+    if (onDayDetail) onDayDetail(d)
     if (typeof requestAnimationFrame !== 'undefined') {
       requestAnimationFrame(() => {
-        document.querySelector(`[data-day-id="${todayDay.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        document.querySelector(`[data-day-id="${d.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       })
     }
   }
+
+  // Yesterday / Tomorrow relative to today, by position in the (date-ordered)
+  // day list — only meaningful while the trip is in progress.
+  const todayIdx = todayDay ? days.findIndex(d => d.id === todayDay.id) : -1
+  const yesterdayDay = todayIdx > 0 ? days[todayIdx - 1] : null
+  const tomorrowDay = todayIdx >= 0 && todayIdx < days.length - 1 ? days[todayIdx + 1] : null
 
   // [460-fork] quick-jump — scroll the day list to a section's first day, the
   // same mechanism the "Today" button uses (each day row carries data-day-id).
@@ -956,24 +963,38 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                 {days.length > 0 && ` · ${days.length} ${t('dayplan.days')}`}
               </div>
             )}
-            {/* [460-fork] Jump to the current day — only while the trip is in
-                progress (today within range). */}
-            {todayDay && (
-              <button
-                onClick={goToToday}
-                title={t('dayplan.today') || 'Today'}
-                aria-label={t('dayplan.today') || 'Today'}
-                style={{
-                  marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
-                  padding: '4px 10px', borderRadius: 999,
-                  border: '1px solid var(--accent)', background: 'transparent',
-                  color: 'var(--accent)', fontSize: 11, fontWeight: 600,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                <CalendarDays size={12} strokeWidth={2.2} /> {t('dayplan.today') || 'Today'}
-              </button>
-            )}
+            {/* [460-fork] Yesterday / Today / Tomorrow — only while the trip is
+                in progress (today within range). */}
+            {todayDay && (() => {
+              const pill = {
+                marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 10px', borderRadius: 999,
+                border: '1px solid var(--accent)', background: 'transparent',
+                color: 'var(--accent)', fontSize: 11, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+              } as const
+              const todayPill = { ...pill, background: 'var(--accent)', color: 'var(--accent-text)' }
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {yesterdayDay && (
+                    <button onClick={() => goToDay(yesterdayDay)} style={pill}
+                      title={t('dayplan.yesterday')} aria-label={t('dayplan.yesterday')}>
+                      <ChevronLeft size={12} strokeWidth={2.2} /> {t('dayplan.yesterday')}
+                    </button>
+                  )}
+                  <button onClick={() => goToDay(todayDay)} style={todayPill}
+                    title={t('dayplan.today') || 'Today'} aria-label={t('dayplan.today') || 'Today'}>
+                    <CalendarDays size={12} strokeWidth={2.2} /> {t('dayplan.today') || 'Today'}
+                  </button>
+                  {tomorrowDay && (
+                    <button onClick={() => goToDay(tomorrowDay)} style={pill}
+                      title={t('dayplan.tomorrow')} aria-label={t('dayplan.tomorrow')}>
+                      {t('dayplan.tomorrow')} <ChevronRight size={12} strokeWidth={2.2} />
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
           </div>
           {/* [460-fork] Export / tool icon strip — its own row below the title so a
               long trip name no longer collides with these buttons. */}

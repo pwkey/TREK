@@ -1458,6 +1458,10 @@ const en: Record<string, string | { name: string; category: string }[]> = {
 
   // Day Detail Panel
   'day.planNotes': 'Day plan',
+  'day.prevDay': 'Previous day',
+  'day.nextDay': 'Next day',
+  'dayplan.yesterday': 'Yesterday',
+  'dayplan.tomorrow': 'Tomorrow',
   'day.precipProb': 'Rain probability',
   'day.precipitation': 'Precipitation',
   'day.wind': 'Wind',

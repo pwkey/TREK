@@ -1029,16 +1029,26 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   reservations={reservations}
                   lat={geoPlace?.lat}
                   lng={geoPlace?.lng}
+                  onChangeDay={(d) => {
+                    setShowDayDetail(d); handleSelectDay(d.id, true)
+                    if (reopenPlanForDay != null) setReopenPlanForDay(d.id) // return to the day we end on
+                  }}
                   onClose={() => {
-                    setShowDayDetail(null); setDayDetailFocusJournal(false); handleSelectDay(null)
-                    // [460-fork] mobile: reopen Plan at the day we came from.
                     const dayId = reopenPlanForDay
+                    setShowDayDetail(null); setDayDetailFocusJournal(false); handleSelectDay(null)
+                    // [460-fork] mobile: reopen Plan scrolled back to the day we
+                    // came from. Retry the scroll until the remounted list has
+                    // rendered the row (a single timeout can fire too early).
                     if (dayId != null) {
                       setReopenPlanForDay(null)
                       setMobileSidebarOpen('left')
-                      setTimeout(() => {
-                        document.querySelector(`[data-day-id="${dayId}"]`)?.scrollIntoView({ block: 'start' })
-                      }, 100)
+                      let tries = 0
+                      const tick = () => {
+                        const el = document.querySelector(`[data-day-id="${dayId}"]`)
+                        if (el) { el.scrollIntoView({ block: 'start' }); return }
+                        if (tries++ < 20) setTimeout(tick, 50)
+                      }
+                      setTimeout(tick, 50)
                     }
                   }}
                   onAccommodationChange={loadAccommodations}

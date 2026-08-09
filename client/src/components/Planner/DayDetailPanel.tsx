@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
-import { X, Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudLightning, Wind, Droplets, Sunrise, Sunset, Hotel, Calendar, MapPin, LogIn, LogOut, Hash, Pencil, Plane, Utensils, Train, Car, Ship, Ticket, FileText, Users, Bookmark } from 'lucide-react'
+import { X, Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudLightning, Wind, Droplets, Sunrise, Sunset, Hotel, Calendar, MapPin, LogIn, LogOut, Hash, Pencil, Plane, Utensils, Train, Car, Ship, Ticket, FileText, Users, Bookmark, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useBackButtonClose } from '../../hooks/useBackButtonClose' // [460-fork] Android Back closes the day screen
 
 const RES_TYPE_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 const RES_TYPE_COLORS = { flight: '#3b82f6', hotel: '#8b5cf6', restaurant: '#ef4444', train: '#06b6d4', car: '#6b7280', cruise: '#0ea5e9', event: '#f59e0b', tour: '#10b981', other: '#6b7280' }
@@ -54,13 +55,21 @@ interface DayDetailPanelProps {
   lng: number | null
   onClose: () => void
   onAccommodationChange: () => void
+  onChangeDay?: (day: Day) => void // [460-fork] Prev/Next day navigation
   leftWidth?: number
   rightWidth?: number
   focusJournal?: boolean // [460-fork] when true, scroll to the journal editor on open
 }
 
-export default function DayDetailPanel({ day, days, places, categories = [], tripId, assignments, reservations = [], lat, lng, onClose, onAccommodationChange, leftWidth = 0, rightWidth = 0, focusJournal = false }: DayDetailPanelProps) {
+export default function DayDetailPanel({ day, days, places, categories = [], tripId, assignments, reservations = [], lat, lng, onClose, onAccommodationChange, onChangeDay, leftWidth = 0, rightWidth = 0, focusJournal = false }: DayDetailPanelProps) {
   const { t, language, locale } = useTranslation()
+  // [460-fork] Android Back (or back-swipe) closes the day screen and returns
+  // to Plan, instead of falling through to the map.
+  useBackButtonClose(onClose)
+  // [460-fork] Prev/Next day within the panel — keeps it open, just swaps day.
+  const dayIdx = days.findIndex(d => d.id === day.id)
+  const prevDay = dayIdx > 0 ? days[dayIdx - 1] : null
+  const nextDay = dayIdx >= 0 && dayIdx < days.length - 1 ? days[dayIdx + 1] : null
   const can = useCanDo()
   const tripObj = useTripStore((s) => s.trip)
   const canEditDays = can('day_edit', tripObj)
@@ -200,6 +209,25 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
             </div>
             {formattedDate && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>{formattedDate}</div>}
           </div>
+          {/* [460-fork] Prev / Next day — only when a callback is wired. */}
+          {onChangeDay && (
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+              <button
+                onClick={() => prevDay && onChangeDay(prevDay)}
+                disabled={!prevDay}
+                title={t('day.prevDay')} aria-label={t('day.prevDay')}
+                style={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: 10, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: prevDay ? 'pointer' : 'default', opacity: prevDay ? 1 : 0.35, flexShrink: 0 }}>
+                <ChevronLeft size={16} style={{ color: 'var(--text-muted)' }} />
+              </button>
+              <button
+                onClick={() => nextDay && onChangeDay(nextDay)}
+                disabled={!nextDay}
+                title={t('day.nextDay')} aria-label={t('day.nextDay')}
+                style={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: 10, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: nextDay ? 'pointer' : 'default', opacity: nextDay ? 1 : 0.35, flexShrink: 0 }}>
+                <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
+              </button>
+            </div>
+          )}
           <button onClick={onClose} style={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: 10, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <X size={14} style={{ color: 'var(--text-muted)' }} />
           </button>

@@ -51,9 +51,32 @@ interface AuthState {
 // Sequence counter to prevent stale loadUser responses from overwriting fresh auth state
 let authSequence = 0
 
+// [460-fork] Offline auth. The session token is an httpOnly cookie (sent with
+// every request automatically), but isAuthenticated was only ever set true by a
+// live /auth/me. So a cold start with no network bounced the user to /login —
+// which needs the server — locking them out of their own cached trip offline.
+// Cache the user profile and start authenticated from it; loadUser confirms it
+// when online and clears it only on a real 401 (genuinely expired), never on a
+// network error. No credential is stored here — just profile data.
+const AUTH_CACHE_KEY = '460_auth_user'
+function cacheUser(user: User | null): void {
+  try {
+    if (user) localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(user))
+    else localStorage.removeItem(AUTH_CACHE_KEY)
+  } catch { /* storage unavailable — non-fatal */ }
+}
+function readCachedUser(): User | null {
+  try {
+    const raw = localStorage.getItem(AUTH_CACHE_KEY)
+    return raw ? (JSON.parse(raw) as User) : null
+  } catch { return null }
+}
+
+const _cachedUser = readCachedUser()
+
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null,
-  isAuthenticated: false,
+  user: _cachedUser,
+  isAuthenticated: !!_cachedUser, // optimistic; loadUser confirms or clears
   isLoading: true,
   error: null,
   demoMode: localStorage.getItem('demo_mode') === 'true',
@@ -158,7 +181,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       connect()
     } catch (err: unknown) {
       if (seq !== authSequence) return // stale response — ignore
-      // Only clear auth state on 401 (invalid/expired token), not on network errors
+      // Only clear auth on a real 401 (invalid/expired token). On a network
+      // error keep whatever we have — including the cached user — so an offline
+      // open still lets the user into their cached trip. [460-fork] The cache
+      // is kept in sync by the subscription below.
       const isAuthError = err && typeof err === 'object' && 'response' in err &&
         (err as { response?: { status?: number } }).response?.status === 401
       if (isAuthError) {
@@ -248,3 +274,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 }))
+
+// [460-fork] Persist the user for offline auth whenever it changes — login,
+// register, MFA, profile edit (new object → cache) and logout (null → clear).
+// A network error during loadUser leaves `user` untouched, so the cache
+// survives and the next offline open stays authenticated.
+let _prevUser: User | null = _cachedUser
+useAuthStore.subscribe((state) => {
+  if (state.user !== _prevUser) {
+    _prevUser = state.user
+    cacheUser(state.user)
+  }
+})

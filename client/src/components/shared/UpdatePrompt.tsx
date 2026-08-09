@@ -21,10 +21,14 @@ export default function UpdatePrompt(): React.ReactElement | null {
   } = useRegisterSW({
     onRegisteredSW(_swUrl, registration) {
       if (!registration) return
-      const check = (): void => { void registration.update() }
+      const check = (): void => { if (navigator.onLine) void registration.update() }
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') check()
       })
+      // [460-fork] On flaky connectivity (e.g. travelling) the foreground and
+      // hourly checks often fire while offline and do nothing. Re-check the
+      // moment the network comes back, so a pending update surfaces promptly.
+      window.addEventListener('online', check)
       window.setInterval(check, 60 * 60 * 1000) // hourly backstop
     },
   })
